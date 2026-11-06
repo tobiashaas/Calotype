@@ -60,6 +60,15 @@ async def upload_photo_endpoint(
 
     existing = PhotoRepository.get_by_lr_catalog_uuid(session, meta.lr_catalog_uuid)
     if existing:
+        # Same photo again: keep the stored preview, take the current edits and decisions
+        # (the photographer may have re-edited or re-rated it since the first upload).
+        PhotoRepository.refresh(
+            session,
+            existing,
+            exif_snapshot=meta.exif_snapshot,
+            lr_develop_settings=meta.lr_develop_settings,
+            lr_metadata=meta.lr_metadata,
+        )
         return PhotoCreatedResponse(
             photo_id=existing.id,
             s3_key=existing.s3_key,
@@ -78,6 +87,7 @@ async def upload_photo_endpoint(
         s3_key=s3_key,
         exif_snapshot=meta.exif_snapshot,
         lr_develop_settings=meta.lr_develop_settings,
+        lr_metadata=meta.lr_metadata,
     )
     return PhotoCreatedResponse(photo_id=photo_id, s3_key=s3_key, already_existed=False)
 

@@ -64,6 +64,7 @@ async fn upload_photos(state: &AppState) -> Result<()> {
             "lr_catalog_uuid": uuid,
             "exif_snapshot": photo.exif_snapshot,
             "lr_develop_settings": photo.lr_develop_settings,
+            "lr_metadata": photo.lr_metadata,
         });
         match state.api.upload_photo(jpeg, &metadata).await {
             Ok(created) => {

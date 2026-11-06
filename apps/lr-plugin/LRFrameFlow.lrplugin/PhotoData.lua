@@ -38,6 +38,25 @@ local function exifSnapshot(photo)
   })
 end
 
+local PICK_STATUS = { [1] = 1, [0] = 0, [-1] = -1 }
+
+--- The photographer's decisions: culling labels (ADR 005).
+function PhotoData.decisions(photo)
+  local function raw(key)
+    local ok, v = pcall(photo.getRawMetadata, photo, key)
+    if ok then return v end
+    return nil
+  end
+  local label = raw("colorNameForLabel")
+  if label == "" or label == "none" then label = nil end
+  local rating = raw("rating")
+  return Json.object({
+    rating = type(rating) == "number" and rating or nil,
+    pick_status = PICK_STATUS[raw("pickStatus")],
+    color_label = label,
+  })
+end
+
 --- Request body for POST /v1/photos plus the photo's format type.
 -- Returns nil, reason for photos the Bridge cannot use.
 function PhotoData.collect(photo)
@@ -52,6 +71,7 @@ function PhotoData.collect(photo)
     file_path = photo:getRawMetadata("path"),
     exif_snapshot = exifSnapshot(photo),
     lr_develop_settings = Json.object(photo:getDevelopSettings() or {}),
+    lr_metadata = PhotoData.decisions(photo),
   }
   return body, formatType
 end

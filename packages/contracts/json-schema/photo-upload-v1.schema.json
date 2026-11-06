@@ -4,12 +4,17 @@
   "title": "PhotoUploadV1",
   "description": "Metadata sent alongside the JPEG preview when uploading a photo from the LR plugin.",
   "type": "object",
-  "required": ["schema_version", "lr_catalog_uuid"],
+  "required": [
+    "schema_version",
+    "lr_catalog_uuid"
+  ],
   "additionalProperties": false,
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": ["photo-upload-v1"]
+      "enum": [
+        "photo-upload-v1"
+      ]
     },
     "lr_catalog_uuid": {
       "type": "string",
@@ -24,6 +29,38 @@
       "type": "object",
       "description": "Current Lightroom Develop module settings at time of export (baseline for delta calculation).",
       "additionalProperties": true
+    },
+    "lr_metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "The photographer's decisions, used as culling labels. Re-uploading the same lr_catalog_uuid refreshes this together with lr_develop_settings and exif_snapshot.",
+      "properties": {
+        "rating": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 5,
+          "description": "Star rating 0-5"
+        },
+        "pick_status": {
+          "enum": [
+            -1,
+            0,
+            1,
+            null
+          ],
+          "description": "Lightroom flag: 1 picked, 0 none, -1 rejected"
+        },
+        "color_label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Color label, e.g. red, yellow, green"
+        }
+      }
     }
   }
 }

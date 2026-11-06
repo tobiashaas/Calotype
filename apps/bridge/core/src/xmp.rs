@@ -31,6 +31,35 @@ pub fn read_develop_settings(xmp: &str) -> Map<String, Value> {
     out
 }
 
+/// The photographer's decisions stored in a sidecar: `xmp:Rating` (0–5, −1 = rejected) and
+/// `xmp:Label`, as `{rating, pick_status, color_label}` like the Lightroom plugin sends them.
+/// Lightroom keeps pick/reject flags in the catalog only, so a rejected flag appears here
+/// only when another tool (e.g. Adobe Bridge) wrote rating −1.
+pub fn read_decisions(xmp: &str) -> Map<String, Value> {
+    let mut out = Map::new();
+    for (name, value) in prefixed_attributes(xmp, "xmp:") {
+        match name {
+            "Rating" => match value.trim().parse::<i64>() {
+                Ok(-1) => {
+                    out.insert("pick_status".into(), Value::from(-1));
+                }
+                Ok(r @ 0..=5) => {
+                    out.insert("rating".into(), Value::from(r));
+                }
+                _ => {}
+            },
+            "Label" => {
+                let label = unescape(value).trim().to_lowercase();
+                if !label.is_empty() && label != "none" {
+                    out.insert("color_label".into(), Value::from(label));
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
 /// True if the sidecar holds actual develop settings (not just ratings/keywords).
 pub fn has_develop_settings(settings: &Map<String, Value>) -> bool {
     [
@@ -57,12 +86,19 @@ fn parse_value(raw: &str) -> Value {
     Value::String(raw.to_string())
 }
 
-/// Iterate `crs:Name="value"` pairs (attribute form, as Adobe writes simple values).
 fn crs_attributes(xmp: &str) -> impl Iterator<Item = (&str, &str)> {
+    prefixed_attributes(xmp, "crs:")
+}
+
+/// Iterate `prefix:Name="value"` pairs (attribute form, as Adobe writes simple values).
+fn prefixed_attributes<'a>(
+    xmp: &'a str,
+    prefix: &'static str,
+) -> impl Iterator<Item = (&'a str, &'a str)> {
     let mut rest = xmp;
     std::iter::from_fn(move || loop {
-        let start = rest.find("crs:")?;
-        let after = &rest[start + 4..];
+        let start = rest.find(prefix)?;
+        let after = &rest[start + prefix.len()..];
         let name_len = after
             .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
             .unwrap_or(after.len());
@@ -289,6 +325,21 @@ mod tests {
         assert_eq!(again.matches("lrff:Profile=").count(), 1);
         assert!(again.contains("lrff:Profile=\"Test 2\""));
         assert_eq!(read_develop_settings(&again)["Vibrance"], json!(21));
+    }
+
+    #[test]
+    fn reads_rating_label_and_reject() {
+        let d = read_decisions(ADOBE);
+        assert_eq!(d["rating"], json!(4));
+        let labelled = r#"<rdf:Description xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmp:Rating="-1" xmp:Label="Green"/>"#;
+        let d = read_decisions(labelled);
+        assert_eq!(d["pick_status"], json!(-1));
+        assert_eq!(d["color_label"], json!("green"));
+        assert!(!d.contains_key("rating"));
+        assert!(
+            read_decisions("<x:xmpmeta/>").is_empty(),
+            "x:xmpmeta is not xmp:"
+        );
     }
 
     #[test]

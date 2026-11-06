@@ -179,6 +179,7 @@ local function fakePhoto(uuid, fileFormat, settings)
   local raw = {
     uuid = uuid, fileFormat = fileFormat, path = "D:/Shoot/" .. uuid .. ".CR3",
     isoSpeedRating = 400, aperture = 2.8, focalLength = 85,
+    rating = 4, pickStatus = -1, colorNameForLabel = "none",
   }
   return {
     getRawMetadata = function(_, key) return raw[key] end,
@@ -202,6 +203,9 @@ test("photo data maps file types and builds the bridge request", function()
   local json = Json.decode(Json.encode(body))
   eq(json.lr_develop_settings.Temperature, 5200, "settings")
   eq(json.exif_snapshot.camera, "Canon EOS R5", "exif")
+  eq(json.lr_metadata.rating, 4, "rating")
+  eq(json.lr_metadata.pick_status, -1, "rejected flag")
+  eq(json.lr_metadata.color_label, nil, "label 'none' dropped")
 
   local none, reason = PhotoData.collect(fakePhoto("v1", "VIDEO"))
   eq(none, nil, "video skipped")

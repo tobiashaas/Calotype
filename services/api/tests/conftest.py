@@ -134,11 +134,19 @@ def client(store, mock_publisher, mock_storage) -> Generator[TestClient, None, N
         return list(store.profiles.values())
 
     def _photo_create(session, *, photo_id, lr_catalog_uuid, s3_key,
-                      exif_snapshot, lr_develop_settings):
+                      exif_snapshot, lr_develop_settings, lr_metadata=None):
         ph = _fake_photo(str(photo_id), lr_catalog_uuid, s3_key)
+        ph.lr_develop_settings = lr_develop_settings
+        ph.lr_metadata = lr_metadata or {}
         store.photos[str(photo_id)] = ph
         store.photos[f"lc:{lr_catalog_uuid}"] = ph
         return ph
+
+    def _photo_refresh(session, photo, *, exif_snapshot, lr_develop_settings, lr_metadata):
+        photo.exif_snapshot = exif_snapshot
+        photo.lr_develop_settings = lr_develop_settings
+        photo.lr_metadata = lr_metadata
+        return photo
 
     def _photo_get_by_id(session, photo_id):
         return store.photos.get(str(photo_id))
@@ -157,6 +165,7 @@ def client(store, mock_publisher, mock_storage) -> Generator[TestClient, None, N
         patch("lr_frameflow_api.main.ProfileRepository.get_by_id", side_effect=_profile_get_by_id),
         patch("lr_frameflow_api.main.ProfileRepository.list_all", side_effect=_profile_list_all),
         patch("lr_frameflow_api.main.PhotoRepository.create", side_effect=_photo_create),
+        patch("lr_frameflow_api.main.PhotoRepository.refresh", side_effect=_photo_refresh),
         patch("lr_frameflow_api.main.PhotoRepository.get_by_id", side_effect=_photo_get_by_id),
         patch("lr_frameflow_api.main.PhotoRepository.get_by_lr_catalog_uuid", side_effect=_photo_get_by_lr_catalog_uuid),
         patch("lr_frameflow_api.main.EditResultRepository.get_all_by_job_id", side_effect=_edit_result_get_all),

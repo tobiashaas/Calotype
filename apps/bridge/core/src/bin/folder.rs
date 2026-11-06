@@ -138,6 +138,7 @@ impl Bridge {
                     "lr_catalog_uuid": id,
                     "file_path": path.display().to_string(),
                     "lr_develop_settings": settings,
+                    "lr_metadata": photo.decisions,
                 }),
             )
             .await

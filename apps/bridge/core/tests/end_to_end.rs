@@ -157,6 +157,7 @@ fn photo_body(uuid: &str, path: &std::path::Path) -> Value {
         "lr_catalog_uuid": uuid,
         "file_path": path.display().to_string(),
         "lr_develop_settings": {"Exposure2012": 0.2},
+        "lr_metadata": {"rating": 4, "pick_status": 1},
     })
 }
 
@@ -249,6 +250,10 @@ async fn edit_job_roundtrip_with_retry() {
     assert_eq!(
         f.uploads[0]["lr_develop_settings"],
         json!({"Exposure2012": 0.2})
+    );
+    assert_eq!(
+        f.uploads[0]["lr_metadata"],
+        json!({"rating": 4, "pick_status": 1})
     );
     let (key, body) = &f.jobs[0];
     assert_eq!(

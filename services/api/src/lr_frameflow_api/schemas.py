@@ -42,6 +42,8 @@ class PhotoMetadataV1(BaseModel):
     lr_catalog_uuid: str
     exif_snapshot: dict[str, Any] = Field(default_factory=dict)
     lr_develop_settings: dict[str, Any] = Field(default_factory=dict)
+    # Rating, pick/reject flag, color label: culling labels (ADR 005).
+    lr_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class JobAcceptedResponse(BaseModel):

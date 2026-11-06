@@ -101,6 +101,9 @@ struct PhotoReq {
     exif_snapshot: Map<String, Value>,
     #[serde(default)]
     lr_develop_settings: Map<String, Value>,
+    /// Rating, pick/reject flag, color label (culling labels).
+    #[serde(default)]
+    lr_metadata: Map<String, Value>,
 }
 
 async fn register_photo(State(state): State<Shared>, Json(body): Json<Value>) -> Response {
@@ -122,6 +125,7 @@ async fn register_photo(State(state): State<Shared>, Json(body): Json<Value>) ->
         &req.file_path,
         &Value::Object(req.exif_snapshot),
         &Value::Object(req.lr_develop_settings),
+        &Value::Object(req.lr_metadata),
     );
     match row {
         Ok(row) => (StatusCode::ACCEPTED, Json(row)).into_response(),

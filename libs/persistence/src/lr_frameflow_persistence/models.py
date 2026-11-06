@@ -32,6 +32,11 @@ class Photo(Base):
         JSONB, nullable=False, server_default=func.cast("{}", JSONB)
     )
 
+    # Rating, pick/reject flag, color label from Lightroom or XMP (culling labels).
+    lr_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=func.cast("{}", JSONB)
+    )
+
     # Populated by feature worker in Phase 2; plain UUID column (no FK) to avoid circularity.
     feature_vector_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 

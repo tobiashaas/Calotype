@@ -37,6 +37,7 @@ class PhotoRepository:
         s3_key: str,
         exif_snapshot: dict[str, Any],
         lr_develop_settings: dict[str, Any],
+        lr_metadata: dict[str, Any] | None = None,
     ) -> Photo:
         photo = Photo(
             id=photo_id,
@@ -44,7 +45,24 @@ class PhotoRepository:
             s3_key=s3_key,
             exif_snapshot=exif_snapshot,
             lr_develop_settings=lr_develop_settings,
+            lr_metadata=lr_metadata or {},
         )
         session.add(photo)
+        session.flush()
+        return photo
+
+    @staticmethod
+    def refresh(
+        session: Session,
+        photo: Photo,
+        *,
+        exif_snapshot: dict[str, Any],
+        lr_develop_settings: dict[str, Any],
+        lr_metadata: dict[str, Any],
+    ) -> Photo:
+        """Re-upload of a known photo: the preview stays, edits and decisions are current."""
+        photo.exif_snapshot = exif_snapshot
+        photo.lr_develop_settings = lr_develop_settings
+        photo.lr_metadata = lr_metadata
         session.flush()
         return photo

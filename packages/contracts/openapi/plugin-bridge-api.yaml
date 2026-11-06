@@ -36,8 +36,9 @@ paths:
       summary: Register a photo for upload (idempotent by lr_catalog_uuid)
       description: |
         The Bridge builds the preview itself from `file_path` (embedded JPEG for RAW files,
-        the file itself for JPEG/TIFF) and uploads it. Registering the same UUID again while
-        the upload is still pending replaces path and settings; after upload it is a no-op.
+        the file itself for JPEG/TIFF) and uploads it. Registering the same UUID again
+        replaces path, settings and decisions; an already uploaded photo is sent again only
+        if settings, EXIF or decisions changed.
       security: [{ token: [] }]
       requestBody:
         required: true
@@ -161,6 +162,12 @@ components:
           type: object
           additionalProperties: true
           description: "`photo:getDevelopSettings()` — training target"
+        lr_metadata:
+          type: object
+          additionalProperties: true
+          description: |
+            The photographer's decisions, used as culling labels:
+            `rating` (0–5), `pick_status` (1 picked, 0 none, −1 rejected), `color_label`.
     PhotoState:
       type: object
       required: [lr_catalog_uuid, status, attempts]

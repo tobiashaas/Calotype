@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
 use serde_json::Value;
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 pub fn now() -> i64 {
     SystemTime::now()
@@ -32,6 +32,9 @@ pub struct PhotoRow {
     pub exif_snapshot: Value,
     #[serde(skip)]
     pub lr_develop_settings: Value,
+    /// Rating, pick/reject flag, color label (culling labels).
+    #[serde(skip)]
+    pub lr_metadata: Value,
     pub status: String,
     pub remote_photo_id: Option<String>,
     pub attempts: i64,
@@ -75,6 +78,7 @@ fn photo_from_row(r: &Row) -> rusqlite::Result<PhotoRow> {
         remote_photo_id: r.get(5)?,
         attempts: r.get(6)?,
         last_error: r.get(7)?,
+        lr_metadata: json(r.get(8)?),
     })
 }
 
@@ -96,7 +100,7 @@ fn job_from_row(r: &Row) -> rusqlite::Result<JobRow> {
 }
 
 const PHOTO_COLS: &str = "lr_catalog_uuid, file_path, exif_json, settings_json, status, \
-                          remote_photo_id, attempts, last_error";
+                          remote_photo_id, attempts, last_error, metadata_json";
 const JOB_COLS: &str = "job_id, kind, request_json, uuids_json, idempotency_key, status, \
                         remote_job_id, attempts, last_error, results_json, profile_id";
 
@@ -150,6 +154,11 @@ impl Db {
         if version < 2 {
             conn.execute_batch("ALTER TABLE jobs ADD COLUMN profile_id TEXT;")?;
         }
+        if version < 3 {
+            conn.execute_batch(
+                "ALTER TABLE photos ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}';",
+            )?;
+        }
         if version < SCHEMA_VERSION {
             conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         }
@@ -158,30 +167,48 @@ impl Db {
 
     // ---- photos -------------------------------------------------------------
 
-    /// Insert, or refresh path/settings while the upload is still pending.
+    /// Insert, or refresh a known photo. An uploaded photo is sent again only when its
+    /// settings, EXIF or decisions (rating, flag, label) changed — re-edits and re-ratings
+    /// must reach the server, unchanged re-registrations cost nothing.
     pub fn upsert_photo(
         &self,
         uuid: &str,
         file_path: &str,
         exif: &Value,
         settings: &Value,
+        metadata: &Value,
     ) -> Result<PhotoRow> {
+        if let Some(existing) = self.photo(uuid)? {
+            let unchanged = existing.exif_snapshot == *exif
+                && existing.lr_develop_settings == *settings
+                && existing.lr_metadata == *metadata;
+            if existing.status == "uploaded" && unchanged {
+                return Ok(existing);
+            }
+        }
         let t = now();
         self.conn.execute(
-            "INSERT INTO photos (lr_catalog_uuid, file_path, exif_json, settings_json, status,
-                                 created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?5)
+            "INSERT INTO photos (lr_catalog_uuid, file_path, exif_json, settings_json,
+                                 metadata_json, status, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6, ?6)
              ON CONFLICT(lr_catalog_uuid) DO UPDATE SET
                  file_path = excluded.file_path,
                  exif_json = excluded.exif_json,
                  settings_json = excluded.settings_json,
+                 metadata_json = excluded.metadata_json,
                  status = 'pending',
                  attempts = 0,
                  next_attempt_at = 0,
                  last_error = NULL,
-                 updated_at = excluded.updated_at
-             WHERE photos.status != 'uploaded'",
-            params![uuid, file_path, exif.to_string(), settings.to_string(), t],
+                 updated_at = excluded.updated_at",
+            params![
+                uuid,
+                file_path,
+                exif.to_string(),
+                settings.to_string(),
+                metadata.to_string(),
+                t
+            ],
         )?;
         Ok(self.photo(uuid)?.expect("row exists after upsert"))
     }
@@ -375,27 +402,38 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn upsert_refreshes_pending_but_not_uploaded() {
+    fn upsert_resends_uploaded_photo_only_when_something_changed() {
         let db = Db::open_in_memory().unwrap();
-        db.upsert_photo("u1", "a.cr3", &json!({}), &json!({"Exposure2012": 0.1}))
+        let s1 = json!({"Exposure2012": 0.1});
+        let m1 = json!({"rating": 3});
+        db.upsert_photo("u1", "a.cr3", &json!({}), &s1, &m1)
             .unwrap();
         let p = db
-            .upsert_photo("u1", "b.cr3", &json!({}), &json!({"Exposure2012": 0.2}))
+            .upsert_photo("u1", "b.cr3", &json!({}), &s1, &m1)
             .unwrap();
-        assert_eq!(p.file_path, "b.cr3");
+        assert_eq!(p.file_path, "b.cr3", "pending photo takes the new path");
 
         db.mark_photo_uploaded("u1", "remote-1").unwrap();
-        let p = db
-            .upsert_photo("u1", "c.cr3", &json!({}), &json!({}))
+        let same = db
+            .upsert_photo("u1", "c.cr3", &json!({}), &s1, &m1)
             .unwrap();
-        assert_eq!(p.file_path, "b.cr3");
-        assert_eq!(p.status, "uploaded");
+        assert_eq!(
+            (same.status.as_str(), same.file_path.as_str()),
+            ("uploaded", "b.cr3")
+        );
+
+        let rerated = db
+            .upsert_photo("u1", "b.cr3", &json!({}), &s1, &json!({"rating": 5}))
+            .unwrap();
+        assert_eq!(rerated.status, "pending", "new rating goes to the server");
+        assert_eq!(rerated.remote_photo_id.as_deref(), Some("remote-1"));
+        assert_eq!(rerated.lr_metadata, json!({"rating": 5}));
     }
 
     #[test]
     fn retry_pushes_photo_out_of_due_list() {
         let db = Db::open_in_memory().unwrap();
-        db.upsert_photo("u1", "a.cr3", &json!({}), &json!({}))
+        db.upsert_photo("u1", "a.cr3", &json!({}), &json!({}), &json!({}))
             .unwrap();
         assert_eq!(db.due_photos(10).unwrap().len(), 1);
         db.retry_photo_later("u1", "offline").unwrap();
@@ -434,6 +472,10 @@ mod tests {
             .unwrap();
         }
         let db = Db::open(&path).unwrap();
+        let photo = db
+            .upsert_photo("p", "a.cr3", &json!({}), &json!({}), &json!({"rating": 2}))
+            .unwrap();
+        assert_eq!(photo.lr_metadata, json!({"rating": 2}), "v3 column exists");
         let job = db.insert_job("train", &json!({}), &["u".into()]).unwrap();
         db.set_job_profile(&job.job_id, "p-1").unwrap();
         assert_eq!(

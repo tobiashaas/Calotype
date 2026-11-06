@@ -56,6 +56,8 @@ pub struct FolderPhoto {
     pub sidecar: PathBuf,
     /// Develop settings from an existing sidecar (empty if none or no crs: settings).
     pub settings: Map<String, Value>,
+    /// Rating / color label from the sidecar (culling labels).
+    pub decisions: Map<String, Value>,
     pub has_sidecar: bool,
 }
 
@@ -74,14 +76,19 @@ pub fn scan(dir: &Path) -> Result<Vec<FolderPhoto>> {
             continue;
         }
         let sidecar = xmp::sidecar_path(&path);
-        let (has_sidecar, settings) = match std::fs::read_to_string(&sidecar) {
-            Ok(text) => (true, xmp::read_develop_settings(&text)),
-            Err(_) => (false, Map::new()),
+        let (has_sidecar, settings, decisions) = match std::fs::read_to_string(&sidecar) {
+            Ok(text) => (
+                true,
+                xmp::read_develop_settings(&text),
+                xmp::read_decisions(&text),
+            ),
+            Err(_) => (false, Map::new(), Map::new()),
         };
         photos.push(FolderPhoto {
             path,
             sidecar,
             settings,
+            decisions,
             has_sidecar,
         });
     }
