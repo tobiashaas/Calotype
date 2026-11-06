@@ -23,7 +23,8 @@ LRFrameFlow is an AI-powered Lightroom Classic photo editing system. It uses an 
 | Phase 2 — Real Data Flow | ✅ Done | Workers download/upload MinIO, feature extraction, model artifact lifecycle |
 | Phase 3 — Real ML Pipeline | ✅ Done | Pillow histogram features (128-dim), Ridge regression, joblib serialization |
 | Phase 4 — Production Hardening | ✅ Done | Redis AOF, stuck-job reaper, at-least-once, heartbeat, CI lint+tests, contracts, JSON logs, rate limiting |
-| Phase 5 — Bridge & Plugin | 🟡 In progress | Bridge (local API, SQLite outbox, previews) + LR plugin (train/apply/status) done; real-Lightroom smoke test + full end-to-end run open |
+| Phase 5 — Bridge & Plugin | 🟡 In progress | Bridge, LR plugin, folder mode (RAW+XMP) done; full stack verified end-to-end on 60 real CR3 (synthetic-rule test 93 % within tolerance); real-Lightroom smoke test open |
+| Phase 6 — Culling | 🔲 Planned | see `docs/adr/005-culling-architecture.md` |
 
 See `TODO.md` for the detailed task breakdown.
 
@@ -110,6 +111,9 @@ TODO.md                # Completed + open work items — keep up to date
 | `apps/bridge/core/src/server.rs` | Local API for the plugin (127.0.0.1:47600) |
 | `apps/bridge/core/src/preview.rs` | Unedited preview: smallest embedded RAW JPEG ≥ 1200 px (else largest) / original JPEG/TIFF, orientation applied |
 | `apps/lr-plugin/LRFrameFlow.lrplugin/BridgeClient.lua` | Plugin → Bridge HTTP, reads `bridge.json` |
+| `apps/bridge/core/src/xmp.rs` | Read/write Adobe `crs:` XMP sidecars (ProcessVersion 15.4, `lrff:Profile`) |
+| `apps/bridge/core/src/bin/folder.rs` | `lrff-folder train/apply/profiles` — folder mode without Lightroom |
+| `tools/lrff_eval/synthetic.py` | Synthetic-rule test: make rule XMPs, score predictions vs. rule and vs. guessing |
 | `apps/lr-plugin/LRFrameFlow.lrplugin/ApplyProfile.lua` | Edit flow in Lightroom, `applyDevelopSettings` in one transaction |
 | `packages/contracts/json-schema/job-envelope-v1.schema.json` | Queue envelope schema |
 | `packages/contracts/json-schema/photo-upload-v1.schema.json` | Photo upload metadata schema |
@@ -172,7 +176,7 @@ On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
 | API | FastAPI 0.115+, Pydantic 2.10+, Uvicorn 0.32+ |
 | Database | PostgreSQL 16 + pgvector, SQLAlchemy 2.0+, Alembic 1.14+ |
 | Queue | Redis 7, redis-py 5.2+ |
-| Object Storage | MinIO (S3-compatible), boto3 1.35+ |
+| Object Storage | S3-compatible: RustFS 1.0 (Apache-2.0) in compose (MinIO publishes no community images anymore), boto3 1.35+ |
 | Workers | Python 3.11+, blocking BLPOP loop |
 | ML | scikit-learn 1.4+, Pillow 10+, numpy 1.26+, joblib 1.3+ |
 | Desktop Bridge | Rust (axum 0.8, rusqlite, reqwest, image) + Tauri 2, static HTML/JS UI |
@@ -189,7 +193,7 @@ On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
 # Start infrastructure
 cp infra/compose/env.example infra/compose/.env
 # Edit .env to set port overrides if needed (Postgres 5433, MinIO 9100/9101)
-cd infra/compose && docker compose up -d
+cd infra/compose && docker compose -p lrframeflow up -d
 
 # Install Python libs (order matters due to dependencies)
 pip install -e libs/domain
@@ -211,6 +215,9 @@ DATABASE_URL="postgresql+psycopg://lrframeflow:lrframeflow@127.0.0.1:5433/lrfram
 cd services/api
 DATABASE_URL="postgresql+psycopg://lrframeflow:lrframeflow@127.0.0.1:5433/lrframeflow" \
   uvicorn lr_frameflow_api.main:app --reload
+
+# Windows: always use 127.0.0.1, never "localhost" (IPv6 ::1 is tried first and Docker's
+# port forward hangs there → ~21 s per connection). Code defaults follow this.
 
 # Validate contracts (also runs in CI)
 python scripts/validate_contracts.py
@@ -262,8 +269,8 @@ Key vars (see `infra/compose/env.example` for full list):
 | Variable | Default | Used by |
 |----------|---------|---------|
 | `DATABASE_URL` | `postgresql+psycopg://lrframeflow:lrframeflow@127.0.0.1:5433/lrframeflow` | API, workers, migrations |
-| `REDIS_URL` | `redis://localhost:6379/0` | API, workers |
-| `S3_ENDPOINT` | `http://localhost:9100` | workers, API |
+| `REDIS_URL` | `redis://127.0.0.1:6379/0` | API, workers |
+| `S3_ENDPOINT` | `http://127.0.0.1:9100` | workers, API |
 | `S3_BUCKET` | `lrff-photos` | workers, API |
 | `S3_ACCESS_KEY` | `minio` | workers, API |
 | `S3_SECRET_KEY` | `miniosecret_changeme` | workers, API |

@@ -79,6 +79,21 @@ Open:
 - [ ] Smoke test in real Lightroom: install plugin, `getDevelopSettings()` keys for JPEG/TIFF (`IncrementalTemperature`?), `applyDevelopSettings` with `WhiteBalance = "Custom"`, `appData` path
 - [ ] End-to-end smoke test: LR → Plugin → Bridge → API → Workers → back to LR
 
+### Phase 5b — Folder mode & first measurement (done 2026-11-06)
+- [x] `xmp.rs`: read `crs:` settings as training targets; write new sidecars / update existing ones (keeps ratings, keywords)
+- [x] `lrff-folder train/apply/profiles` (RAW + XMP, no Lightroom), content-based photo ids
+- [x] `tools/lrff_eval/synthetic.py`: known-rule test on 60 real CR3 (45 train / 15 test): exposure MAE 0.01 EV, temperature 25 K, 93 % of photos with every slider within tolerance
+- [x] Fixed on the real stack: workers crashed on empty queues (redis-py 8 socket timeout ≤ BLPOP) and on any Redis hiccup; `localhost` cost 21 s per connection on Windows → 127.0.0.1 defaults; MinIO image gone → RustFS
+- [ ] `lrff-eval` on real edits: hold-out split of the user's own edited photos (needs ~30+ edited RAWs)
+
+### Phase 6 — Culling (planned)
+See `docs/adr/005-culling-architecture.md`.
+- [ ] Plugin: read star ratings, pick/reject flags, color labels as culling labels
+- [ ] Swappable model interface (`face_detector: …`), `THIRD_PARTY_MODELS.md`
+- [ ] Feature extractors (technical, face, emotion/moment, content, series) with permissive models
+- [ ] Scorer trained on the user's own decisions; explanations per photo; "uncertain" bucket
+- [ ] Labeling UI + `lrff-eval cull` (agreement, rescued technically-weak keepers)
+
 ### Backlog / Nice-to-have
 - [ ] **Better model (biggest quality lever):** CNN on the image (e.g. pretrained ResNet/EfficientNet backbone, one head per slider group) instead of 128-dim histogram + Ridge; export to ONNX for optional local inference in the Bridge
 - [ ] Predict RAW white balance relative to as-shot instead of absolute Kelvin
