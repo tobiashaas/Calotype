@@ -8,6 +8,7 @@ import numpy as np
 from PIL import Image, UnidentifiedImageError
 
 FEATURE_DIM = 128  # 4 channels × 32 histogram bins
+FEATURE_MODEL_VERSION = "histogram-v1"  # stored with every FeatureVector; bump on layout change
 _BINS = 32
 _TARGET_SIZE = (256, 256)
 

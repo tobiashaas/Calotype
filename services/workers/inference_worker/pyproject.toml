@@ -12,6 +12,7 @@ dependencies = [
     "lr-frameflow-queue",
     "lr-frameflow-observability",
     "lr-frameflow-inference-pipeline",
+    "lr-frameflow-edit-serializer",
     "boto3>=1.35",
 ]
 

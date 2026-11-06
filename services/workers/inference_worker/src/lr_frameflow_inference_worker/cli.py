@@ -12,6 +12,7 @@ import boto3
 from redis import Redis
 from sqlalchemy.orm import sessionmaker
 
+from lr_edit_serializer import serialize_for_lightroom
 from lr_frameflow_domain.jobs import JobStatus
 from lr_frameflow_inference_pipeline import run_inference
 from lr_frameflow_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
@@ -70,24 +71,25 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
             if profile is None:
                 raise ValueError(f"profile {profile_id} not found")
             artifact_key = profile.model_artifact_key
+            format_type = profile.format_type
 
-        model_bytes: bytes = b""
-        if artifact_key:
-            try:
-                s3 = _s3_client()
-                bucket = os.environ.get("S3_BUCKET", "lrff-photos")
-                obj = s3.get_object(Bucket=bucket, Key=artifact_key)
-                model_bytes = obj["Body"].read()
-            except Exception as e:
-                log.warning("could not load model artifact key=%s: %s — using zero predictions", artifact_key, e)
+        # No model → fail the job. Zero predictions would reset the user's photos.
+        if not artifact_key:
+            raise ValueError(f"profile {profile_id} has no model artifact")
+        s3 = _s3_client()
+        bucket = os.environ.get("S3_BUCKET", "lrff-photos")
+        model_bytes = s3.get_object(Bucket=bucket, Key=artifact_key)["Body"].read()
 
-        # Run inference for each photo
+        # Run inference for each photo; photos without features (no usable preview) get no result.
         for photo_id in photo_ids:
             with session_scope(factory) as session:
                 fv = FeatureVectorRepository.get_by_photo_id(session, photo_id)
-                vector = list(fv.vector) if fv is not None else [0.0] * 128
+                if fv is None:
+                    log.warning("no feature vector, skipping photo_id=%s job_id=%s", photo_id, job_uuid)
+                    continue
 
-                lr_settings = run_inference(model_bytes, vector) if model_bytes else {p: 0.0 for p in ["exposure", "temp", "tint", "contrast", "highlights", "shadows", "whites", "blacks", "vibrance", "saturation"]}
+                prediction = run_inference(model_bytes, list(fv.vector))
+                lr_settings = serialize_for_lightroom(prediction, format_type)
 
                 EditResultRepository.create(
                     session,

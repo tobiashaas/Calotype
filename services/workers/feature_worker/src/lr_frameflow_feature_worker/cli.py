@@ -13,7 +13,7 @@ from redis import Redis
 from sqlalchemy.orm import sessionmaker
 
 from lr_frameflow_domain.jobs import JobStatus
-from lr_frameflow_inference_pipeline import extract_features
+from lr_frameflow_inference_pipeline import FEATURE_MODEL_VERSION, extract_features
 from lr_frameflow_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
 from lr_frameflow_persistence.reaper import reap_stuck_jobs, start_reaper_thread
 from lr_frameflow_persistence.repositories.feature_vectors import FeatureVectorRepository
@@ -25,8 +25,6 @@ from lr_frameflow_queue.constants import QUEUE_FEATURE
 from lr_frameflow_queue.publisher import RedisQueuePublisher, redis_from_env
 
 log = get_logger("lr_ff.feature_worker")
-
-FEATURE_MODEL_VERSION = "histogram-v1"
 
 
 def _s3_client():
@@ -76,15 +74,19 @@ def process_one(redis: Redis, publisher: RedisQueuePublisher, factory: sessionma
                     log.info("feature vector already exists, reusing photo_id=%s", photo_id)
                     continue
 
-                # Download preview from MinIO
+                # Download preview from MinIO. Without a usable preview no vector is stored:
+                # a zero vector would be reused forever and poison training.
                 try:
                     obj = s3.get_object(Bucket=bucket, Key=photo.s3_key)
                     image_bytes = obj["Body"].read()
                 except Exception as e:
-                    log.warning("could not download preview, using empty bytes photo_id=%s: %s", photo_id, e)
-                    image_bytes = b""
+                    log.warning("could not download preview, skipping photo_id=%s: %s", photo_id, e)
+                    continue
 
                 vector = extract_features(image_bytes)
+                if not any(vector):
+                    log.warning("preview not decodable, skipping photo_id=%s", photo_id)
+                    continue
                 fv_id = uuid4()
                 FeatureVectorRepository.create(
                     session,

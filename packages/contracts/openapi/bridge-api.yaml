@@ -331,7 +331,18 @@ components:
         lr_settings:
           type: object
           additionalProperties: true
-          description: Lightroom Develop settings to apply (exposure, contrast, highlights, etc.)
+          description: |
+            Lightroom Classic develop settings, ready for `photo:applyDevelopSettings()`.
+            Keys use Lightroom names (`Exposure2012`, `Contrast2012`, `Highlights2012`, …);
+            white balance is `Temperature`/`Tint` for RAW profiles and
+            `IncrementalTemperature`/`IncrementalTint` for JPEG/TIFF profiles.
+            Values are clamped to the slider ranges.
+          example:
+            Exposure2012: 0.35
+            Temperature: 5600
+            Tint: 8
+            Contrast2012: -12
+            Highlights2012: -40
         s3_key:
           type: string
           nullable: true

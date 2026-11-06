@@ -12,7 +12,8 @@ from sklearn.preprocessing import StandardScaler
 
 from lr_frameflow_inference_pipeline.features import LR_PARAMS
 
-_MIN_SAMPLES = 3
+MIN_SAMPLES = 3
+_MIN_SAMPLES = MIN_SAMPLES  # backwards-compatible alias
 
 
 def train_model(
@@ -57,25 +58,27 @@ def run_inference(model_bytes: bytes, feature_vector: list[float]) -> dict[str, 
     """Apply a trained model to a feature vector and return LR settings.
 
     Returns a dict of {param: value} for all LR_PARAMS.
-    Falls back to zeros on any error.
+
+    Raises ``ValueError`` for an unreadable artifact: silently returning zeros would
+    reset the user's photos to neutral settings.
     """
     try:
         artifact = joblib.load(io.BytesIO(model_bytes))
-    except Exception:
-        return {p: 0.0 for p in LR_PARAMS}
+    except Exception as exc:
+        raise ValueError("model artifact cannot be loaded") from exc
+
+    if not isinstance(artifact, dict):
+        raise ValueError("model artifact has an unexpected format")
 
     if artifact.get("type") == "zero_model":
         return {p: 0.0 for p in LR_PARAMS}
 
-    try:
-        scaler = artifact["scaler"]
-        model = artifact["model"]
-        params = artifact["lr_params"]
+    scaler = artifact["scaler"]
+    model = artifact["model"]
+    params = artifact["lr_params"]
 
-        X = np.array([feature_vector], dtype=np.float32)
-        X_scaled = scaler.transform(X)
-        pred = model.predict(X_scaled)[0]  # shape (n_params,)
+    X = np.array([feature_vector], dtype=np.float32)
+    X_scaled = scaler.transform(X)
+    pred = model.predict(X_scaled)[0]  # shape (n_params,)
 
-        return {p: float(v) for p, v in zip(params, pred)}
-    except Exception:
-        return {p: 0.0 for p in LR_PARAMS}
+    return {p: float(v) for p, v in zip(params, pred)}

@@ -6,15 +6,22 @@ import os
 import sys
 import time
 import traceback
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import boto3
 from redis import Redis
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
+from lr_edit_serializer import from_lightroom
 from lr_frameflow_domain.jobs import JobStatus
 from lr_frameflow_domain.profiles import ProfileStatus
-from lr_frameflow_inference_pipeline import train_model
+from lr_frameflow_inference_pipeline import (
+    FEATURE_MODEL_VERSION,
+    LR_PARAMS,
+    MIN_SAMPLES,
+    extract_features,
+    train_model,
+)
 from lr_frameflow_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
 from lr_frameflow_persistence.reaper import reap_stuck_jobs, start_reaper_thread
 from lr_frameflow_persistence.repositories.feature_vectors import FeatureVectorRepository
@@ -46,6 +53,35 @@ def _ensure_bucket(s3, bucket: str) -> None:
         s3.create_bucket(Bucket=bucket)
 
 
+def _ensure_feature_vector(session: Session, s3, bucket: str, photo) -> list[float] | None:
+    """Return the photo's feature vector, extracting and storing it if missing.
+
+    Returns None when the preview cannot be downloaded or decoded — a zero vector
+    would teach the model nonsense.
+    """
+    existing = FeatureVectorRepository.get_by_photo_id(session, photo.id)
+    if existing is not None:
+        return list(existing.vector)
+    try:
+        image_bytes = s3.get_object(Bucket=bucket, Key=photo.s3_key)["Body"].read()
+    except Exception as exc:
+        log.warning("could not download preview photo_id=%s: %s", photo.id, exc)
+        return None
+    vector = extract_features(image_bytes)
+    if not any(vector):
+        log.warning("preview not decodable photo_id=%s", photo.id)
+        return None
+    fv_id = uuid4()
+    FeatureVectorRepository.create(
+        session,
+        vector_id=fv_id,
+        photo_id=photo.id,
+        model_version=FEATURE_MODEL_VERSION,
+        vector=vector,
+    )
+    PhotoRepository.set_feature_vector_id(session, photo.id, fv_id)
+    return vector
+
 
 def process_one(redis: Redis, factory: sessionmaker) -> bool:
     envelope, raw = consumer.blpop_envelope(redis, QUEUE_TRAIN, timeout_seconds=5)
@@ -70,30 +106,50 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
             if profile_id_str:
                 ProfileRepository.set_status(session, UUID(profile_id_str), ProfileStatus.TRAINING)
 
-        # Load feature vectors + LR settings for all training photos
-        feature_vectors: list[list[float]] = []
-        lr_settings_list: list[dict] = []
-        with session_scope(factory) as session:
-            for photo_id in photo_ids:
-                fv = FeatureVectorRepository.get_by_photo_id(session, photo_id)
-                if fv is None:
-                    log.warning("no feature vector for photo_id=%s — skipping", photo_id)
-                    continue
-                photo = PhotoRepository.get_by_id(session, photo_id)
-                lr_settings = (photo.lr_develop_settings or {}) if photo else {}
-                feature_vectors.append(list(fv.vector))
-                lr_settings_list.append(lr_settings)
+        format_type = "raw"
+        if profile_id_str:
+            with session_scope(factory) as session:
+                profile = ProfileRepository.get_by_id(session, UUID(profile_id_str))
+                if profile is not None:
+                    format_type = profile.format_type
 
-        if not feature_vectors:
-            raise ValueError(f"no feature vectors available for job {job_uuid} — run feature extraction first")
+        bucket = os.environ.get("S3_BUCKET", "lrff-photos")
+        s3 = _s3_client()
+
+        # Training rows: features of the preview + the user's LR settings as targets.
+        # Features are computed here when missing — freshly uploaded photos have none yet.
+        feature_vectors: list[list[float]] = []
+        targets: list[dict[str, float]] = []
+        skipped: list[str] = []
+        for photo_id in photo_ids:
+            with session_scope(factory) as session:
+                photo = PhotoRepository.get_by_id(session, photo_id)
+                if photo is None:
+                    skipped.append(f"{photo_id}: not found")
+                    continue
+                row = from_lightroom(photo.lr_develop_settings or {}, format_type)
+                missing = [p for p in LR_PARAMS if p not in row]
+                if missing:
+                    skipped.append(f"{photo_id}: missing LR settings {missing}")
+                    continue
+                vector = _ensure_feature_vector(session, s3, bucket, photo)
+                if vector is None:
+                    skipped.append(f"{photo_id}: preview unavailable")
+                    continue
+                feature_vectors.append(vector)
+                targets.append(row)
+
+        if skipped:
+            log.warning("skipped %d training photos: %s", len(skipped), "; ".join(skipped[:20]))
+        if len(feature_vectors) < MIN_SAMPLES:
+            raise ValueError(
+                f"only {len(feature_vectors)} usable training photos, need at least {MIN_SAMPLES}"
+            )
 
         # Train real model and save bytes to MinIO
-        model_bytes = train_model(feature_vectors, lr_settings_list)
+        model_bytes = train_model(feature_vectors, targets)
         profile_id = UUID(profile_id_str) if profile_id_str else None
         artifact_key = f"models/{profile_id}/model-ridge-v1.joblib" if profile_id else f"models/job-{job_uuid}/model-ridge-v1.joblib"
-        bucket = os.environ.get("S3_BUCKET", "lrff-photos")
-
-        s3 = _s3_client()
         _ensure_bucket(s3, bucket)
         s3.put_object(Bucket=bucket, Key=artifact_key, Body=model_bytes, ContentType="application/octet-stream")
         log.info("model artifact saved key=%s n_samples=%d", artifact_key, len(feature_vectors))

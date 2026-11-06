@@ -1,11 +1,31 @@
-"""Serialize internal edit payloads toward Lightroom-compatible sidecars/metadata."""
+"""Translate between internal model parameters and Lightroom Classic develop settings."""
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+
+from lr_edit_serializer.sliders import (
+    FormatType,
+    SliderSpec,
+    from_lightroom,
+    slider_specs,
+    to_lightroom,
+)
+
+__all__ = [
+    "FormatType",
+    "SliderSpec",
+    "from_lightroom",
+    "serialize_for_lightroom",
+    "slider_specs",
+    "to_lightroom",
+    "ping",
+]
 
 
-def serialize_for_lightroom(edit: Mapping[str, Any]) -> Mapping[str, Any]:
-    """Stub: passes through validated structure until XMP/catalog mapping lands."""
-    return dict(edit)
+def serialize_for_lightroom(
+    edit: Mapping[str, float], format_type: FormatType = "raw"
+) -> dict[str, float]:
+    """Model prediction → settings ready for ``photo:applyDevelopSettings()``."""
+    return to_lightroom(edit, format_type)
 
 
 def ping() -> str:
