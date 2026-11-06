@@ -83,6 +83,7 @@ TODO.md                # Completed + open work items — keep up to date
   - **Workers CANNOT import `lr_frameflow_api`**
   - **API CANNOT import worker modules**
 - **Versioned contracts:** Every queue message and API schema has a `schema_version` field. Never break existing schema versions; add new ones.
+- **Tolerant reader:** request models ignore (and log) unknown *optional* fields instead of rejecting them — a newer Bridge must work with an older server. New *required* fields need a new schema version. (Found when an updated Bridge sent `lr_metadata` to a not-yet-restarted API: every upload failed with 422.)
 - **Idempotency:** Use the `idempotency_key` DB column (unique partial index) for safe retries.
 - **Photo upload is idempotent:** Uploading the same `lr_catalog_uuid` twice returns the existing record.
 

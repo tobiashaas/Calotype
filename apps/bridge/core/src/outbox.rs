@@ -19,63 +19,84 @@ use crate::db::JobRow;
 use crate::preview::{build_preview, PreviewError};
 use crate::AppState;
 
-const PHOTO_BATCH: usize = 4;
+/// Photos prepared and uploaded at the same time (preview building is CPU-bound,
+/// uploads wait on the network — both overlap).
+const PHOTO_BATCH: usize = 8;
 const JOB_BATCH: usize = 20;
 /// Seconds between status polls of a queued/running server job.
 pub const POLL_SECS: i64 = 2;
 
 pub async fn run(state: Arc<AppState>) {
     loop {
-        tick(&state).await;
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        // A full batch means more is waiting: go on without the idle pause.
+        if tick(&state).await < PHOTO_BATCH {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
     }
 }
 
-/// One pass over everything that is due. Errors are logged, never fatal.
-pub async fn tick(state: &AppState) {
-    if let Err(e) = upload_photos(state).await {
-        tracing::warn!("photo upload pass failed: {e:#}");
-    }
+/// One pass over everything that is due; returns how many photos it handled.
+/// Errors are logged, never fatal.
+pub async fn tick(state: &Arc<AppState>) -> usize {
+    let photos = match upload_photos(state).await {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::warn!("photo upload pass failed: {e:#}");
+            0
+        }
+    };
     if let Err(e) = advance_jobs(state).await {
         tracing::warn!("job pass failed: {e:#}");
     }
+    photos
 }
 
-async fn upload_photos(state: &AppState) -> Result<()> {
+async fn upload_photos(state: &Arc<AppState>) -> Result<usize> {
     let due = state.db().due_photos(PHOTO_BATCH)?;
+    let count = due.len();
+    let mut tasks = tokio::task::JoinSet::new();
     for photo in due {
-        let uuid = photo.lr_catalog_uuid.clone();
-        let path = PathBuf::from(&photo.file_path);
-        let jpeg = match tokio::task::spawn_blocking(move || build_preview(&path)).await? {
-            Ok(jpeg) => jpeg,
-            // File not reachable (external drive unplugged, NAS offline): try again later.
-            Err(e @ PreviewError::Read { .. }) => {
-                state.db().retry_photo_later(&uuid, &e.to_string())?;
-                continue;
+        let state = state.clone();
+        tasks.spawn(async move {
+            let uuid = photo.lr_catalog_uuid.clone();
+            if let Err(e) = upload_one(&state, photo).await {
+                tracing::warn!(%uuid, "photo upload failed: {e:#}");
             }
-            Err(e) => {
-                tracing::warn!(%uuid, "no usable preview: {e}");
-                state.db().mark_photo_failed(&uuid, &e.to_string())?;
-                continue;
-            }
-        };
-        let metadata = json!({
-            "schema_version": "photo-upload-v1",
-            "lr_catalog_uuid": uuid,
-            "exif_snapshot": photo.exif_snapshot,
-            "lr_develop_settings": photo.lr_develop_settings,
-            "lr_metadata": photo.lr_metadata,
         });
-        match state.api.upload_photo(jpeg, &metadata).await {
-            Ok(created) => {
-                tracing::info!(%uuid, remote = %created.photo_id, "photo uploaded");
-                state.db().mark_photo_uploaded(&uuid, &created.photo_id)?;
-            }
-            Err(ApiError::Transient(msg)) => state.db().retry_photo_later(&uuid, &msg)?,
-            Err(ApiError::Permanent(msg)) => state.db().mark_photo_failed(&uuid, &msg)?,
-        }
     }
-    Ok(())
+    while tasks.join_next().await.is_some() {}
+    Ok(count)
+}
+
+async fn upload_one(state: &AppState, photo: crate::db::PhotoRow) -> Result<()> {
+    let uuid = photo.lr_catalog_uuid.clone();
+    let path = PathBuf::from(&photo.file_path);
+    let jpeg = match tokio::task::spawn_blocking(move || build_preview(&path)).await? {
+        Ok(jpeg) => jpeg,
+        // File not reachable (external drive unplugged, NAS offline): try again later.
+        Err(e @ PreviewError::Read { .. }) => {
+            return state.db().retry_photo_later(&uuid, &e.to_string());
+        }
+        Err(e) => {
+            tracing::warn!(%uuid, "no usable preview: {e}");
+            return state.db().mark_photo_failed(&uuid, &e.to_string());
+        }
+    };
+    let metadata = json!({
+        "schema_version": "photo-upload-v1",
+        "lr_catalog_uuid": uuid,
+        "exif_snapshot": photo.exif_snapshot,
+        "lr_develop_settings": photo.lr_develop_settings,
+        "lr_metadata": photo.lr_metadata,
+    });
+    match state.api.upload_photo(jpeg, &metadata).await {
+        Ok(created) => {
+            tracing::info!(%uuid, remote = %created.photo_id, "photo uploaded");
+            state.db().mark_photo_uploaded(&uuid, &created.photo_id)
+        }
+        Err(ApiError::Transient(msg)) => state.db().retry_photo_later(&uuid, &msg),
+        Err(ApiError::Permanent(msg)) => state.db().mark_photo_failed(&uuid, &msg),
+    }
 }
 
 async fn advance_jobs(state: &AppState) -> Result<()> {

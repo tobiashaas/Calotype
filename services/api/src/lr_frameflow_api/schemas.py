@@ -5,15 +5,38 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+import logging
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+log = logging.getLogger("lr_ff.api.schemas")
 
 TrainSchema = Literal["train-request-v1"]
 EditSchema = Literal["edit-request-v1"]
 PhotoSchema = Literal["photo-upload-v1"]
 
 
-class TrainJobRequestV1(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class TolerantRequest(BaseModel):
+    """Tolerant reader: unknown *optional* fields are ignored (and logged), not rejected.
+
+    A newer Bridge may send fields this server does not know yet; refusing them would break
+    every upload after a client update. New *required* fields still need a new schema
+    version. Known fields keep their strict types.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _log_unknown(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            unknown = sorted(set(data) - set(cls.model_fields))
+            if unknown:
+                log.warning("%s: ignoring unknown fields %s", cls.__name__, unknown)
+        return data
+
+
+class TrainJobRequestV1(TolerantRequest):
 
     schema_version: TrainSchema
     correlation_id: str | None = None
@@ -25,8 +48,7 @@ class TrainJobRequestV1(BaseModel):
     base_preset: dict[str, Any] | None = None
 
 
-class EditJobRequestV1(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class EditJobRequestV1(TolerantRequest):
 
     schema_version: EditSchema
     correlation_id: str | None = None
@@ -35,8 +57,7 @@ class EditJobRequestV1(BaseModel):
     photo_ids: Annotated[list[UUID], Field(min_length=1)]
 
 
-class PhotoMetadataV1(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class PhotoMetadataV1(TolerantRequest):
 
     schema_version: PhotoSchema
     lr_catalog_uuid: str

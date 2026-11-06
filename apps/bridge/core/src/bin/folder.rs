@@ -1,11 +1,14 @@
 //! Folder mode without Lightroom. Talks to the running Bridge like the plugin does.
 //!
 //!     lrff-folder train  <DIR> --name "Business Warm" [--genre business] [--color color]
-//!     lrff-folder apply  <DIR> --profile "Business Warm" [--force]
+//!     lrff-folder apply  <DIR> --profile "Business Warm" [--force] [--out <DIR>]
 //!     lrff-folder profiles
 //!
 //! train: edited RAWs (RAW + XMP with develop settings) are the training material.
 //! apply: unedited RAWs get a new XMP sidecar; import the folder into Lightroom afterwards.
+//! --files-from <list>: only these files (one name or path per line), e.g. a train/test split.
+//! --out <dir>: write sidecars there instead of next to the RAWs (read-only cards,
+//!              evaluation against existing edits). The source folder is never touched.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -40,6 +43,9 @@ enum Command {
         genre: String,
         #[arg(long, default_value = "color", value_parser = ["color", "bw"])]
         color: String,
+        /// Only use the files listed here (one file name or path per line).
+        #[arg(long)]
+        files_from: Option<PathBuf>,
     },
     /// Apply a profile to the RAWs in a folder and write XMP sidecars.
     Apply {
@@ -50,6 +56,12 @@ enum Command {
         /// Also overwrite develop settings in sidecars that are already edited.
         #[arg(long)]
         force: bool,
+        /// Only use the files listed here (one file name or path per line).
+        #[arg(long)]
+        files_from: Option<PathBuf>,
+        /// Write the sidecars into this folder instead of next to the RAWs.
+        #[arg(long)]
+        out: Option<PathBuf>,
     },
     /// List profiles on the server.
     Profiles,
@@ -193,8 +205,45 @@ impl Bridge {
     }
 }
 
-async fn train(bridge: &Bridge, dir: &Path, name: &str, genre: &str, color: &str) -> Result<()> {
-    let (edited, other): (Vec<_>, Vec<_>) = folder::scan(dir)?
+/// Scan the folder, optionally keeping only the files named in a list.
+fn scan_selected(dir: &Path, files_from: Option<&Path>) -> Result<Vec<FolderPhoto>> {
+    let photos = folder::scan(dir)?;
+    let Some(list) = files_from else {
+        return Ok(photos);
+    };
+    let text =
+        std::fs::read_to_string(list).with_context(|| format!("cannot read {}", list.display()))?;
+    let wanted: std::collections::HashSet<String> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .filter_map(|l| {
+            Path::new(l)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_lowercase())
+        })
+        .collect();
+    let selected: Vec<FolderPhoto> = photos
+        .into_iter()
+        .filter(|p| {
+            p.path
+                .file_name()
+                .is_some_and(|n| wanted.contains(&n.to_string_lossy().to_lowercase()))
+        })
+        .collect();
+    println!("{} of {} listed files found", selected.len(), wanted.len());
+    Ok(selected)
+}
+
+async fn train(
+    bridge: &Bridge,
+    dir: &Path,
+    name: &str,
+    genre: &str,
+    color: &str,
+    files_from: Option<&Path>,
+) -> Result<()> {
+    let (edited, other): (Vec<_>, Vec<_>) = scan_selected(dir, files_from)?
         .into_iter()
         .partition(FolderPhoto::is_edited);
     println!(
@@ -248,15 +297,26 @@ async fn find_profile(bridge: &Bridge, wanted: &str) -> Result<Value> {
     }
 }
 
-async fn apply(bridge: &Bridge, dir: &Path, wanted: &str, force: bool) -> Result<()> {
+async fn apply(
+    bridge: &Bridge,
+    dir: &Path,
+    wanted: &str,
+    force: bool,
+    files_from: Option<&Path>,
+    out: Option<&Path>,
+) -> Result<()> {
     let profile = find_profile(bridge, wanted).await?;
     if profile["format_type"] != "raw" {
         bail!("folder mode writes RAW sidecars; this profile is for JPEG/TIFF");
     }
     let name = profile["name"].as_str().unwrap_or(wanted).to_string();
-    let (todo, edited): (Vec<_>, Vec<_>) = folder::scan(dir)?
+    // With --out nothing next to the RAWs is overwritten, so existing edits do not block.
+    let (todo, edited): (Vec<_>, Vec<_>) = scan_selected(dir, files_from)?
         .into_iter()
-        .partition(|p| force || !p.is_edited());
+        .partition(|p| force || out.is_some() || !p.is_edited());
+    if let Some(out) = out {
+        std::fs::create_dir_all(out)?;
+    }
     println!(
         "{} RAWs to edit, {} already edited and skipped (use --force)",
         todo.len(),
@@ -288,7 +348,14 @@ async fn apply(bridge: &Bridge, dir: &Path, wanted: &str, force: bool) -> Result
             continue;
         };
         if let Some(photo) = by_id.get(id) {
-            folder::write_result(photo, settings, &name)?;
+            match out {
+                Some(out) => {
+                    let mut target = photo.clone();
+                    target.sidecar = out.join(photo.sidecar.file_name().unwrap_or_default());
+                    folder::write_result(&target, settings, &name)?;
+                }
+                None => folder::write_result(photo, settings, &name)?,
+            }
             written += 1;
         }
     }
@@ -323,12 +390,25 @@ async fn main() -> Result<()> {
             name,
             genre,
             color,
-        } => train(&bridge, &dir, &name, &genre, &color).await,
+            files_from,
+        } => train(&bridge, &dir, &name, &genre, &color, files_from.as_deref()).await,
         Command::Apply {
             dir,
             profile,
             force,
-        } => apply(&bridge, &dir, &profile, force).await,
+            files_from,
+            out,
+        } => {
+            apply(
+                &bridge,
+                &dir,
+                &profile,
+                force,
+                files_from.as_deref(),
+                out.as_deref(),
+            )
+            .await
+        }
         Command::Profiles => profiles(&bridge).await,
     }
 }

@@ -79,6 +79,21 @@ def test_reupload_refreshes_settings_and_decisions(client, mock_storage):
     assert mock_storage.put_object.call_count == 1
 
 
+def test_upload_from_newer_client_with_unknown_field_is_accepted(client):
+    """Tolerant reader: a newer Bridge may send fields this server does not know yet."""
+    meta = json.dumps({
+        "schema_version": "photo-upload-v1",
+        "lr_catalog_uuid": "test-lr-uuid-new-client",
+        "field_from_the_future": {"x": 1},
+    })
+    resp = client.post(
+        "/v1/photos",
+        files={"file": ("test.jpg", _jpeg_bytes(), "image/jpeg")},
+        data={"metadata": meta},
+    )
+    assert resp.status_code == 200
+
+
 def test_upload_photo_invalid_metadata(client):
     resp = client.post(
         "/v1/photos",

@@ -22,11 +22,37 @@ pub fn sidecar_path(raw: &Path) -> PathBuf {
     raw.with_extension("xmp")
 }
 
-/// All simple `crs:Name="value"` attributes. Numbers ("+21", "0.00") become numbers.
+/// Byte range of the attributes of the first (top-level) `rdf:Description` start tag.
+///
+/// Only these attributes are the photo's settings. Real sidecars (Lightroom, Camera Raw,
+/// other tools) nest more `rdf:Description`s with their own `crs:` values — masks
+/// (`MaskGroupBasedCorrections`), looks (`crs:Look` → `Parameters`), snapshots — e.g.
+/// `crs:Exposure2012="0"` inside a mask. Reading those would overwrite the real values.
+fn top_description(xmp: &str) -> Option<std::ops::Range<usize>> {
+    let tag = "<rdf:Description";
+    let start = xmp.find(tag)? + tag.len();
+    let mut in_quotes = false;
+    for (i, c) in xmp[start..].char_indices() {
+        match c {
+            '"' => in_quotes = !in_quotes,
+            '>' if !in_quotes => return Some(start..start + i),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Top-level attributes only (see [`top_description`]); whole text if there is no tag.
+fn top_attributes(xmp: &str) -> &str {
+    top_description(xmp).map_or(xmp, |r| &xmp[r])
+}
+
+/// All simple top-level `crs:Name="value"` attributes. Numbers ("+21", "0.00") become numbers.
 pub fn read_develop_settings(xmp: &str) -> Map<String, Value> {
     let mut out = Map::new();
-    for (name, value) in crs_attributes(xmp) {
-        out.insert(name.to_string(), parse_value(&unescape(value)));
+    for (name, value) in crs_attributes(top_attributes(xmp)) {
+        out.entry(name.to_string())
+            .or_insert_with(|| parse_value(&unescape(value)));
     }
     out
 }
@@ -37,7 +63,7 @@ pub fn read_develop_settings(xmp: &str) -> Map<String, Value> {
 /// only when another tool (e.g. Adobe Bridge) wrote rating −1.
 pub fn read_decisions(xmp: &str) -> Map<String, Value> {
     let mut out = Map::new();
-    for (name, value) in prefixed_attributes(xmp, "xmp:") {
+    for (name, value) in prefixed_attributes(top_attributes(xmp), "xmp:") {
         match name {
             "Rating" => match value.trim().parse::<i64>() {
                 Ok(-1) => {
@@ -212,8 +238,12 @@ pub fn update_sidecar(
     let mut xmp = existing.to_string();
     let mut missing = Vec::new();
     for (k, v) in with_required(settings) {
+        // Only the top-level tag: the same key inside a mask or look must stay untouched.
+        // (Recomputed each time; replacements change the length.)
+        let top = top_description(&xmp)?;
         let needle = format!("crs:{k}=\"");
-        if let Some(pos) = xmp.find(&needle) {
+        let found = xmp[top.clone()].find(&needle).map(|rel| top.start + rel);
+        if let Some(pos) = found {
             let value_start = pos + needle.len();
             let value_end = value_start + xmp[value_start..].find('"')?;
             xmp.replace_range(value_start..value_end, &escape(&v));
@@ -325,6 +355,68 @@ mod tests {
         assert_eq!(again.matches("lrff:Profile=").count(), 1);
         assert!(again.contains("lrff:Profile=\"Test 2\""));
         assert_eq!(read_develop_settings(&again)["Vibrance"], json!(21));
+    }
+
+    /// Shape of real sidecars from Lightroom/Camera Raw/culling tools: masks and looks
+    /// nest their own `crs:` values, which must not leak into the photo's settings.
+    const NESTED: &str = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    xmp:Rating="5"
+    crs:ProcessVersion="15.4"
+    crs:Exposure2012="0.05646324"
+    crs:Temperature="5120">
+   <crs:MaskGroupBasedCorrections>
+    <rdf:Seq><rdf:li>
+     <rdf:Description crs:LocalExposure2012="0.2" crs:Exposure2012="0" crs:Highlights2012="-40"
+       xmp:Rating="1"/>
+    </rdf:li></rdf:Seq>
+   </crs:MaskGroupBasedCorrections>
+   <crs:Look>
+    <rdf:Description crs:Name="Adobe Color">
+     <crs:Parameters>
+      <rdf:Description crs:Version="15.2" crs:ProcessVersion="11.0" crs:Exposure2012="0"/>
+     </crs:Parameters>
+    </rdf:Description>
+   </crs:Look>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+
+    #[test]
+    fn nested_masks_and_looks_do_not_leak_into_settings() {
+        let s = read_develop_settings(NESTED);
+        assert_eq!(s["Exposure2012"], json!(0.05646324));
+        assert_eq!(s["ProcessVersion"], json!(15.4));
+        assert!(
+            !s.contains_key("Highlights2012"),
+            "mask value must not count"
+        );
+        assert!(!s.contains_key("Version"), "look parameter must not count");
+        assert_eq!(read_decisions(NESTED)["rating"], json!(5));
+    }
+
+    #[test]
+    fn update_only_touches_the_top_level() {
+        let settings = json!({"Exposure2012": 0.5, "Highlights2012": -10.0})
+            .as_object()
+            .unwrap()
+            .clone();
+        let xmp = update_sidecar(NESTED, &settings, "P").unwrap();
+        let back = read_develop_settings(&xmp);
+        assert_eq!(back["Exposure2012"], json!(0.5));
+        assert_eq!(back["Highlights2012"], json!(-10));
+        assert!(
+            xmp.contains(r#"crs:Highlights2012="-40""#),
+            "mask value untouched"
+        );
+        assert!(
+            xmp.contains(r#"crs:ProcessVersion="11.0""#),
+            "look untouched"
+        );
+        assert_eq!(xmp.matches(r#"crs:Exposure2012="0""#).count(), 2);
     }
 
     #[test]

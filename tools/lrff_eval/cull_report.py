@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import sys
 import time
 from collections import Counter
 from pathlib import Path
@@ -75,6 +76,8 @@ baseline weights (not yet learned from your ratings)</div></header>
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("preview_dir", type=Path)
     ap.add_argument("--out", type=Path)
