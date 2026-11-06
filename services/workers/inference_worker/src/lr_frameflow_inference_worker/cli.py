@@ -9,6 +9,8 @@ from uuid import UUID, uuid4
 
 import boto3
 from redis import Redis
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.orm import sessionmaker
 
 from lr_edit_serializer import serialize_for_lightroom
@@ -31,7 +33,7 @@ log = get_logger("lr_ff.inference_worker")
 def _s3_client():
     return boto3.client(
         "s3",
-        endpoint_url=os.environ.get("S3_ENDPOINT", "http://localhost:9000"),
+        endpoint_url=os.environ.get("S3_ENDPOINT", "http://127.0.0.1:9000"),
         aws_access_key_id=os.environ.get("S3_ACCESS_KEY", "minio"),
         aws_secret_access_key=os.environ.get("S3_SECRET_KEY", "miniosecret_changeme"),
         region_name="us-east-1",
@@ -135,6 +137,10 @@ def main() -> None:
         try:
             if not process_one(redis, factory):
                 time.sleep(0.05)
+        except (RedisConnectionError, RedisTimeoutError) as exc:
+            # Redis restarted or the network hiccupped: keep the worker alive and retry.
+            log.warning("redis unavailable, retrying in 2s: %s", exc)
+            time.sleep(2)
         except KeyboardInterrupt:
             print("Stopping inference worker", file=sys.stderr)
             raise SystemExit(0)

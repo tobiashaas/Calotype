@@ -17,8 +17,20 @@ class QueueFullError(Exception):
     """Raised when a queue has reached its maximum depth."""
 
 
+# Workers block in BLPOP for up to 5 s. The socket read timeout must be clearly longer,
+# otherwise an empty queue raises TimeoutError (newer redis-py versions set a default).
+SOCKET_TIMEOUT_SECONDS = 30
+
+
 def redis_from_env(default_url: str = "redis://127.0.0.1:6379/0") -> Redis:
-    return Redis.from_url(os.environ.get("REDIS_URL", default_url), decode_responses=True)
+    return Redis.from_url(
+        os.environ.get("REDIS_URL", default_url),
+        decode_responses=True,
+        socket_timeout=SOCKET_TIMEOUT_SECONDS,
+        socket_connect_timeout=5,
+        socket_keepalive=True,
+        health_check_interval=30,
+    )
 
 
 def first_stage_queue(kind: JobKind) -> str:

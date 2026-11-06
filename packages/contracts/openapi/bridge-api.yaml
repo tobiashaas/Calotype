@@ -6,7 +6,7 @@ info:
     Thin Gateway: Jobs werden asynchron eingereiht (`202 Accepted`).
     Zusätzliche kanonische JSON Schemas unter `json-schema/` (gleiche Felder abstimmen).
 servers:
-  - url: http://localhost:8080
+  - url: http://127.0.0.1:8080
     description: Local API (compose default host port)
 paths:
   /health:

@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_PORT: u16 = 47600;
-pub const DEFAULT_API_BASE_URL: &str = "http://localhost:8080";
+pub const DEFAULT_API_BASE_URL: &str = "http://127.0.0.1:8080";
 pub const CONFIG_FILE: &str = "bridge.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

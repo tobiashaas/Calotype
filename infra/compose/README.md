@@ -16,9 +16,9 @@ API/Worker (später, nicht alle im Compose enthalten):
 
 | Variable | Beispiel | Beschreibung |
 |----------|----------|--------------|
-| `DATABASE_URL` | `postgresql+psycopg://lrframeflow:lrframeflow@localhost:5432/lrframeflow` | SQLAlchemy/async URL |
-| `REDIS_URL` | `redis://localhost:6379/0` | Broker / Result backend |
-| `S3_ENDPOINT` | `http://localhost:9000` | MinIO API |
+| `DATABASE_URL` | `postgresql+psycopg://lrframeflow:lrframeflow@127.0.0.1:5432/lrframeflow` | SQLAlchemy/async URL |
+| `REDIS_URL` | `redis://127.0.0.1:6379/0` | Broker / Result backend |
+| `S3_ENDPOINT` | `http://127.0.0.1:9000` | S3 API (RustFS; any S3 endpoint works) |
 | `S3_ACCESS_KEY` | `minio` | Access Key |
 | `S3_SECRET_KEY` | `miniosecret_changeme` | Secret Key |
 | `S3_BUCKET` | `lr-frameflow` | Artefakt-Bucket |

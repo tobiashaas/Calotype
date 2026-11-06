@@ -11,7 +11,7 @@ from botocore.exceptions import ClientError
 
 
 _DEFAULTS = {
-    "endpoint": "http://localhost:9000",
+    "endpoint": "http://127.0.0.1:9000",
     "access_key": "minio",
     "secret_key": "miniosecret_changeme",
     "bucket": "lrff-photos",
