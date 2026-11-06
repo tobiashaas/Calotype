@@ -12,6 +12,10 @@ name = "lrff_bridge_core"
 name = "lrff-bridge-headless"
 path = "src/bin/headless.rs"
 
+[[bin]]
+name = "lrff-folder"
+path = "src/bin/folder.rs"
+
 [dependencies]
 anyhow.workspace = true
 serde.workspace = true
@@ -26,6 +30,8 @@ uuid = { version = "1", features = ["v4", "serde"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "tiff", "png"] }
 dirs = "5"
 thiserror = "2"
+sha2 = "0.10"
+clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
 axum = { version = "0.8", features = ["multipart"] }

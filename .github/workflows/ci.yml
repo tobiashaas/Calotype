@@ -41,7 +41,8 @@ jobs:
             services/api/src \
             services/workers/feature_worker/src \
             services/workers/train_worker/src \
-            services/workers/inference_worker/src
+            services/workers/inference_worker/src \
+            tools
 
   inference-pipeline:
     name: Inference pipeline tests

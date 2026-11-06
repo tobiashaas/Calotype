@@ -26,8 +26,28 @@ Vertrag der lokalen API: [`packages/contracts/openapi/plugin-bridge-api.yaml`](.
   baut Vorschauen, lädt hoch, legt Jobs an (fester `Idempotency-Key`) und pollt den Status.
   Netzfehler, 5xx/429 und nicht erreichbare Dateien (abgesteckte Platte) → neuer Versuch mit
   Backoff (2 s … 5 min). Abgelehnte Anfragen (4xx) und kaputte Dateien → `failed` mit Grund.
-- **Vorschau = unbearbeitetes Bild:** bei RAW das größte eingebettete Kamera-JPEG, bei
-  JPEG/TIFF/PNG die Datei selbst; längste Seite ≤ 1200 px.
+- **Vorschau = unbearbeitetes Bild:** bei RAW das kleinste eingebettete Kamera-JPEG, das
+  1200 px abdeckt (sonst das größte), bei JPEG/TIFF/PNG die Datei selbst; längste Seite
+  ≤ 1200 px, Ausrichtung aus RAW-Container bzw. EXIF angewendet. Canon CR3: ~200 ms pro Foto.
+
+## Ordner-Modus (ohne Lightroom)
+
+`lrff-folder` arbeitet mit RAW + XMP-Sidecars und spricht mit der laufenden Bridge:
+
+```bash
+lrff-folder train  <ordner> --name "Business Warm" --genre business   # bearbeitete RAWs (RAW + XMP)
+lrff-folder apply  <ordner> --profile "Business Warm"                  # schreibt IMG_0001.xmp neben jede RAW
+lrff-folder profiles
+```
+
+- Training nutzt nur RAWs, deren XMP Develop-Settings enthält (`crs:Exposure2012` …).
+- `apply` überspringt bereits bearbeitete Fotos (deine XMPs); `--force` aktualisiert nur die
+  `crs:`-Werte darin und lässt Sterne, Stichwörter usw. stehen. Neue XMPs tragen
+  `crs:ProcessVersion="15.4"` und `lrff:Profile="…"`.
+- Danach den Ordner in Lightroom importieren — die Fotos sind sofort bearbeitet. Für Fotos, die
+  schon im Katalog sind, ist das Plugin der richtige Weg.
+- Foto-IDs außerhalb eines Katalogs: `file-` + SHA-256 über Größe, erstes und letztes MiB
+  (stabil bei Verschieben/Umbenennen).
 
 ## Entwickeln
 
@@ -35,6 +55,9 @@ Vertrag der lokalen API: [`packages/contracts/openapi/plugin-bridge-api.yaml`](.
 # Kern: Tests + Lint (schnell, ohne Tauri)
 cargo test -p lrff-bridge-core
 cargo clippy -p lrff-bridge-core --all-targets -- -D warnings
+
+# Vorschau-Extraktion an echten RAWs prüfen (Zeit, Größe, Ausrichtung)
+cargo run --release -p lrff-bridge-core --example preview -- <out-dir> <raw-dateien>
 
 # Ohne Fenster laufen lassen
 cargo run -p lrff-bridge-core --bin lrff-bridge-headless
@@ -52,5 +75,5 @@ Windows braucht die MSVC Build Tools und WebView2 (bei Windows 11 vorinstalliert
 - Schließen des Fensters beendet die Bridge (Tray-Modus folgt).
 - Fotos, die schon hochgeladen sind, werden bei erneuter Registrierung nicht aktualisiert —
   die Server-API ist pro `lr_catalog_uuid` idempotent und übernimmt neue Develop-Settings nicht.
-- Ein Train-Job liefert noch keine `profile_id` zurück; das Plugin findet das Profil über
-  `GET /v1/profiles` und den Namen.
+- Vorschauen werden nacheinander gebaut (4 pro Durchlauf) — für große Shootings parallelisieren.
+- Ordner-Modus schreibt nur RAW-Sidecars; JPEG/TIFF tragen XMP in der Datei selbst.

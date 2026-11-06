@@ -7,9 +7,11 @@
 pub mod api_client;
 pub mod config;
 pub mod db;
+pub mod folder;
 pub mod outbox;
 pub mod preview;
 pub mod server;
+pub mod xmp;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
