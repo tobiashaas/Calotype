@@ -206,6 +206,11 @@ components:
             `waiting_for_photos` until all photos are uploaded and the job is accepted by the
             server; then mirrors the server job status.
         remote_job_id: { type: string, format: uuid, nullable: true }
+        profile_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Train — the profile being trained; edit — the profile applied
         attempts: { type: integer }
         last_error: { type: string, nullable: true }
         results:

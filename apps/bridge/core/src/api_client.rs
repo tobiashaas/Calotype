@@ -58,11 +58,17 @@ pub struct PhotoCreated {
 #[derive(Debug, Deserialize)]
 pub struct JobAccepted {
     pub job_id: String,
+    #[serde(default)]
+    pub profile_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct JobSnapshot {
     pub status: String,
+    #[serde(default)]
+    pub profile_id: Option<String>,
+    #[serde(default)]
+    pub failure_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

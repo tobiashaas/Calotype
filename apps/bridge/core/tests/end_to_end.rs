@@ -237,6 +237,7 @@ async fn edit_job_roundtrip_with_retry() {
     outbox::tick(&st).await;
     let (_, job) = call(&st, "GET", &format!("/v1/jobs/{job_id}"), Some(TOKEN), None).await;
     assert_eq!(job["status"], "completed");
+    assert_eq!(job["profile_id"], profile);
     assert_eq!(
         job["results"],
         json!([{"lr_catalog_uuid": "lr-1", "lr_settings": {"Exposure2012": 0.35}}])

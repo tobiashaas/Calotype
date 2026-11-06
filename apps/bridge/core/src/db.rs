@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
 use serde_json::Value;
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 pub fn now() -> i64 {
     SystemTime::now()
@@ -52,6 +52,8 @@ pub struct JobRow {
     pub remote_job_id: Option<String>,
     pub attempts: i64,
     pub last_error: Option<String>,
+    /// Server profile: created by a train job, applied by an edit job.
+    pub profile_id: Option<String>,
     pub results: Option<Value>,
 }
 
@@ -88,6 +90,7 @@ fn job_from_row(r: &Row) -> rusqlite::Result<JobRow> {
         remote_job_id: r.get(6)?,
         attempts: r.get(7)?,
         last_error: r.get(8)?,
+        profile_id: r.get(10)?,
         results: results.map(json),
     })
 }
@@ -95,7 +98,7 @@ fn job_from_row(r: &Row) -> rusqlite::Result<JobRow> {
 const PHOTO_COLS: &str = "lr_catalog_uuid, file_path, exif_json, settings_json, status, \
                           remote_photo_id, attempts, last_error";
 const JOB_COLS: &str = "job_id, kind, request_json, uuids_json, idempotency_key, status, \
-                        remote_job_id, attempts, last_error, results_json";
+                        remote_job_id, attempts, last_error, results_json, profile_id";
 
 impl Db {
     pub fn open(path: &Path) -> Result<Self> {
@@ -143,6 +146,11 @@ impl Db {
                 CREATE INDEX photos_due ON photos(status, next_attempt_at);
                 CREATE INDEX jobs_due ON jobs(status, next_attempt_at);",
             )?;
+        }
+        if version < 2 {
+            conn.execute_batch("ALTER TABLE jobs ADD COLUMN profile_id TEXT;")?;
+        }
+        if version < SCHEMA_VERSION {
             conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         }
         Ok(Self { conn })
@@ -290,6 +298,14 @@ impl Db {
         Ok(())
     }
 
+    pub fn set_job_profile(&self, job_id: &str, profile_id: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE jobs SET profile_id = ?2, updated_at = ?3 WHERE job_id = ?1",
+            params![job_id, profile_id, now()],
+        )?;
+        Ok(())
+    }
+
     pub fn complete_job(&self, job_id: &str, results: Option<&Value>) -> Result<()> {
         self.conn.execute(
             "UPDATE jobs SET status = 'completed', results_json = ?2, last_error = NULL,
@@ -393,6 +409,39 @@ mod tests {
         assert_eq!(backoff_secs(1), 2);
         assert_eq!(backoff_secs(3), 8);
         assert_eq!(backoff_secs(50), 300);
+    }
+
+    #[test]
+    fn migrates_v1_database() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("old.sqlite3");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE photos (lr_catalog_uuid TEXT PRIMARY KEY, file_path TEXT NOT NULL,
+                    exif_json TEXT NOT NULL, settings_json TEXT NOT NULL, status TEXT NOT NULL,
+                    remote_photo_id TEXT, attempts INTEGER NOT NULL DEFAULT 0,
+                    next_attempt_at INTEGER NOT NULL DEFAULT 0, last_error TEXT,
+                    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+                 CREATE TABLE jobs (job_id TEXT PRIMARY KEY, kind TEXT NOT NULL,
+                    request_json TEXT NOT NULL, uuids_json TEXT NOT NULL,
+                    idempotency_key TEXT NOT NULL, status TEXT NOT NULL, remote_job_id TEXT,
+                    attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at INTEGER NOT NULL DEFAULT 0,
+                    last_error TEXT, results_json TEXT, created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL);
+                 PRAGMA user_version = 1;",
+            )
+            .unwrap();
+        }
+        let db = Db::open(&path).unwrap();
+        let job = db.insert_job("train", &json!({}), &["u".into()]).unwrap();
+        db.set_job_profile(&job.job_id, "p-1").unwrap();
+        assert_eq!(
+            db.job(&job.job_id).unwrap().unwrap().profile_id.as_deref(),
+            Some("p-1")
+        );
+        drop(db);
+        Db::open(&path).unwrap(); // reopening an up-to-date DB is a no-op
     }
 
     #[test]

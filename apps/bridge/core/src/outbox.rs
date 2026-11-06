@@ -160,9 +160,15 @@ async fn submit_when_ready(state: &AppState, job: &JobRow) -> Result<()> {
     {
         Ok(accepted) => {
             tracing::info!(job = %job.job_id, remote = %accepted.job_id, "job submitted");
-            state
-                .db()
-                .update_job(&job.job_id, "queued", Some(&accepted.job_id), POLL_SECS)?;
+            let db = state.db();
+            db.update_job(&job.job_id, "queued", Some(&accepted.job_id), POLL_SECS)?;
+            // Train: the server's new profile. Edit: the profile from the request.
+            let profile = accepted
+                .profile_id
+                .or_else(|| job.request["profile_id"].as_str().map(str::to_owned));
+            if let Some(profile) = profile {
+                db.set_job_profile(&job.job_id, &profile)?;
+            }
         }
         Err(ApiError::Transient(msg)) => state.db().retry_job_later(&job.job_id, &msg)?,
         Err(ApiError::Permanent(msg)) => state.db().fail_job(&job.job_id, &msg)?,
@@ -192,7 +198,15 @@ async fn poll(state: &AppState, job: &JobRow) -> Result<()> {
             Err(ApiError::Permanent(msg)) => state.db().fail_job(&job.job_id, &msg)?,
         },
         "completed" => state.db().complete_job(&job.job_id, None)?,
-        "failed" => state.db().fail_job(&job.job_id, "server job failed")?,
+        "failed" => {
+            let reason = snapshot
+                .failure_reason
+                .as_deref()
+                .unwrap_or("no reason given");
+            state
+                .db()
+                .fail_job(&job.job_id, &format!("server job failed: {reason}"))?
+        }
         other => state.db().update_job(&job.job_id, other, None, POLL_SECS)?,
     }
     Ok(())
