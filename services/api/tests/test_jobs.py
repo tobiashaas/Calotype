@@ -67,6 +67,16 @@ def test_get_job_after_train(client):
     assert resp.json()["status"] == "queued"
 
 
+def test_train_job_exposes_profile_id(client):
+    accepted = client.post("/v1/jobs/train", json=_train_body()).json()
+    assert accepted["profile_id"]
+    snapshot = client.get(f"/v1/jobs/{accepted['job_id']}").json()
+    assert snapshot["profile_id"] == accepted["profile_id"]
+    assert snapshot["failure_reason"] is None
+    profile = client.get(f"/v1/profiles/{accepted['profile_id']}")
+    assert profile.status_code == 200
+
+
 def test_get_job_result_not_completed(client):
     r = client.post("/v1/jobs/train", json=_train_body())
     job_id = r.json()["job_id"]

@@ -40,6 +40,7 @@ def _fake_job(job_id, kind, status, payload, payload_schema_version, correlation
     j.correlation_id = correlation_id
     j.idempotency_key = idempotency_key
     j.profile_id = profile_id
+    j.failure_reason = None
     return j
 
 
@@ -116,6 +117,7 @@ def client(store, mock_publisher, mock_storage) -> Generator[TestClient, None, N
         j = store.jobs.get(str(job_id))
         if j:
             j.status = status.value
+            j.failure_reason = failure_reason
         return j
 
     def _profile_create(session, *, profile_id, name, genre, format_type, color_type,

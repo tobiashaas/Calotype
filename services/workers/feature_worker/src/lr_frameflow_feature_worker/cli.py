@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import sys
 import time
-import traceback
 from uuid import UUID, uuid4
 
 import boto3
@@ -102,10 +101,11 @@ def process_one(redis: Redis, publisher: RedisQueuePublisher, factory: sessionma
         publisher.forward_to_inference(envelope)
         log.info("forwarded to inference job_id=%s photos=%d", job_uuid, len(photo_ids))
 
-    except Exception:
-        tb = traceback.format_exc()[:4000]
+    except Exception as exc:
+        # Short, user-facing reason (shown in Lightroom); the traceback goes to the log.
+        reason = f"{type(exc).__name__}: {exc}"[:500]
         with session_scope(factory) as session:
-            JobRepository.set_status(session, job_uuid, JobStatus.FAILED, failure_reason=tb)
+            JobRepository.set_status(session, job_uuid, JobStatus.FAILED, failure_reason=reason)
         if raw is not None:
             consumer.push_dead_letter(redis, primary_queue_name=QUEUE_FEATURE, raw_payload=raw, reason="processing_error")
         log.exception("feature worker failure job_id=%s", job_uuid)

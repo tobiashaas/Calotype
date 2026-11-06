@@ -48,12 +48,15 @@ class JobAcceptedResponse(BaseModel):
     job_id: UUID
     status: Literal["queued"] = "queued"
     kind: Literal["train", "edit"]
+    profile_id: UUID | None = None
 
 
 class JobSnapshotResponse(BaseModel):
     job_id: UUID
     status: Literal["queued", "running", "completed", "failed"]
     payload_schema_version: str | None = None
+    profile_id: UUID | None = None
+    failure_reason: str | None = None
     correlation_id: str | None = None
 
 

@@ -132,7 +132,7 @@ def create_train_job(
         if existing:
             if existing.kind != JobKind.TRAIN.value:
                 raise HTTPException(status_code=409, detail="idempotency key conflicts with another job kind")
-            return JobAcceptedResponse(job_id=existing.id, kind="train")
+            return JobAcceptedResponse(job_id=existing.id, kind="train", profile_id=existing.profile_id)
 
     # Create Profile record in DRAFT status.
     profile_id = uuid4()
@@ -173,7 +173,7 @@ def create_train_job(
         publisher.enqueue(envelope)
     except QueueFullError as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
-    return JobAcceptedResponse(job_id=job_id, kind="train")
+    return JobAcceptedResponse(job_id=job_id, kind="train", profile_id=profile_id)
 
 
 @app.post("/v1/jobs/edit", status_code=202, response_model=JobAcceptedResponse)
@@ -247,6 +247,8 @@ def get_job(job_id: UUID, session: Session = Depends(get_session)):
         job_id=record.id,
         status=record.status,  # type: ignore[arg-type]
         payload_schema_version=record.payload_schema_version,
+        profile_id=record.profile_id,
+        failure_reason=record.failure_reason,
         correlation_id=record.correlation_id,
     )
 

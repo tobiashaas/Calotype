@@ -204,6 +204,11 @@ components:
         kind:
           type: string
           enum: [train, edit]
+        profile_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Train jobs — the profile created in `draft` status
     TrainJobRequestV1:
       type: object
       required:
@@ -277,6 +282,15 @@ components:
             - failed
         payload_schema_version:
           type: string
+        profile_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Profile the job trains (train) or applies (edit)
+        failure_reason:
+          type: string
+          nullable: true
+          description: Short, user-facing reason when status is `failed`
         correlation_id:
           type: string
     PhotoCreatedResponse:
