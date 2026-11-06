@@ -1,5 +1,50 @@
 # Lightroom Classic Plugin (Lua)
 
-Platzhalter für das SDK-Plugin: Menüs, Jobstart, Profilwahl, Bridge-Client.
+Die Oberfläche von LR-FrameFlow in Lightroom. Das Plugin spricht nur mit der lokalen
+[Bridge](../bridge/README.md); Vorschau, Upload, Wiederholungen und Server-Kommunikation
+erledigt die Bridge ([ADR 004](../../docs/adr/004-bridge-localhost-architecture.md)).
 
-Struktur orientiert sich am Tech-Design (`Info.lua`, `Main.lua`, `BridgeClient.lua`, …) und wird in späteren Iterationen befüllt.
+## Installieren
+
+1. Bridge-App einmal starten (legt `bridge.json` mit Port und Token an).
+2. Lightroom Classic: **Datei → Zusatzmodul-Manager → Hinzufügen** → Ordner
+   `apps/lr-plugin/LRFrameFlow.lrplugin` wählen.
+
+## Menüpunkte
+
+**Bibliothek → Zusatzmoduloptionen** (und **Datei → Zusatzmoduloptionen**):
+
+| Menüpunkt | Was passiert |
+|---|---|
+| Train profile from selected photos... | Fragt Name, Genre, Farbe/SW ab. Übergibt die Fotos (Pfad + aktuelle Develop-Settings als Lernziel) an die Bridge und wartet auf das Training. Mindestens 3 Fotos, nur RAW **oder** nur JPEG/TIFF. |
+| Apply profile to selected photos... | Zeigt fertige Profile, übergibt die passenden Fotos, wartet und schreibt die vorhergesagten Werte mit `photo:applyDevelopSettings` in **einem** Katalog-Schritt (Bearbeiten → Rückgängig wirkt). |
+| Bridge status... | Läuft die Bridge? Server erreichbar? Wie viele Profile sind fertig? |
+
+Abbrechen im Fortschrittsbalken beendet nur das Warten — die Bridge arbeitet weiter.
+
+## Dateien
+
+| Datei | Zweck |
+|---|---|
+| `Info.lua` | Plugin-Manifest, Menüeinträge |
+| `BridgeClient.lua` | HTTP zur Bridge (`X-LRFF-Token`), liest `bridge.json` |
+| `PhotoData.lua` | UUID, Pfad, Develop-Settings, EXIF pro Foto; RAW vs. JPEG/TIFF |
+| `JobWait.lua` | Fotos registrieren, Job mit Fortschritt/Abbrechen abwarten |
+| `TrainProfile.lua`, `ApplyProfile.lua`, `BridgeStatus.lua` | Menüaktionen |
+| `Json.lua` | Kleiner JSON-Encoder/-Decoder (Lightroom bringt keinen mit) |
+| `Log.lua` | Log-Datei `LRFrameFlow.log` in `Dokumente/LrClassicLogs` |
+
+## Testen ohne Lightroom
+
+Die Tests ersetzen Lightrooms SDK-Module durch Attrappen (Lua 5.1 / LuaJIT wie in Lightroom):
+
+```bash
+luajit apps/lr-plugin/tests/run.lua
+```
+
+## Im ersten echten Lightroom-Test prüfen
+
+- Liefert `getDevelopSettings()` bei JPEG/TIFF `IncrementalTemperature`/`IncrementalTint`?
+- Übernimmt `applyDevelopSettings` `Temperature`/`Tint` zusammen mit `WhiteBalance = "Custom"`?
+- `LrPathUtils.getStandardFilePath("appData")` zeigt auf `%APPDATA%` bzw.
+  `~/Library/Application Support` (sonst greifen die Fallbacks).

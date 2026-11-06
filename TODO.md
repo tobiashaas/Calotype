@@ -67,12 +67,16 @@ Open:
 - [x] Bridge: status window (server reachable, queue counts, server address, "Retry now"); headless binary `lrff-bridge-headless`
 - [x] CI job `bridge-core` (fmt, clippy, tests)
 - [ ] Bridge: tray mode (closing the window must not stop the bridge) + autostart
-- [ ] Bridge: real-RAW test corpus (CR3/NEF/ARW/RAF/DNG) for embedded-preview extraction; respect EXIF orientation
-- [ ] API: return `profile_id` for train jobs (JobAccepted / JobSnapshot) so the plugin does not match by name
+- [x] Bridge: orientation from RAW container (TIFF IFD0 / CR3 `CMT1`) or JPEG EXIF; verified on 30 real Canon CR3 (portrait + landscape)
+- [x] Bridge: pick smallest embedded JPEG covering 1200 px instead of full-size → ~200 ms/photo (release) instead of 2–5 s
+- [x] API + Bridge: `profile_id` and short `failure_reason` in job status (workers store a one-line reason, traceback stays in the log)
+- [ ] Bridge: test corpus for NEF/ARW/RAF/DNG (only CR3 verified so far); parallel preview building for big shoots
 - [ ] API: update `lr_develop_settings` when an already uploaded photo is registered again (retraining after edits)
-- [ ] LR Plugin: send file path + `getDevelopSettings()` + catalog UUID to bridge
-- [ ] LR Plugin: poll job status and apply returned `lr_settings` back to catalog
-- [ ] Smoke test: verify `getDevelopSettings()` keys for JPEG/TIFF (`IncrementalTemperature`?)
+- [x] LR Plugin `apps/lr-plugin/LRFrameFlow.lrplugin`: menu items Train / Apply / Bridge status
+- [x] LR Plugin: send file path + `getDevelopSettings()` + catalog UUID + EXIF to bridge
+- [x] LR Plugin: poll job status (progress + cancel) and apply `lr_settings` in one catalog transaction
+- [x] LR Plugin tests with faked SDK modules (`luajit apps/lr-plugin/tests/run.lua`, CI job `lr-plugin`)
+- [ ] Smoke test in real Lightroom: install plugin, `getDevelopSettings()` keys for JPEG/TIFF (`IncrementalTemperature`?), `applyDevelopSettings` with `WhiteBalance = "Custom"`, `appData` path
 - [ ] End-to-end smoke test: LR → Plugin → Bridge → API → Workers → back to LR
 
 ### Backlog / Nice-to-have

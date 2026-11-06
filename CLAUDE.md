@@ -23,7 +23,7 @@ LRFrameFlow is an AI-powered Lightroom Classic photo editing system. It uses an 
 | Phase 2 — Real Data Flow | ✅ Done | Workers download/upload MinIO, feature extraction, model artifact lifecycle |
 | Phase 3 — Real ML Pipeline | ✅ Done | Pillow histogram features (128-dim), Ridge regression, joblib serialization |
 | Phase 4 — Production Hardening | ✅ Done | Redis AOF, stuck-job reaper, at-least-once, heartbeat, CI lint+tests, contracts, JSON logs, rate limiting |
-| Phase 5 — Bridge & Plugin | 🟡 In progress | Bridge core + Tauri app done (local API, SQLite outbox, previews); LR plugin + end-to-end flow open |
+| Phase 5 — Bridge & Plugin | 🟡 In progress | Bridge (local API, SQLite outbox, previews) + LR plugin (train/apply/status) done; real-Lightroom smoke test + full end-to-end run open |
 
 See `TODO.md` for the detailed task breakdown.
 
@@ -34,7 +34,7 @@ See `TODO.md` for the detailed task breakdown.
 ```
 apps/
   bridge/              # Rust workspace: core/ (axum local API, SQLite outbox, previews) + src-tauri/ (desktop shell) + ui/
-  lr-plugin/           # Lightroom SDK plugin (Lua)
+  lr-plugin/           # LRFrameFlow.lrplugin (Lua 5.1): Train / Apply / Bridge status; tests/run.lua with faked SDK
 packages/
   contracts/           # OpenAPI spec + JSON Schemas (source of truth for contracts)
   domain-types/        # Optional shared DTOs (placeholder)
@@ -108,7 +108,9 @@ TODO.md                # Completed + open work items — keep up to date
 | `packages/contracts/openapi/plugin-bridge-api.yaml` | OpenAPI spec (LR plugin ↔ Bridge, local, `X-LRFF-Token`) |
 | `apps/bridge/core/src/outbox.rs` | Background loop: preview → upload → submit job → poll → map results |
 | `apps/bridge/core/src/server.rs` | Local API for the plugin (127.0.0.1:47600) |
-| `apps/bridge/core/src/preview.rs` | Unedited preview: largest embedded RAW JPEG / original JPEG/TIFF, ≤ 1200 px |
+| `apps/bridge/core/src/preview.rs` | Unedited preview: smallest embedded RAW JPEG ≥ 1200 px (else largest) / original JPEG/TIFF, orientation applied |
+| `apps/lr-plugin/LRFrameFlow.lrplugin/BridgeClient.lua` | Plugin → Bridge HTTP, reads `bridge.json` |
+| `apps/lr-plugin/LRFrameFlow.lrplugin/ApplyProfile.lua` | Edit flow in Lightroom, `applyDevelopSettings` in one transaction |
 | `packages/contracts/json-schema/job-envelope-v1.schema.json` | Queue envelope schema |
 | `packages/contracts/json-schema/photo-upload-v1.schema.json` | Photo upload metadata schema |
 | `infra/compose/docker-compose.yml` | Local infra (Postgres, Redis, MinIO) |
@@ -125,9 +127,9 @@ TODO.md                # Completed + open work items — keep up to date
 | POST | `/v1/photos` | Upload JPEG preview + metadata (idempotent by `lr_catalog_uuid`) |
 | GET | `/v1/profiles` | List all profiles |
 | GET | `/v1/profiles/{id}` | Get single profile with status |
-| POST | `/v1/jobs/train` | Enqueue train job (creates Profile in DRAFT) |
+| POST | `/v1/jobs/train` | Enqueue train job (creates Profile in DRAFT, returns `profile_id`) |
 | POST | `/v1/jobs/edit` | Enqueue edit job (profile must be READY, photo_ids must exist) |
-| GET | `/v1/jobs/{id}` | Get job status snapshot |
+| GET | `/v1/jobs/{id}` | Get job status snapshot (incl. `profile_id`, short `failure_reason`) |
 | GET | `/v1/jobs/{id}/result` | Get edit results (only when job is COMPLETED) |
 
 ---
@@ -218,13 +220,17 @@ cd apps/bridge
 cargo test -p lrff-bridge-core                               # fast, no Tauri
 cargo run -p lrff-bridge-core --bin lrff-bridge-headless     # bridge without window
 npm install && npm run dev                                   # desktop app
+cargo run --release -p lrff-bridge-core --example preview -- <out> <raw files>  # preview check on real RAWs
+
+# Lightroom plugin tests (LuaJIT = Lua 5.1 like Lightroom; `scoop install luajit`)
+luajit apps/lr-plugin/tests/run.lua
 ```
 
 ---
 
 ## CI
 
-Seven jobs on push/PR to `main`:
+Eight jobs on push/PR to `main`:
 1. **contracts** — validates OpenAPI spec + all JSON schemas + examples
 2. **lint** — Ruff check across all Python source dirs
 3. **inference-pipeline** — `pytest libs/inference-pipeline/tests/`
@@ -232,6 +238,7 @@ Seven jobs on push/PR to `main`:
 5. **api-tests** — `pytest services/api/tests/` (mock-based, no Postgres needed)
 6. **worker-tests** — `pytest services/workers/train_worker/tests/` (mock-based, no DB/S3)
 7. **bridge-core** — `cargo fmt --check`, `clippy -D warnings`, `cargo test -p lrff-bridge-core` (incl. end-to-end against a fake API)
+8. **lr-plugin** — `luajit apps/lr-plugin/tests/run.lua` (Lightroom SDK faked)
 
 ---
 

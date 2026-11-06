@@ -1,0 +1,112 @@
+--[[ HTTP client for the local Bridge (packages/contracts/openapi/plugin-bridge-api.yaml).
+
+Port and token come from bridge.json, which the Bridge writes on first start.
+Every function returns `result, errorMessage`. Call only from an async task.
+]]
+
+local LrFileUtils = import "LrFileUtils"
+local LrHttp = import "LrHttp"
+local LrPathUtils = import "LrPathUtils"
+
+local Json = require "Json"
+local Log = require "Log"
+
+local BridgeClient = {}
+
+local CONFIG_DIR = "LRFrameFlow"
+local CONFIG_FILE = "bridge.json"
+local NOT_RUNNING = "The LR-FrameFlow Bridge is not running. Start the Bridge app and try again."
+
+local function configCandidates()
+  local list = {}
+  local function add(base, ...)
+    if not base or base == "" then return end
+    local path = base
+    for _, part in ipairs({ ... }) do path = LrPathUtils.child(path, part) end
+    list[#list + 1] = path
+  end
+  -- Windows: %APPDATA%\LRFrameFlow, macOS: ~/Library/Application Support/LRFrameFlow
+  add(os.getenv("LRFF_BRIDGE_DATA_DIR"), CONFIG_FILE)
+  add(LrPathUtils.getStandardFilePath("appData"), CONFIG_DIR, CONFIG_FILE)
+  add(os.getenv("APPDATA"), CONFIG_DIR, CONFIG_FILE)
+  add(LrPathUtils.getStandardFilePath("home"), "Library", "Application Support", CONFIG_DIR, CONFIG_FILE)
+  return list
+end
+
+function BridgeClient.loadConfig()
+  for _, path in ipairs(configCandidates()) do
+    if LrFileUtils.exists(path) == "file" then
+      local ok, cfg = pcall(Json.decode, LrFileUtils.readFile(path))
+      if ok and type(cfg) == "table" and cfg.port and cfg.token then
+        return cfg, nil, path
+      end
+      return nil, "The Bridge settings file is damaged: " .. path
+    end
+  end
+  return nil, "No Bridge settings found. Start the LR-FrameFlow Bridge app once, then try again."
+end
+
+local function request(method, path, body)
+  local cfg, err = BridgeClient.loadConfig()
+  if not cfg then return nil, err end
+
+  local url = string.format("http://127.0.0.1:%d%s", cfg.port, path)
+  local headers = {
+    { field = "X-LRFF-Token", value = cfg.token },
+    { field = "Content-Type", value = "application/json" },
+  }
+  local raw, response
+  if method == "GET" then
+    raw, response = LrHttp.get(url, headers, 15)
+  else
+    raw, response = LrHttp.post(url, Json.encode(body), headers, "POST", 30)
+  end
+
+  local status = response and response.status
+  if not raw or not status then
+    Log.warn("bridge unreachable: %s %s", method, path)
+    return nil, NOT_RUNNING
+  end
+
+  local ok, data = pcall(Json.decode, raw)
+  if status >= 200 and status < 300 then
+    if not ok then return nil, "The Bridge sent an unreadable answer." end
+    return data
+  end
+  local message = ok and type(data) == "table" and data.error or raw
+  Log.warn("bridge %s %s -> %s: %s", method, path, tostring(status), tostring(message))
+  if status == 401 then
+    return nil, "The Bridge rejected the plugin (token mismatch). Restart Lightroom and the Bridge."
+  end
+  return nil, string.format("Bridge error %s: %s", tostring(status), tostring(message))
+end
+
+function BridgeClient.health()
+  return request("GET", "/health")
+end
+
+function BridgeClient.registerPhoto(body)
+  return request("POST", "/v1/photos", body)
+end
+
+function BridgeClient.photo(uuid)
+  return request("GET", "/v1/photos/" .. uuid)
+end
+
+function BridgeClient.queueTrain(body)
+  return request("POST", "/v1/jobs/train", body)
+end
+
+function BridgeClient.queueEdit(body)
+  return request("POST", "/v1/jobs/edit", body)
+end
+
+function BridgeClient.job(jobId)
+  return request("GET", "/v1/jobs/" .. jobId)
+end
+
+function BridgeClient.profiles()
+  return request("GET", "/v1/profiles")
+end
+
+return BridgeClient
