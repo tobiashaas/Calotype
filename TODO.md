@@ -88,9 +88,14 @@ Open:
 
 ### Phase 6 — Culling (planned)
 See `docs/adr/005-culling-architecture.md`.
-- [ ] Plugin: read star ratings, pick/reject flags, color labels as culling labels
-- [ ] Swappable model interface (`face_detector: …`), `THIRD_PARTY_MODELS.md`
-- [ ] Feature extractors (technical, face, emotion/moment, content, series) with permissive models
+- [x] Plugin: read star ratings, pick/reject flags, color labels (`lr_metadata`); folder mode reads `xmp:Rating`/`xmp:Label`; API refreshes settings + decisions on re-upload (migration 008)
+- [x] `THIRD_PARTY_MODELS.md` + model registry with SHA-256 download (`libs/culling/models.py`)
+- [x] `libs/culling` prototype: sharpness (subject/face), exposure (face clipping), YuNet faces, MediaPipe blendshapes (eyes closed, smile), dHash series, explainable baseline — 130 ms/photo on 60 real CR3
+- [ ] Swappable model interface via config (`face_detector: yunet | …`)
+- [ ] Content/moment features: image embeddings (DINOv2/CLIP), interaction (hug, kiss, eye contact), candid vs. posed
+- [ ] Series via embeddings + capture time instead of dHash
+- [ ] Eyes "closed" vs. "looking down": separate via gaze/head pitch (blendshapes `eyeLookDown*`)
+- [ ] Culling job type: worker (or Bridge-local) + results back to Lightroom as flags/stars/labels
 - [ ] Scorer trained on the user's own decisions; explanations per photo; "uncertain" bucket
 - [ ] Labeling UI + `lrff-eval cull` (agreement, rescued technically-weak keepers)
 

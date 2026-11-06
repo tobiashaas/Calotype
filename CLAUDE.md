@@ -24,7 +24,7 @@ LRFrameFlow is an AI-powered Lightroom Classic photo editing system. It uses an 
 | Phase 3 — Real ML Pipeline | ✅ Done | Pillow histogram features (128-dim), Ridge regression, joblib serialization |
 | Phase 4 — Production Hardening | ✅ Done | Redis AOF, stuck-job reaper, at-least-once, heartbeat, CI lint+tests, contracts, JSON logs, rate limiting |
 | Phase 5 — Bridge & Plugin | 🟡 In progress | Bridge, LR plugin, folder mode (RAW+XMP) done; full stack verified end-to-end on 60 real CR3 (synthetic-rule test 93 % within tolerance); real-Lightroom smoke test open |
-| Phase 6 — Culling | 🔲 Planned | see `docs/adr/005-culling-architecture.md` |
+| Phase 6 — Culling | 🟡 Started | Labels (rating/flag/label) flow plugin→bridge→API; `libs/culling` prototype (YuNet + MediaPipe blendshapes, series, explainable baseline) at ~130 ms/photo; learned scorer open — see ADR 005 |
 
 See `TODO.md` for the detailed task breakdown.
 
@@ -46,6 +46,7 @@ libs/
   observability/       # get_logger() — stdlib logging wrapper
   inference-pipeline/  # Feature extraction (Pillow) + Ridge model (scikit-learn/joblib)
   edit-serializer/     # internal params ↔ Lightroom develop settings (names, ranges)
+  culling/             # culling features (sharpness, faces, expressions, series) + explainable baseline scorer
   lr-io/               # Shared path/I/O helpers (stub)
 services/
   api/                 # FastAPI: all routes (photos, profiles, jobs, results)
@@ -77,6 +78,7 @@ TODO.md                # Completed + open work items — keep up to date
   - `inference-pipeline` imports: Pillow, numpy, scikit-learn, joblib — no DB/Redis
   - `services/api` imports: domain, persistence, queue — NOT workers, NOT torch
   - `edit-serializer` imports: stdlib only
+  - `culling` imports: numpy, Pillow, opencv-python-headless, mediapipe — no DB/Redis; models only via `models.py` (SHA-256, `THIRD_PARTY_MODELS.md`)
   - `services/workers/*` import: domain, persistence, queue, observability, inference-pipeline, edit-serializer
   - **Workers CANNOT import `lr_frameflow_api`**
   - **API CANNOT import worker modules**
@@ -113,6 +115,9 @@ TODO.md                # Completed + open work items — keep up to date
 | `apps/lr-plugin/LRFrameFlow.lrplugin/BridgeClient.lua` | Plugin → Bridge HTTP, reads `bridge.json` |
 | `apps/bridge/core/src/xmp.rs` | Read/write Adobe `crs:` XMP sidecars (ProcessVersion 15.4, `lrff:Profile`) |
 | `apps/bridge/core/src/bin/folder.rs` | `lrff-folder train/apply/profiles` — folder mode without Lightroom |
+| `libs/culling/src/lr_frameflow_culling/scoring.py` | Series + explainable baseline (keep/uncertain/reject with reasons) |
+| `tools/lrff_eval/cull_report.py` | Culling prototype on a preview folder → local HTML contact sheet + timing |
+| `THIRD_PARTY_MODELS.md` | Every downloaded model with license and SHA-256 — permissive only |
 | `tools/lrff_eval/synthetic.py` | Synthetic-rule test: make rule XMPs, score predictions vs. rule and vs. guessing |
 | `apps/lr-plugin/LRFrameFlow.lrplugin/ApplyProfile.lua` | Edit flow in Lightroom, `applyDevelopSettings` in one transaction |
 | `packages/contracts/json-schema/job-envelope-v1.schema.json` | Queue envelope schema |
@@ -237,7 +242,7 @@ luajit apps/lr-plugin/tests/run.lua
 
 ## CI
 
-Eight jobs on push/PR to `main`:
+Nine jobs on push/PR to `main`:
 1. **contracts** — validates OpenAPI spec + all JSON schemas + examples
 2. **lint** — Ruff check across all Python source dirs
 3. **inference-pipeline** — `pytest libs/inference-pipeline/tests/`
@@ -246,6 +251,7 @@ Eight jobs on push/PR to `main`:
 6. **worker-tests** — `pytest services/workers/train_worker/tests/` (mock-based, no DB/S3)
 7. **bridge-core** — `cargo fmt --check`, `clippy -D warnings`, `cargo test -p lrff-bridge-core` (incl. end-to-end against a fake API)
 8. **lr-plugin** — `luajit apps/lr-plugin/tests/run.lua` (Lightroom SDK faked)
+9. **culling** — `pytest libs/culling/tests/` (synthetic images, no models needed)
 
 ---
 
