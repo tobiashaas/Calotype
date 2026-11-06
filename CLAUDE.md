@@ -23,7 +23,7 @@ LRFrameFlow is an AI-powered Lightroom Classic photo editing system. It uses an 
 | Phase 2 — Real Data Flow | ✅ Done | Workers download/upload MinIO, feature extraction, model artifact lifecycle |
 | Phase 3 — Real ML Pipeline | ✅ Done | Pillow histogram features (128-dim), Ridge regression, joblib serialization |
 | Phase 4 — Production Hardening | ✅ Done | Redis AOF, stuck-job reaper, at-least-once, heartbeat, CI lint+tests, contracts, JSON logs, rate limiting |
-| Phase 5 — Bridge & Plugin | 🔲 Open | Tauri HTTP client, LR Plugin integration, end-to-end flow |
+| Phase 5 — Bridge & Plugin | 🟡 In progress | Bridge core + Tauri app done (local API, SQLite outbox, previews); LR plugin + end-to-end flow open |
 
 See `TODO.md` for the detailed task breakdown.
 
@@ -33,7 +33,7 @@ See `TODO.md` for the detailed task breakdown.
 
 ```
 apps/
-  bridge/              # Tauri desktop app (Rust + JS)
+  bridge/              # Rust workspace: core/ (axum local API, SQLite outbox, previews) + src-tauri/ (desktop shell) + ui/
   lr-plugin/           # Lightroom SDK plugin (Lua)
 packages/
   contracts/           # OpenAPI spec + JSON Schemas (source of truth for contracts)
@@ -44,7 +44,7 @@ libs/
   queue/               # Redis Lists publisher/consumer + DLQ
   observability/       # get_logger() — stdlib logging wrapper
   inference-pipeline/  # Feature extraction (Pillow) + Ridge model (scikit-learn/joblib)
-  edit-serializer/     # Lightroom-compatible edit serialization (stub)
+  edit-serializer/     # internal params ↔ Lightroom develop settings (names, ranges)
   lr-io/               # Shared path/I/O helpers (stub)
 services/
   api/                 # FastAPI: all routes (photos, profiles, jobs, results)
@@ -75,7 +75,8 @@ TODO.md                # Completed + open work items — keep up to date
   - `observability` imports: stdlib only
   - `inference-pipeline` imports: Pillow, numpy, scikit-learn, joblib — no DB/Redis
   - `services/api` imports: domain, persistence, queue — NOT workers, NOT torch
-  - `services/workers/*` import: domain, persistence, queue, observability, inference-pipeline
+  - `edit-serializer` imports: stdlib only
+  - `services/workers/*` import: domain, persistence, queue, observability, inference-pipeline, edit-serializer
   - **Workers CANNOT import `lr_frameflow_api`**
   - **API CANNOT import worker modules**
 - **Versioned contracts:** Every queue message and API schema has a `schema_version` field. Never break existing schema versions; add new ones.
@@ -94,6 +95,7 @@ TODO.md                # Completed + open work items — keep up to date
 | `libs/persistence/src/lr_frameflow_persistence/repositories/` | One repo file per model |
 | `libs/inference-pipeline/src/lr_frameflow_inference_pipeline/features.py` | `extract_features()` — 128-dim histogram |
 | `libs/inference-pipeline/src/lr_frameflow_inference_pipeline/model.py` | `train_model()` / `run_inference()` |
+| `libs/edit-serializer/src/lr_edit_serializer/sliders.py` | `from_lightroom()` / `to_lightroom()` — LR names, ranges, RAW vs JPEG white balance |
 | `libs/queue/src/lr_frameflow_queue/envelope.py` | `JobEnvelopeV1` — canonical queue message |
 | `libs/queue/src/lr_frameflow_queue/constants.py` | Queue keys: `lrff:jobs:train`, `lrff:jobs:feature`, `lrff:jobs:inference` |
 | `libs/queue/src/lr_frameflow_queue/publisher.py` | `enqueue()`, `forward_to_inference()` |
@@ -103,6 +105,10 @@ TODO.md                # Completed + open work items — keep up to date
 | `services/api/src/lr_frameflow_api/deps.py` | FastAPI dependencies (DB session, publisher, S3) |
 | `services/api/src/lr_frameflow_api/storage.py` | boto3 MinIO helper |
 | `packages/contracts/openapi/bridge-api.yaml` | OpenAPI spec (Bridge ↔ API contract) |
+| `packages/contracts/openapi/plugin-bridge-api.yaml` | OpenAPI spec (LR plugin ↔ Bridge, local, `X-LRFF-Token`) |
+| `apps/bridge/core/src/outbox.rs` | Background loop: preview → upload → submit job → poll → map results |
+| `apps/bridge/core/src/server.rs` | Local API for the plugin (127.0.0.1:47600) |
+| `apps/bridge/core/src/preview.rs` | Unedited preview: largest embedded RAW JPEG / original JPEG/TIFF, ≤ 1200 px |
 | `packages/contracts/json-schema/job-envelope-v1.schema.json` | Queue envelope schema |
 | `packages/contracts/json-schema/photo-upload-v1.schema.json` | Photo upload metadata schema |
 | `infra/compose/docker-compose.yml` | Local infra (Postgres, Redis, MinIO) |
@@ -135,12 +141,12 @@ Train job:  API → lrff:jobs:train   → train_worker   → COMPLETED
 
 Train flow detail:
 1. API creates Profile (DRAFT) + Job, enqueues to `lrff:jobs:train`
-2. `train_worker`: Profile → TRAINING, loads feature vectors + `lr_develop_settings` from DB, trains Ridge model, saves `.joblib` to MinIO, Profile → READY
+2. `train_worker`: Profile → TRAINING; per photo: maps `lr_develop_settings` (LR names) to internal params via `from_lightroom`, computes the feature vector if missing (download preview from MinIO); photos without usable preview or settings are skipped; needs ≥ 3 usable photos; trains Ridge model, saves `.joblib` to MinIO, Profile → READY
 
 Edit flow detail:
 1. API validates Profile is READY + all photo_ids exist, enqueues to `lrff:jobs:feature`
-2. `feature_worker`: downloads JPEG from MinIO, extracts 128-dim histogram vector, saves FeatureVector, forwards to `lrff:jobs:inference`
-3. `inference_worker`: loads `.joblib` from MinIO, predicts 10 LR params per photo, saves EditResult
+2. `feature_worker`: downloads JPEG from MinIO, extracts 128-dim histogram vector, saves FeatureVector (skips photos whose preview is missing/undecodable — never stores zero vectors), forwards to `lrff:jobs:inference`
+3. `inference_worker`: loads `.joblib` from MinIO (missing artifact → job FAILED), predicts 10 params per photo, converts to LR develop settings via `to_lightroom` (clamped, LR key names), saves EditResult; photos without feature vector get no result
 
 On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
 
@@ -151,7 +157,8 @@ On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
 - **Feature vector:** 128 floats — R/G/B/Brightness histograms, 32 bins each, normalized
 - **Model:** `MultiOutputRegressor(Ridge(alpha=1.0))` with `StandardScaler`, serialized with joblib
 - **10 LR params predicted:** `exposure, temp, tint, contrast, highlights, shadows, whites, blacks, vibrance, saturation`
-- **Fallback:** < 3 training samples → zero-model (returns all zeros)
+- **Minimum:** train worker refuses < 3 usable photos (Profile FAILED); `run_inference` raises on unreadable artifacts instead of returning zeros (zeros would reset the user's photos)
+- **Output names:** model works with internal names (`exposure`, `temp` …); `libs/edit-serializer` maps to/from LR (`Exposure2012`, `Temperature`/`IncrementalTemperature` …)
 - **Artifact path:** `models/{profile_id}/model-ridge-v1.joblib` in MinIO bucket
 
 ---
@@ -166,7 +173,7 @@ On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
 | Object Storage | MinIO (S3-compatible), boto3 1.35+ |
 | Workers | Python 3.11+, blocking BLPOP loop |
 | ML | scikit-learn 1.4+, Pillow 10+, numpy 1.26+, joblib 1.3+ |
-| Desktop Bridge | Tauri (Rust + JS) |
+| Desktop Bridge | Rust (axum 0.8, rusqlite, reqwest, image) + Tauri 2, static HTML/JS UI |
 | LR Plugin | Lightroom Classic SDK (Lua) |
 | Linting | Ruff 0.8+ |
 | Testing | pytest 8+ |
@@ -188,6 +195,7 @@ pip install -e libs/queue
 pip install -e libs/persistence
 pip install -e libs/observability
 pip install -e libs/inference-pipeline
+pip install -e libs/edit-serializer
 pip install -e services/api
 pip install -e services/workers/feature_worker
 pip install -e services/workers/train_worker
@@ -204,17 +212,26 @@ DATABASE_URL="postgresql+psycopg://lrframeflow:lrframeflow@127.0.0.1:5433/lrfram
 
 # Validate contracts (also runs in CI)
 python scripts/validate_contracts.py
+
+# Bridge (Rust; rustup in ~/.cargo/bin)
+cd apps/bridge
+cargo test -p lrff-bridge-core                               # fast, no Tauri
+cargo run -p lrff-bridge-core --bin lrff-bridge-headless     # bridge without window
+npm install && npm run dev                                   # desktop app
 ```
 
 ---
 
 ## CI
 
-Four jobs on push/PR to `main`:
+Seven jobs on push/PR to `main`:
 1. **contracts** — validates OpenAPI spec + all JSON schemas + examples
 2. **lint** — Ruff check across all Python source dirs
-3. **inference-pipeline** — `pytest libs/inference-pipeline/tests/` (9 tests)
-4. **api-tests** — `pytest services/api/tests/` (14 tests, mock-based, no Postgres needed)
+3. **inference-pipeline** — `pytest libs/inference-pipeline/tests/`
+4. **edit-serializer** — `pytest libs/edit-serializer/tests/`
+5. **api-tests** — `pytest services/api/tests/` (mock-based, no Postgres needed)
+6. **worker-tests** — `pytest services/workers/train_worker/tests/` (mock-based, no DB/S3)
+7. **bridge-core** — `cargo fmt --check`, `clippy -D warnings`, `cargo test -p lrff-bridge-core` (incl. end-to-end against a fake API)
 
 ---
 
@@ -225,6 +242,7 @@ Four jobs on push/PR to `main`:
 | 001 | Redis Lists for async queuing; API returns 202 immediately |
 | 002 | Tauri (Rust) for Bridge instead of Electron |
 | 003 | Redis DLQ per primary queue; strict module import matrix |
+| 004 | Bridge = local Rust/axum service on 127.0.0.1 with SQLite outbox; LR plugin = UI, talks only to Bridge; model input = unedited image (embedded RAW JPEG / original) |
 
 Full docs in `docs/adr/`.
 

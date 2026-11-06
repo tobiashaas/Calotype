@@ -1,11 +1,20 @@
-[package]
-name = "lr-frameflow-bridge"
+[workspace]
+resolver = "2"
+members = ["core", "src-tauri"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
-description = "LR-FrameFlow desktop bridge (Tauri scaffold placeholder)"
+license = "MIT OR Apache-2.0"
 
-[[bin]]
-name = "lr-frameflow-bridge"
-path = "src/main.rs"
+[workspace.dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-[dependencies]
+# Image decoding is painfully slow unoptimized; optimize dependencies even in dev builds.
+[profile.dev.package."*"]
+opt-level = 2

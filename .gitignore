@@ -39,3 +39,6 @@ tmp/
 
 # Lightroom / Adobe (falls lokale Artefakte)
 *.lrcat-wal
+
+# Tauri generated schemas
+apps/bridge/src-tauri/gen/

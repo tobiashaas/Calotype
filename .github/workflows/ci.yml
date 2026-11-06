@@ -37,6 +37,7 @@ jobs:
             libs/queue/src \
             libs/observability/src \
             libs/inference-pipeline/src \
+            libs/edit-serializer/src \
             services/api/src \
             services/workers/feature_worker/src \
             services/workers/train_worker/src \
@@ -54,6 +55,57 @@ jobs:
         run: pip install -e "libs/inference-pipeline[dev]"
       - name: Test
         run: python -m pytest libs/inference-pipeline/tests/ -v
+
+  edit-serializer:
+    name: Edit serializer tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e "libs/edit-serializer[dev]"
+      - name: Test
+        run: python -m pytest libs/edit-serializer/tests/ -v
+
+  worker-tests:
+    name: Worker tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install -e libs/domain -e libs/queue -e libs/observability -e libs/persistence
+          pip install -e libs/inference-pipeline -e libs/edit-serializer
+          pip install -e services/workers/train_worker pytest
+      - name: Test
+        run: python -m pytest services/workers/train_worker/tests/ -v
+
+  bridge-core:
+    name: Bridge core (Rust)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/bridge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/bridge
+      # The Tauri crate needs WebKitGTK on Linux; the core is tested on its own.
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy -p lrff-bridge-core --all-targets -- -D warnings
+      - name: Test
+        run: cargo test -p lrff-bridge-core
 
   api-tests:
     name: API integration tests

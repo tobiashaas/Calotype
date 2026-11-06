@@ -1,0 +1,20 @@
+[package]
+name = "lrff-bridge"
+description = "LR-FrameFlow Bridge desktop app (Tauri shell around lrff-bridge-core)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "lrff-bridge"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+lrff-bridge-core = { path = "../core" }
+tauri = { version = "2", features = [] }
+serde.workspace = true
+serde_json.workspace = true
+tracing-subscriber.workspace = true

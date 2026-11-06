@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Status window: core IPC only, plus the app's own commands",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

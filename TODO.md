@@ -50,13 +50,36 @@ Update it whenever a phase is finished or new tasks are identified.
 - [x] **Rate limiting / backpressure**: `RateLimitMiddleware` (fixed-window, Redis-backed, per-IP, 60 req/60s on `/v1/jobs/*`); `QueueFullError` when `LLEN > MAX_QUEUE_DEPTH` (default 500) → 429; env vars `RATE_LIMIT_REQUESTS`, `RATE_LIMIT_WINDOW_SECONDS`, `MAX_QUEUE_DEPTH`
 
 ### Phase 5 — Bridge & Plugin Integration
-- [ ] Tauri bridge app: implement HTTP client to call API (`/v1/photos`, `/v1/jobs/train`, `/v1/jobs/edit`)
-- [ ] LR Plugin: trigger export of JPEG preview + metadata to bridge
+Architecture: see `docs/adr/004-bridge-localhost-architecture.md`.
+
+Prerequisites (done 2026-11-06):
+- [x] Train worker computes missing feature vectors itself (fresh uploads used to fail with "no feature vectors")
+- [x] `libs/edit-serializer`: internal params ↔ LR develop settings (names, ranges, RAW vs JPEG white balance), used by train + inference worker
+- [x] No silent zeros: undecodable previews are skipped, missing/broken model artifact fails the job, < 3 usable training photos fails the profile
+- [x] ADR 004: Bridge as localhost service, plugin as UI, unedited image as model input
+
+Open:
+- [x] Rust toolchain + Tauri 2 app in `apps/bridge` (workspace: `core/` + `src-tauri/` + `ui/`)
+- [x] Contract `packages/contracts/openapi/plugin-bridge-api.yaml` (plugin ↔ bridge, validated in CI)
+- [x] Bridge: axum server on 127.0.0.1:47600 + token in `bridge.json` (`X-LRFF-Token`)
+- [x] Bridge: SQLite outbox with retry/backoff for photos + train/edit jobs; stable Idempotency-Key; status polling; edit results mapped back to catalog UUIDs
+- [x] Bridge: preview from original file (largest embedded RAW JPEG / JPEG/TIFF original, longest side ≤ 1200 px); unreachable file = retry, broken file = failed
+- [x] Bridge: status window (server reachable, queue counts, server address, "Retry now"); headless binary `lrff-bridge-headless`
+- [x] CI job `bridge-core` (fmt, clippy, tests)
+- [ ] Bridge: tray mode (closing the window must not stop the bridge) + autostart
+- [ ] Bridge: real-RAW test corpus (CR3/NEF/ARW/RAF/DNG) for embedded-preview extraction; respect EXIF orientation
+- [ ] API: return `profile_id` for train jobs (JobAccepted / JobSnapshot) so the plugin does not match by name
+- [ ] API: update `lr_develop_settings` when an already uploaded photo is registered again (retraining after edits)
+- [ ] LR Plugin: send file path + `getDevelopSettings()` + catalog UUID to bridge
 - [ ] LR Plugin: poll job status and apply returned `lr_settings` back to catalog
+- [ ] Smoke test: verify `getDevelopSettings()` keys for JPEG/TIFF (`IncrementalTemperature`?)
 - [ ] End-to-end smoke test: LR → Plugin → Bridge → API → Workers → back to LR
 
 ### Backlog / Nice-to-have
-- [ ] Replace Ridge regression with a gradient boosting model (XGBoost/LightGBM) for better accuracy
+- [ ] **Better model (biggest quality lever):** CNN on the image (e.g. pretrained ResNet/EfficientNet backbone, one head per slider group) instead of 128-dim histogram + Ridge; export to ONNX for optional local inference in the Bridge
+- [ ] Predict RAW white balance relative to as-shot instead of absolute Kelvin
+- [ ] More sliders: Texture, Clarity, Dehaze, tone curve, HSL, crop/straighten
+- [ ] XMP sidecar writer (crs:) as second output path besides `applyDevelopSettings`
 - [ ] Add a `GET /v1/jobs` list endpoint with pagination and status filter
 - [ ] Profile versioning: bump `version` on retrain instead of overwriting artifact
 - [ ] S3 presigned URLs for returning edit result images (not just `lr_settings`)
