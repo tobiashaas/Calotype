@@ -70,21 +70,23 @@ pub fn is_curve_key(key: &str) -> bool {
     key.starts_with("ToneCurvePV2012") || key == "ToneCurve"
 }
 
+/// Reads Adobe's form (`<rdf:li>x, y</rdf:li>` per point) and, tolerantly, a flat form
+/// some generators write (`<rdf:li>x</rdf:li><rdf:li>y</rdf:li>`). We always write Adobe's.
 fn parse_curve(element: &str) -> Option<Value> {
-    let mut points = Vec::new();
+    let mut numbers = Vec::new();
     let mut rest = element;
     while let Some(start) = rest.find("<rdf:li>") {
         let after = &rest[start + "<rdf:li>".len()..];
         let end = after.find("</rdf:li>")?;
-        let mut xy = after[..end].split(',').map(|v| v.trim().parse::<f64>());
-        let (Some(Ok(x)), Some(Ok(y))) = (xy.next(), xy.next()) else {
-            return None;
-        };
-        points.push(Value::from(x));
-        points.push(Value::from(y));
+        for v in after[..end].split(',') {
+            numbers.push(v.trim().parse::<f64>().ok()?);
+        }
         rest = &after[end..];
     }
-    (!points.is_empty()).then_some(Value::Array(points))
+    if numbers.is_empty() || !numbers.len().is_multiple_of(2) {
+        return None;
+    }
+    Some(Value::Array(numbers.into_iter().map(Value::from).collect()))
 }
 
 fn curve_points(value: &Value) -> Option<Vec<(i64, i64)>> {
@@ -593,6 +595,22 @@ mod tests {
         assert_eq!(back["Exposure2012"], json!(0.2));
         // NESTED has curves only inside crs:Look → nothing at the top level
         assert!(!read_develop_settings(NESTED).contains_key("ToneCurvePV2012"));
+    }
+
+    #[test]
+    fn flat_curve_form_is_read_and_rewritten_in_adobe_form() {
+        let flat = r#"<rdf:Description crs:PresetType="Normal">
+   <crs:ToneCurvePV2012><rdf:Seq><rdf:li>0</rdf:li><rdf:li>25</rdf:li><rdf:li>255</rdf:li><rdf:li>250</rdf:li></rdf:Seq></crs:ToneCurvePV2012>
+  </rdf:Description>"#;
+        let s = read_develop_settings(flat);
+        assert_eq!(s["ToneCurvePV2012"], json!([0.0, 25.0, 255.0, 250.0]));
+        let written = new_sidecar(&s, "P");
+        assert!(
+            written.contains("<rdf:li>0, 25</rdf:li>")
+                && written.contains("<rdf:li>255, 250</rdf:li>")
+        );
+        let odd = r#"<rdf:Description a="1"><crs:ToneCurvePV2012><rdf:Seq><rdf:li>0</rdf:li></rdf:Seq></crs:ToneCurvePV2012></rdf:Description>"#;
+        assert!(!read_develop_settings(odd).contains_key("ToneCurvePV2012"));
     }
 
     #[test]

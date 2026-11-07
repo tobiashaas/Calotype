@@ -220,6 +220,7 @@ test("prepared settings switch white balance to custom", function()
   eq(s.WhiteBalance, "Custom", "white balance")
   eq(s.Bogus, nil, "null dropped")
   eq(PhotoData.prepareSettings({ Exposure2012 = 0.2 }).WhiteBalance, nil, "untouched without WB")
+  eq(PhotoData.prepareSettings({ ConvertToGrayscale = "True" }).ConvertToGrayscale, true, "XMP boolean")
 end)
 
 -- ------------------------------------------------------------ JobWait

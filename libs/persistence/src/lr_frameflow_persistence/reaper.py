@@ -13,7 +13,6 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
-from lr_frameflow_domain.jobs import JobKind
 from lr_frameflow_persistence.repositories.jobs import JobRepository
 from lr_frameflow_persistence.session import session_scope
 

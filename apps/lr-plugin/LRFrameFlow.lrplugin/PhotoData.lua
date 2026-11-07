@@ -80,6 +80,7 @@ end
 function PhotoData.prepareSettings(settings)
   local out = {}
   for k, v in pairs(settings) do
+    if v == "True" then v = true elseif v == "False" then v = false end -- XMP booleans
     if v ~= Json.null then out[k] = v end
   end
   if out.Temperature or out.Tint or out.IncrementalTemperature or out.IncrementalTint then
