@@ -30,6 +30,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "tiff", "png"] }
 dirs = "5"
 thiserror = "2"
+jpeg-decoder = { version = "0.3", default-features = false }
 sha2 = "0.10"
 clap = { version = "4", features = ["derive"] }
 

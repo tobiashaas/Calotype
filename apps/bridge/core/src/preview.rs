@@ -161,13 +161,62 @@ pub fn best_embedded_jpeg(bytes: &[u8]) -> Result<(DynamicImage, Orientation), P
         .filter(|c| c.1 >= MAX_EDGE)
         .min_by_key(|c| c.0);
     let best = covering.or_else(|| candidates.iter().max_by_key(|c| c.0));
-    let &(_, _, offset) = best.ok_or(PreviewError::NoEmbeddedJpeg)?;
-    let (img, orientation) = decode_oriented(&bytes[offset..], Some(ImageFormat::Jpeg))?;
+    let &(_, longest_edge, offset) = best.ok_or(PreviewError::NoEmbeddedJpeg)?;
+    let (img, orientation) = if longest_edge >= 2 * MAX_EDGE {
+        // Only a full-size JPEG (e.g. Canon CR2): decode at 1/2, 1/4 or 1/8 directly in the
+        // DCT instead of building a 20+ MP image and shrinking it (~3x faster).
+        let orientation = jpeg_orientation(&bytes[offset..]);
+        (decode_jpeg_scaled(&bytes[offset..], MAX_EDGE)?, orientation)
+    } else {
+        decode_oriented(&bytes[offset..], Some(ImageFormat::Jpeg))?
+    };
     let longest = img.width().max(img.height());
     if longest < MIN_EDGE {
         return Err(PreviewError::TooSmall(longest));
     }
     Ok((img, orientation))
+}
+
+/// EXIF orientation of a JPEG from its header only.
+fn jpeg_orientation(jpeg: &[u8]) -> Orientation {
+    ImageReader::with_format(Cursor::new(jpeg), ImageFormat::Jpeg)
+        .into_decoder()
+        .ok()
+        .and_then(|mut d| d.orientation().ok())
+        .unwrap_or(Orientation::NoTransforms)
+}
+
+/// Decode with DCT scaling to the smallest size whose longest edge is still ≥ `edge`.
+fn decode_jpeg_scaled(jpeg: &[u8], edge: u32) -> Result<DynamicImage, PreviewError> {
+    let err = |e: jpeg_decoder::Error| PreviewError::Decode(e.to_string());
+    let mut decoder = jpeg_decoder::Decoder::new(Cursor::new(jpeg));
+    decoder.read_info().map_err(err)?;
+    let info = decoder
+        .info()
+        .ok_or_else(|| PreviewError::Decode("no JPEG header".into()))?;
+    let (w, h) = (u32::from(info.width), u32::from(info.height));
+    let ratio = f64::from(edge) / f64::from(w.max(h));
+    let want = |v: u32| (f64::from(v) * ratio).ceil().clamp(1.0, 65535.0) as u16;
+    let (sw, sh) = decoder.scale(want(w), want(h)).map_err(err)?;
+    let pixels = decoder.decode().map_err(err)?;
+    let (sw, sh) = (u32::from(sw), u32::from(sh));
+    let info = decoder
+        .info()
+        .ok_or_else(|| PreviewError::Decode("no JPEG header".into()))?;
+    match info.pixel_format {
+        jpeg_decoder::PixelFormat::RGB24 => {
+            image::RgbImage::from_raw(sw, sh, pixels).map(DynamicImage::ImageRgb8)
+        }
+        jpeg_decoder::PixelFormat::L8 => {
+            image::GrayImage::from_raw(sw, sh, pixels).map(DynamicImage::ImageLuma8)
+        }
+        other => {
+            return Err(PreviewError::Decode(format!(
+                "unsupported JPEG pixel format {other:?}"
+            )))
+        }
+    }
+    .ok_or_else(|| PreviewError::Decode("JPEG size mismatch".into()))
 }
 
 /// Offsets of `FF D8 FF` (JPEG start-of-image followed by a marker).
@@ -221,6 +270,24 @@ pub(crate) mod tests {
     fn dims(jpeg: &[u8]) -> (u32, u32) {
         let img = image::load_from_memory(jpeg).unwrap();
         (img.width(), img.height())
+    }
+
+    #[test]
+    fn full_size_only_jpeg_is_decoded_scaled_and_stays_upright() {
+        // CR2-like: only a large embedded JPEG plus a thumbnail, portrait via the container
+        let mut cr2 = tiff_with_orientation(6);
+        cr2.extend(jpeg_bytes(160, 120));
+        cr2.extend(jpeg_bytes(5000, 3000));
+        let (img, _) = best_embedded_jpeg(&cr2).unwrap();
+        assert_eq!(
+            (img.width(), img.height()),
+            (1250, 750),
+            "1/4 DCT scale, still ≥ 1200"
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.cr2");
+        std::fs::write(&path, cr2).unwrap();
+        assert_eq!(dims(&build_preview(&path).unwrap()), (720, 1200));
     }
 
     #[test]
