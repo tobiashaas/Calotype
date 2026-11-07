@@ -42,9 +42,9 @@ Die Tests ersetzen Lightrooms SDK-Module durch Attrappen (Lua 5.1 / LuaJIT wie i
 luajit apps/lr-plugin/tests/run.lua
 ```
 
-## Im ersten echten Lightroom-Test prüfen
+## Erster echter Lightroom-Test (07.11.2026)
 
-- Liefert `getDevelopSettings()` bei JPEG/TIFF `IncrementalTemperature`/`IncrementalTint`?
-- Übernimmt `applyDevelopSettings` `Temperature`/`Tint` zusammen mit `WhiteBalance = "Custom"`?
-- `LrPathUtils.getStandardFilePath("appData")` zeigt auf `%APPDATA%` bzw.
-  `~/Library/Application Support` (sonst greifen die Fallbacks).
+- ✅ Plugin lädt, findet `bridge.json` (`%APPDATA%\LRFrameFlow`), Bridge-Status zeigt Server und Profile.
+- ✅ „Apply profile" auf 45 Canon-R6-Fotos: Vorschau → Bridge → Server → Worker → `applyDevelopSettings`, Look plausibel.
+- 🐞 Behoben: Lightrooms Lua-Sandbox hat kein `os.getenv` (Tests bilden das jetzt nach).
+- ⏳ Noch prüfen: Training aus Lightroom, JPEG/TIFF (`IncrementalTemperature`), Weißabgleich „Benutzerdefiniert" nach dem Anwenden, Stil-Profil mit S/W.

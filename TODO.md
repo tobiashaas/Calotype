@@ -77,7 +77,8 @@ Open:
 - [x] LR Plugin: send file path + `getDevelopSettings()` + catalog UUID + EXIF to bridge
 - [x] LR Plugin: poll job status (progress + cancel) and apply `lr_settings` in one catalog transaction
 - [x] LR Plugin tests with faked SDK modules (`luajit apps/lr-plugin/tests/run.lua`, CI job `lr-plugin`)
-- [ ] Smoke test in real Lightroom: install plugin, `getDevelopSettings()` keys for JPEG/TIFF (`IncrementalTemperature`?), `applyDevelopSettings` with `WhiteBalance = "Custom"`, `appData` path
+- [x] First real Lightroom run (2026-11-07): plugin loads, Bridge status ok, apply on 45 R6 photos ok; fixed os.getenv missing in the sandbox
+- [ ] Rest of the Lightroom smoke test: train from Lightroom, `getDevelopSettings()` keys for JPEG/TIFF (`IncrementalTemperature`?), `applyDevelopSettings` with `WhiteBalance = "Custom"`, `appData` path
 - [ ] End-to-end smoke test: LR → Plugin → Bridge → API → Workers → back to LR
 
 ### Phase 5b — Folder mode & first measurement (done 2026-11-06)
