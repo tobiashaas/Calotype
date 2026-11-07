@@ -47,6 +47,9 @@ function import(name) -- luacheck: ignore (global, as in Lightroom)
   return assert(sdk[name], "no fake for " .. name)
 end
 
+-- Like Lightroom's sandbox: no os.getenv. (Found in the first real Lightroom test.)
+os.getenv = nil
+
 local Json = require "Json"
 local BridgeClient = require "BridgeClient"
 local PhotoData = require "PhotoData"
@@ -133,6 +136,18 @@ test("json rejects broken input", function()
 end)
 
 -- ------------------------------------------------------------ BridgeClient
+
+test("bridge config is found via the home folder when appData is not the roaming folder", function()
+  local original = sdk.LrPathUtils.getStandardFilePath
+  sdk.LrPathUtils.getStandardFilePath = function(name)
+    return ({ appData = "C:/Users/test/AppData/Roaming/Adobe/Lightroom", home = "C:/Users/test" })[name]
+  end
+  fake.files[CONFIG_PATH] = Json.encode({ port = 47600, token = "t" })
+  local cfg, err = BridgeClient.loadConfig()
+  sdk.LrPathUtils.getStandardFilePath = original
+  eq(err, nil, "error")
+  eq(cfg.port, 47600, "port")
+end)
 
 test("bridge client sends token and reads JSON", function()
   fake.files[CONFIG_PATH] = Json.encode({ port = 47600, token = "secret", api_base_url = "http://srv" })

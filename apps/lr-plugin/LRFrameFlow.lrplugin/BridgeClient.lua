@@ -17,6 +17,19 @@ local CONFIG_DIR = "LRFrameFlow"
 local CONFIG_FILE = "bridge.json"
 local NOT_RUNNING = "The LR-FrameFlow Bridge is not running. Start the Bridge app and try again."
 
+-- Lightroom's Lua sandbox has no os.getenv (and may lack `os` entirely): never call it blindly.
+local function env(name)
+  local ok, value = pcall(function() return os and os.getenv and os.getenv(name) end)
+  if ok then return value end
+  return nil
+end
+
+local function standardPath(name)
+  local ok, value = pcall(LrPathUtils.getStandardFilePath, name)
+  if ok then return value end
+  return nil
+end
+
 local function configCandidates()
   local list = {}
   local function add(base, ...)
@@ -26,10 +39,12 @@ local function configCandidates()
     list[#list + 1] = path
   end
   -- Windows: %APPDATA%\LRFrameFlow, macOS: ~/Library/Application Support/LRFrameFlow
-  add(os.getenv("LRFF_BRIDGE_DATA_DIR"), CONFIG_FILE)
-  add(LrPathUtils.getStandardFilePath("appData"), CONFIG_DIR, CONFIG_FILE)
-  add(os.getenv("APPDATA"), CONFIG_DIR, CONFIG_FILE)
-  add(LrPathUtils.getStandardFilePath("home"), "Library", "Application Support", CONFIG_DIR, CONFIG_FILE)
+  add(env("LRFF_BRIDGE_DATA_DIR"), CONFIG_FILE)
+  add(standardPath("appData"), CONFIG_DIR, CONFIG_FILE)
+  add(env("APPDATA"), CONFIG_DIR, CONFIG_FILE)
+  local home = standardPath("home")
+  add(home, "AppData", "Roaming", CONFIG_DIR, CONFIG_FILE)                  -- Windows
+  add(home, "Library", "Application Support", CONFIG_DIR, CONFIG_FILE)      -- macOS
   return list
 end
 
