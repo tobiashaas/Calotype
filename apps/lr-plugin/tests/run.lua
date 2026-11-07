@@ -419,7 +419,7 @@ end)
 
 test("menu scripts compile", function()
   for _, file in ipairs({ "Info.lua", "TrainProfile.lua", "ApplyProfile.lua", "BridgeStatus.lua",
-                          "Actions.lua", "Automation.lua", "AutomationCommands.lua", "AutomationStop.lua" }) do
+                          "Actions.lua", "Automation.lua", "AutomationCommands.lua" }) do
     assert(loadfile(PLUGIN .. file))
   end
   local info = assert(loadfile(PLUGIN .. "Info.lua"))()

@@ -16,7 +16,6 @@ return {
 
   -- Starts the (opt-in) automation channel for end-to-end tests, see Automation.lua.
   LrInitPlugin = "Automation.lua",
-  LrShutdownPlugin = "AutomationStop.lua",
 
   -- Library > Plug-in Extras
   LrLibraryMenuItems = {
