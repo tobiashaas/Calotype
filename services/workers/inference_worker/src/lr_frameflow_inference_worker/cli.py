@@ -13,7 +13,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.orm import sessionmaker
 
-from lr_edit_serializer import serialize_for_lightroom
+from lr_edit_serializer import apply_style, serialize_for_lightroom
 from lr_frameflow_domain.jobs import JobStatus
 from lr_frameflow_inference_pipeline import run_inference
 from lr_frameflow_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
@@ -73,6 +73,8 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
                 raise ValueError(f"profile {profile_id} not found")
             artifact_key = profile.model_artifact_key
             format_type = profile.format_type
+            # Style layer: the profile's preset adds the look on top of each prediction.
+            base_preset = dict(profile.base_preset or {})
 
         # No model → fail the job. Zero predictions would reset the user's photos.
         if not artifact_key:
@@ -90,7 +92,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
                     continue
 
                 prediction = run_inference(model_bytes, list(fv.vector))
-                lr_settings = serialize_for_lightroom(prediction, format_type)
+                lr_settings = apply_style(serialize_for_lightroom(prediction, format_type), base_preset)
 
                 EditResultRepository.create(
                     session,

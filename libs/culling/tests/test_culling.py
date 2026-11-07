@@ -118,3 +118,24 @@ def test_photos_without_faces_still_get_a_decision():
     hs = _spread(3)
     photos = [_photo(f"p{i}", 2.0 + i, h=hs[i], faces=False) for i in range(3)]
     assert all(x.bucket in {"keep", "uncertain", "reject"} for x in score(photos))
+
+
+def test_learned_scorer_picks_up_the_photographers_taste():
+    """Labels say: smiles are kept, closed eyes are not. The weights must follow."""
+    from lr_frameflow_culling.learned import LearnedScorer
+
+    rng = np.random.default_rng(0)
+    photos, keep = [], []
+    for i in range(200):
+        smile, eyes = float(rng.random()), float(rng.random())
+        photos.append(_photo(f"p{i}", 2.0 + 0.3 * rng.random(), eyes=eyes, smile=smile,
+                             h=int(rng.integers(0, 1 << 62))))
+        keep.append(smile > 0.5 and eyes < 0.6)
+    scorer = LearnedScorer.fit(photos, keep)
+    weights = dict(scorer.weights())
+    assert weights["smiling"] > 0.5
+    assert weights["eyes closed"] < -0.5
+    p = scorer.keep_probability(photos)
+    assert p[np.array(keep)].mean() > p[~np.array(keep)].mean() + 0.3
+    text = scorer.explain([_photo("x", 2.1, eyes=0.9, smile=0.0, h=1)])[0]
+    assert "eyes closed" in text or "no smile" in text

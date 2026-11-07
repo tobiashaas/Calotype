@@ -13,6 +13,7 @@ dependencies = [
     "Pillow>=10",
     "opencv-python-headless>=4.8",  # Apache-2.0; YuNet face detector built in
     "mediapipe>=0.10",              # Apache-2.0; face landmarker + blendshapes
+    "scikit-learn>=1.4",            # BSD-3; learned scorer
 ]
 
 [project.optional-dependencies]

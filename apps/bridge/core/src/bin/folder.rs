@@ -6,6 +6,8 @@
 //!
 //! train: edited RAWs (RAW + XMP with develop settings) are the training material.
 //! apply: unedited RAWs get a new XMP sidecar; import the folder into Lightroom afterwards.
+//! train --style <preset.xmp>: a Lightroom preset as the profile's style layer — the model
+//!              predicts exposure/white balance/tone per photo, the preset adds the look.
 //! --files-from <list>: only these files (one name or path per line), e.g. a train/test split.
 //! --out <dir>: write sidecars there instead of next to the RAWs (read-only cards,
 //!              evaluation against existing edits). The source folder is never touched.
@@ -20,6 +22,7 @@ use serde_json::{json, Map, Value};
 
 use lrff_bridge_core::config::{self, BridgeConfig};
 use lrff_bridge_core::folder::{self, FolderPhoto};
+use lrff_bridge_core::xmp;
 
 #[derive(Parser)]
 #[command(
@@ -46,6 +49,9 @@ enum Command {
         /// Only use the files listed here (one file name or path per line).
         #[arg(long)]
         files_from: Option<PathBuf>,
+        /// Lightroom preset (.xmp) whose look is layered on every prediction.
+        #[arg(long)]
+        style: Option<PathBuf>,
     },
     /// Apply a profile to the RAWs in a folder and write XMP sidecars.
     Apply {
@@ -242,7 +248,25 @@ async fn train(
     genre: &str,
     color: &str,
     files_from: Option<&Path>,
+    style: Option<&Path>,
 ) -> Result<()> {
+    let base_preset = match style {
+        Some(path) => {
+            let text = std::fs::read_to_string(path)
+                .with_context(|| format!("cannot read style preset {}", path.display()))?;
+            let settings = xmp::read_develop_settings(&text);
+            if settings.is_empty() {
+                bail!("{} holds no develop settings", path.display());
+            }
+            println!(
+                "style layer from {} ({} settings)",
+                path.display(),
+                settings.len()
+            );
+            Some(Value::Object(settings))
+        }
+        None => None,
+    };
     let (edited, other): (Vec<_>, Vec<_>) = scan_selected(dir, files_from)?
         .into_iter()
         .partition(FolderPhoto::is_edited);
@@ -264,6 +288,7 @@ async fn train(
                 "genre": genre,
                 "format_type": "raw",
                 "color_type": color,
+                "base_preset": base_preset,
                 "lr_catalog_uuids": by_id.keys().collect::<Vec<_>>(),
             }),
         )
@@ -391,7 +416,19 @@ async fn main() -> Result<()> {
             genre,
             color,
             files_from,
-        } => train(&bridge, &dir, &name, &genre, &color, files_from.as_deref()).await,
+            style,
+        } => {
+            train(
+                &bridge,
+                &dir,
+                &name,
+                &genre,
+                &color,
+                files_from.as_deref(),
+                style.as_deref(),
+            )
+            .await
+        }
         Command::Apply {
             dir,
             profile,

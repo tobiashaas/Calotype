@@ -47,14 +47,138 @@ fn top_attributes(xmp: &str) -> &str {
     top_description(xmp).map_or(xmp, |r| &xmp[r])
 }
 
-/// All simple top-level `crs:Name="value"` attributes. Numbers ("+21", "0.00") become numbers.
+/// All simple top-level `crs:Name="value"` attributes (numbers become numbers) plus
+/// top-level tone curves (`crs:ToneCurvePV2012` …) as flat point lists `[x0, y0, x1, y1 …]`.
 pub fn read_develop_settings(xmp: &str) -> Map<String, Value> {
     let mut out = Map::new();
     for (name, value) in crs_attributes(top_attributes(xmp)) {
         out.entry(name.to_string())
             .or_insert_with(|| parse_value(&unescape(value)));
     }
+    for (name, range) in top_children(xmp) {
+        if let Some(key) = name.strip_prefix("crs:").filter(|k| is_curve_key(k)) {
+            if let Some(points) = parse_curve(&xmp[range]) {
+                out.entry(key.to_string()).or_insert(points);
+            }
+        }
+    }
     out
+}
+
+/// Tone curves are lists, written as `<crs:ToneCurvePV2012><rdf:Seq><rdf:li>x, y</rdf:li>…`.
+pub fn is_curve_key(key: &str) -> bool {
+    key.starts_with("ToneCurvePV2012") || key == "ToneCurve"
+}
+
+fn parse_curve(element: &str) -> Option<Value> {
+    let mut points = Vec::new();
+    let mut rest = element;
+    while let Some(start) = rest.find("<rdf:li>") {
+        let after = &rest[start + "<rdf:li>".len()..];
+        let end = after.find("</rdf:li>")?;
+        let mut xy = after[..end].split(',').map(|v| v.trim().parse::<f64>());
+        let (Some(Ok(x)), Some(Ok(y))) = (xy.next(), xy.next()) else {
+            return None;
+        };
+        points.push(Value::from(x));
+        points.push(Value::from(y));
+        rest = &after[end..];
+    }
+    (!points.is_empty()).then_some(Value::Array(points))
+}
+
+fn curve_points(value: &Value) -> Option<Vec<(i64, i64)>> {
+    let flat: Vec<f64> = value
+        .as_array()?
+        .iter()
+        .map(Value::as_f64)
+        .collect::<Option<_>>()?;
+    if flat.is_empty() || !flat.len().is_multiple_of(2) {
+        return None;
+    }
+    Some(
+        flat.chunks(2)
+            .map(|c| (c[0].round() as i64, c[1].round() as i64))
+            .collect(),
+    )
+}
+
+fn curve_element(key: &str, value: &Value) -> Option<String> {
+    let points = curve_points(value)?;
+    let items: String = points
+        .iter()
+        .map(|(x, y)| format!("\n     <rdf:li>{x}, {y}</rdf:li>"))
+        .collect();
+    Some(format!(
+        "<crs:{key}>\n    <rdf:Seq>{items}\n    </rdf:Seq>\n   </crs:{key}>"
+    ))
+}
+
+/// Direct children of the top-level `rdf:Description` as (element name, byte range).
+/// Nested elements (inside looks, masks …) are skipped — only depth 0 counts.
+fn top_children(xmp: &str) -> Vec<(String, std::ops::Range<usize>)> {
+    let mut out = Vec::new();
+    let Some(top) = top_description(xmp) else {
+        return out;
+    };
+    // The start tag ends at top.end; a self-closing top tag has no children.
+    if xmp[..top.end].ends_with('/') {
+        return out;
+    }
+    let mut pos = top.end + 1;
+    let mut depth = 0usize;
+    let mut open: Option<(String, usize)> = None;
+    while let Some(rel) = xmp[pos..].find('<') {
+        let start = pos + rel;
+        let Some(len) = tag_len(&xmp[start..]) else {
+            break;
+        };
+        let tag = &xmp[start..start + len];
+        pos = start + len;
+        if tag.starts_with("<?") || tag.starts_with("<!") {
+            continue;
+        }
+        let name: String = tag
+            .trim_start_matches("</")
+            .trim_start_matches('<')
+            .chars()
+            .take_while(|c| !c.is_whitespace() && *c != '>' && *c != '/')
+            .collect();
+        if tag.starts_with("</") {
+            if depth == 0 {
+                break; // closing tag of the top-level description
+            }
+            depth -= 1;
+            if depth == 0 {
+                if let Some((n, s)) = open.take() {
+                    out.push((n, s..pos));
+                }
+            }
+        } else if tag.ends_with("/>") {
+            if depth == 0 {
+                out.push((name, start..pos));
+            }
+        } else {
+            if depth == 0 {
+                open = Some((name, start));
+            }
+            depth += 1;
+        }
+    }
+    out
+}
+
+/// Length of the tag starting at `s[0] == '<'`, quotes respected.
+fn tag_len(s: &str) -> Option<usize> {
+    let mut in_quotes = false;
+    for (i, c) in s.char_indices() {
+        match c {
+            '"' => in_quotes = !in_quotes,
+            '>' if !in_quotes => return Some(i + 1),
+            _ => {}
+        }
+    }
+    None
 }
 
 /// The photographer's decisions stored in a sidecar: `xmp:Rating` (0–5, −1 = rejected) and
@@ -190,10 +314,12 @@ fn format_value(key: &str, value: &Value) -> String {
     }
 }
 
-/// Settings plus the attributes Lightroom needs to apply them.
+/// Settings plus the attributes Lightroom needs to apply them (curves excluded, see
+/// [`curve_elements`]).
 fn with_required(settings: &Map<String, Value>) -> Vec<(String, String)> {
     let mut attrs: Vec<(String, String)> = settings
         .iter()
+        .filter(|(k, _)| !is_curve_key(k))
         .map(|(k, v)| (k.clone(), format_value(k, v)))
         .collect();
     let has = |k: &str| settings.contains_key(k);
@@ -206,6 +332,14 @@ fn with_required(settings: &Map<String, Value>) -> Vec<(String, String)> {
     attrs.sort();
     attrs.dedup_by(|a, b| a.0 == b.0);
     attrs
+}
+
+fn curve_elements(settings: &Map<String, Value>) -> Vec<(String, String)> {
+    settings
+        .iter()
+        .filter(|(k, _)| is_curve_key(k))
+        .filter_map(|(k, v)| Some((k.clone(), curve_element(k, v)?)))
+        .collect()
 }
 
 /// A complete new sidecar for a RAW that has none.
@@ -221,7 +355,16 @@ pub fn new_sidecar(settings: &Map<String, Value>, profile: &str) -> String {
     for (k, v) in with_required(settings) {
         out.push_str(&format!("    crs:{k}=\"{}\"\n", escape(&v)));
     }
-    out.push_str("   />\n");
+    let curves = curve_elements(settings);
+    if curves.is_empty() {
+        out.push_str("   />\n");
+    } else {
+        out.push_str("   >\n");
+        for (_, element) in curves {
+            out.push_str(&format!("   {element}\n"));
+        }
+        out.push_str("  </rdf:Description>\n");
+    }
     out.push_str(" </rdf:RDF>\n");
     out.push_str("</x:xmpmeta>\n");
     out.push_str("<?xpacket end=\"w\"?>\n");
@@ -275,6 +418,20 @@ pub fn update_sidecar(
         let joined: String = insert.iter().map(|a| format!("\n    {a}")).collect();
         xmp.insert_str(pos, &joined);
     }
+    for (key, element) in curve_elements(settings) {
+        let name = format!("crs:{key}");
+        if let Some((_, range)) = top_children(&xmp).into_iter().find(|(n, _)| *n == name) {
+            xmp.replace_range(range, &element);
+            continue;
+        }
+        // No such curve at the top level yet: open a self-closing top tag, then add it first.
+        let top = top_description(&xmp)?;
+        if xmp[..top.end].ends_with('/') {
+            xmp.replace_range(top.end - 1..top.end + 1, ">\n  </rdf:Description>");
+        }
+        let top = top_description(&xmp)?;
+        xmp.insert_str(top.end + 1, &format!("\n   {element}"));
+    }
     Some(xmp)
 }
 
@@ -311,9 +468,10 @@ mod tests {
         assert_eq!(s["Exposure2012"], json!(0.0));
         assert_eq!(s["Vibrance"], json!(21));
         assert_eq!(s["CameraProfile"], json!("Adobe Standard"));
-        assert!(
-            !s.contains_key("ToneCurvePV2012"),
-            "element form is skipped"
+        assert_eq!(
+            s["ToneCurvePV2012"],
+            json!([0.0, 0.0]),
+            "top-level curve is read as a flat point list"
         );
         assert!(has_develop_settings(&s));
     }
@@ -417,6 +575,63 @@ mod tests {
             "look untouched"
         );
         assert_eq!(xmp.matches(r#"crs:Exposure2012="0""#).count(), 2);
+    }
+
+    #[test]
+    fn curves_roundtrip_and_nested_curves_are_not_read() {
+        let settings = json!({"Exposure2012": 0.2, "ToneCurvePV2012": [0, 18, 128, 120, 255, 245]})
+            .as_object()
+            .unwrap()
+            .clone();
+        let xmp = new_sidecar(&settings, "Look");
+        assert!(xmp.contains("<rdf:li>0, 18</rdf:li>"));
+        let back = read_develop_settings(&xmp);
+        assert_eq!(
+            back["ToneCurvePV2012"],
+            json!([0.0, 18.0, 128.0, 120.0, 255.0, 245.0])
+        );
+        assert_eq!(back["Exposure2012"], json!(0.2));
+        // NESTED has curves only inside crs:Look → nothing at the top level
+        assert!(!read_develop_settings(NESTED).contains_key("ToneCurvePV2012"));
+    }
+
+    #[test]
+    fn update_adds_and_replaces_top_level_curve_only() {
+        let s1 = json!({"ToneCurvePV2012": [0, 10, 255, 250]})
+            .as_object()
+            .unwrap()
+            .clone();
+        let once = update_sidecar(NESTED, &s1, "P").unwrap();
+        assert_eq!(
+            read_develop_settings(&once)["ToneCurvePV2012"],
+            json!([0.0, 10.0, 255.0, 250.0])
+        );
+        let s2 = json!({"ToneCurvePV2012": [0, 30, 255, 230]})
+            .as_object()
+            .unwrap()
+            .clone();
+        let twice = update_sidecar(&once, &s2, "P").unwrap();
+        assert_eq!(twice.matches("<rdf:li>0, 30</rdf:li>").count(), 1);
+        assert!(
+            !twice.contains("<rdf:li>0, 10</rdf:li>"),
+            "old curve replaced"
+        );
+        assert!(
+            twice.contains(r#"crs:ProcessVersion="11.0""#)
+                && twice.contains(r#"crs:Highlights2012="-40""#),
+            "nested look and mask untouched"
+        );
+        // self-closing description (as we write it) gets opened correctly
+        let flat = new_sidecar(
+            &json!({"Exposure2012": 0.1}).as_object().unwrap().clone(),
+            "P",
+        );
+        let opened = update_sidecar(&flat, &s1, "P").unwrap();
+        assert_eq!(
+            read_develop_settings(&opened)["ToneCurvePV2012"],
+            json!([0.0, 10.0, 255.0, 250.0])
+        );
+        assert_eq!(read_develop_settings(&opened)["Exposure2012"], json!(0.1));
     }
 
     #[test]

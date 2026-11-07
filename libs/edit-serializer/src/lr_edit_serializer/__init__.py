@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 
+from lr_edit_serializer.style import PHOTO_DEPENDENT, apply_style, is_style_key, style_settings
 from lr_edit_serializer.sliders import (
     FormatType,
     SliderSpec,
@@ -11,6 +12,10 @@ from lr_edit_serializer.sliders import (
 )
 
 __all__ = [
+    "PHOTO_DEPENDENT",
+    "apply_style",
+    "is_style_key",
+    "style_settings",
     "FormatType",
     "SliderSpec",
     "from_lightroom",
