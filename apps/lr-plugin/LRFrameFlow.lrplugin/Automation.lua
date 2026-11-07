@@ -3,53 +3,71 @@
 Off by default. When on, the plugin asks the Bridge every two seconds for a test command
 (GET /v1/automation/next), runs it with AutomationCommands and posts the result back.
 
-Reload safety: Lightroom keeps the global table across "Reload Plug-in" and loads the new
-plugin before unloading the old one, so a stop flag set on shutdown would also stop the new
-loop. Instead every start takes a new generation number; a loop runs only while its number
-is the current one, so the old loop ends by itself after a reload. ]]
+Lightroom specifics this file is built around (each one found in a real run):
+- Reading an undefined global raises an error in Lightroom, so globals are read with rawget.
+- The global table survives "Reload Plug-in" and the new plugin starts before the old one
+  is unloaded: every start takes a new generation number and a loop runs only while its
+  number is current, so an old loop ends by itself.
+- Catalog and HTTP calls yield; plain pcall cannot yield, LrTasks.pcall can. ]]
 
 local LrApplication = import "LrApplication"
+local LrDialogs = import "LrDialogs"
 local LrTasks = import "LrTasks"
 
-local AutomationCommands = require "AutomationCommands"
-local AutomationState = require "AutomationState"
-local BridgeClient = require "BridgeClient"
-local Log = require "Log"
+local GENERATION_KEY = "LRFF_AUTOMATION_GENERATION"
 
-_G.LRFF_AUTOMATION_GENERATION = (_G.LRFF_AUTOMATION_GENERATION or 0) + 1
-local generation = _G.LRFF_AUTOMATION_GENERATION
+local function readGlobal(name)
+  local ok, value = pcall(rawget, _G, name)
+  if ok then return value end
+  return nil
+end
+
+local generation = (readGlobal(GENERATION_KEY) or 0) + 1
+rawset(_G, GENERATION_KEY, generation)
 
 local function current()
-  return _G.LRFF_AUTOMATION_GENERATION == generation
+  return readGlobal(GENERATION_KEY) == generation
 end
 
 LrTasks.startAsyncTask(function()
-  local cfg = BridgeClient.loadConfig()
-  if not cfg or cfg.automation ~= true then return end
-  AutomationState.enabled = true
-  Log.info("automation channel on (generation %d)", generation)
-  local function step()
-    local command, err = BridgeClient.automationNext()
-    if not current() then return end -- a newer plugin took over while we were waiting
-    if command == BridgeClient.NO_CONTENT then
-      LrTasks.sleep(2)
-    elseif command then
-      Log.info("automation: %s #%s", tostring(command.command), tostring(command.id))
-      local ok, result = AutomationCommands.run(LrApplication.activeCatalog(), command)
-      local _, postErr = BridgeClient.automationResult(command.id, ok, result)
-      if postErr then Log.warn("automation: result not delivered: %s", postErr) end
-    else
-      Log.warn("automation: %s", tostring(err))
-      LrTasks.sleep(5)
+  local started, startErr = LrTasks.pcall(function()
+    local AutomationCommands = require "AutomationCommands"
+    local AutomationState = require "AutomationState"
+    local BridgeClient = require "BridgeClient"
+    local Log = require "Log"
+
+    local cfg = BridgeClient.loadConfig()
+    if not cfg or cfg.automation ~= true then return end
+    AutomationState.enabled = true
+    Log.info("automation channel on (generation %d)", generation)
+
+    local function step()
+      local command, err = BridgeClient.automationNext()
+      if not current() then return end -- a newer plugin took over while we were waiting
+      if command == BridgeClient.NO_CONTENT then
+        LrTasks.sleep(2)
+      elseif command then
+        Log.info("automation: %s #%s", tostring(command.command), tostring(command.id))
+        local ok, result = AutomationCommands.run(LrApplication.activeCatalog(), command)
+        local _, postErr = BridgeClient.automationResult(command.id, ok, result)
+        if postErr then Log.warn("automation: result not delivered: %s", postErr) end
+      else
+        Log.warn("automation: %s", tostring(err))
+        LrTasks.sleep(5)
+      end
     end
-  end
-  while current() do
-    -- One failing step must never end the channel (a yield error inside plain pcall once did).
-    local ok, err = LrTasks.pcall(step)
-    if not ok then
-      Log.warn("automation step failed: %s", tostring(err))
-      LrTasks.sleep(5)
+
+    while current() do
+      -- One failing step must never end the channel.
+      local ok, err = LrTasks.pcall(step)
+      if not ok then
+        Log.warn("automation step failed: %s", tostring(err))
+        LrTasks.sleep(5)
+      end
     end
+    Log.info("automation channel of generation %d ended", generation)
+  end)
+  if not started then
+    LrDialogs.message("LR-FrameFlow", "Automation channel failed to start: " .. tostring(startErr), "critical")
   end
-  Log.info("automation channel of generation %d ended", generation)
 end)

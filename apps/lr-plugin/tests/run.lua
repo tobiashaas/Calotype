@@ -63,6 +63,13 @@ end
 
 -- Like Lightroom's sandbox: no os.getenv. (Found in the first real Lightroom test.)
 os.getenv = nil
+sdk.LrDialogs = { message = function() end }
+
+-- Like Lightroom: reading an undefined global is an error (found when the automation
+-- channel silently failed to start). Writing new globals stays allowed.
+local function strictGlobals()
+  setmetatable(_G, { __index = function(_, name) error("undefined global " .. tostring(name), 2) end })
+end
 
 local Json = require "Json"
 local BridgeClient = require "BridgeClient"
@@ -416,6 +423,18 @@ test("automation: apply runs the same flow as the menu and writes the results", 
 end)
 
 -- ------------------------------------------------------------ syntax of UI scripts
+
+test("automation init runs under Lightroom's strict globals", function()
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t", automation = false })
+  local started
+  sdk.LrTasks.startAsyncTask = function(fn) started = true; fn() end
+  strictGlobals()
+  local ok, err = pcall(assert(loadfile(PLUGIN .. "Automation.lua")))
+  setmetatable(_G, nil)
+  eq(ok, true, "init: " .. tostring(err))
+  eq(started, true, "task started")
+  eq(rawget(_G, "LRFF_AUTOMATION_GENERATION") >= 1, true, "generation set")
+end)
 
 test("menu scripts compile", function()
   for _, file in ipairs({ "Info.lua", "TrainProfile.lua", "ApplyProfile.lua", "BridgeStatus.lua",
