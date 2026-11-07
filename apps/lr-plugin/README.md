@@ -32,7 +32,7 @@ Cancel in the progress bar only stops the waiting — the Bridge keeps working.
 | `JobWait.lua` | Register photos, wait for a job with progress/cancel |
 | `TrainProfile.lua`, `ApplyProfile.lua`, `BridgeStatus.lua` | Menu actions |
 | `Json.lua` | Small JSON encoder/decoder (Lightroom ships none) |
-| `Log.lua` | Log file `LRFrameFlow.log` in `Documents/LrClassicLogs` |
+| `Log.lua` | Log file `LRFrameFlow.log` in `%LOCALAPPDATA%\Adobe\Lightroom\Logs\LrClassicLogs` (Windows) |
 
 ## Testing without Lightroom
 

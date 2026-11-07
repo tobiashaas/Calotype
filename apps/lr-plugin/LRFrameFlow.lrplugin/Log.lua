@@ -1,5 +1,5 @@
 --[[ Plugin log: LRFrameFlow.log in Lightroom's log folder
-(Windows: Documents\LrClassicLogs, macOS: ~/Documents/LrClassicLogs). ]]
+(Windows: %LOCALAPPDATA%\Adobe\Lightroom\Logs\LrClassicLogs, macOS: ~/Library/Logs/Adobe/Lightroom/LrClassicLogs). ]]
 
 local LrLogger = import "LrLogger"
 
