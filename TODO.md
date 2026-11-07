@@ -110,7 +110,9 @@ See `docs/adr/005-culling-architecture.md`.
 - [x] Learned culling scorer: ROC-AUC 0.42 (hand weights) → 0.74 vs. another tool's cull
 - [x] Tried: DINOv2-small embeddings (PCA 16–64) on top of v2 → all-3 34 % → 37 %, temperature 166 → 150 K, exposure unchanged; not worth torch (~1 GB) + 170 ms/photo yet (`tools/lrff_eval/embed_lab.py`)
 - [x] Tried: retrieval (sliders of the most similar edited photos, RefRetouch/Adaptive-Color-Grading idea): alone 14–22 % vs. 34 % for v2, blending/stacking no gain on this (very consistent, tool-generated) benchmark → repeat on a real photographer's edits (`tools/lrff_eval/retrieval_lab.py`)
-- [ ] Model research 2026-11 (licenses checked at the source): keep YuNet + MediaPipe; DINOv3 has a custom Meta license (plug-in only); test Meta Perception Encoder (Apache-2.0) and SigLIP 2 (Apache-2.0) vs. DINOv2; avoid pyiqa (PolyForm Noncommercial) and its weights (CC BY-NC-SA)
+- [x] Model research 2026-11 (licenses checked at the source): keep YuNet + MediaPipe; DINOv3 has a custom Meta license (plug-in only); avoid pyiqa (PolyForm Noncommercial) and its weights (CC BY-NC-SA), Q-Align, QualiCLIP (non-commercial), LAION Aesthetic V2.5 (AGPL), MobileCLIP weights (research-only)
+- [x] Benchmarked embeddings (all Apache-2.0): DINOv2-S, Perception Encoder S16/B16, SigLIP 2 B16 → editing 33–37 % vs. 34 % without, culling AUC 0.72–0.73 vs. 0.74 without, +230–380 ms/photo on CPU → none integrated for now (`tools/lrff_eval/embed_compare.py`)
+- [ ] Zero-shot text prompts on SigLIP 2 / Perception Encoder ("blurry photo", "people hugging", "candid moment") as culling features — untested
 - [ ] Next model step for exposure: EXIF context (ISO, shutter, aperture → scene EV; folder mode must send EXIF) and consistency within a series/shoot (relative to neighbours)
 - [ ] Predict RAW white balance relative to as-shot (needs EXIF as-shot from the RAW)
 
