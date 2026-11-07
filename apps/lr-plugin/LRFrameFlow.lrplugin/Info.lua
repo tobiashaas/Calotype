@@ -16,6 +16,9 @@ return {
 
   -- Starts the (opt-in) automation channel for end-to-end tests, see Automation.lua.
   LrInitPlugin = "Automation.lua",
+  -- Without this Lightroom loads the plugin only on first use, so the automation
+  -- channel would not start with Lightroom.
+  LrForceInitPlugin = true,
 
   -- Library > Plug-in Extras
   LrLibraryMenuItems = {

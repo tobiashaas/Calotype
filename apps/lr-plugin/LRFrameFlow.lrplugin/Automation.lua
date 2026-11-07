@@ -4,8 +4,7 @@ Off by default. When on, the plugin asks the Bridge every two seconds for a test
 (GET /v1/automation/next), runs it with AutomationCommands and posts the result back.
 
 Lightroom specifics this file is built around (each one found in a real run):
-- Reading an undefined global raises an error, and the plugin environment has no _G:
-  this file uses no globals at all.
+- Reading an undefined global raises an error: this file uses no globals at all.
 - On "Reload Plug-in" the new plugin starts before the old one is unloaded: every start
   takes a new generation number (kept in the plugin prefs) and a loop runs only while its
   number is current, so an old loop ends by itself.
@@ -16,11 +15,18 @@ local LrDialogs = import "LrDialogs"
 local LrPrefs = import "LrPrefs"
 local LrTasks = import "LrTasks"
 
--- The generation lives in the plugin's prefs, not in a global: Lightroom's plugin
--- environment has no _G, and reading it aborted the start without any message.
+-- Loaded here, not inside the task: the only start that ever worked in Lightroom did so.
+local AutomationCommands = require "AutomationCommands"
+local AutomationState = require "AutomationState"
+local BridgeClient = require "BridgeClient"
+local Log = require "Log"
+
+-- The generation lives in the plugin's prefs, not in a global: Lightroom raises an
+-- error when an undefined global is read.
 local prefs = LrPrefs.prefsForPlugin()
 local generation = (tonumber(prefs.automationGeneration) or 0) + 1
 prefs.automationGeneration = generation
+Log.info("plugin init (automation generation %d)", generation)
 
 local function current()
   return prefs.automationGeneration == generation
@@ -28,11 +34,6 @@ end
 
 LrTasks.startAsyncTask(function()
   local started, startErr = LrTasks.pcall(function()
-    local AutomationCommands = require "AutomationCommands"
-    local AutomationState = require "AutomationState"
-    local BridgeClient = require "BridgeClient"
-    local Log = require "Log"
-
     local cfg, cfgErr = BridgeClient.loadConfig()
     if not cfg then
       Log.warn("automation: no bridge config (%s)", tostring(cfgErr))

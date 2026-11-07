@@ -23,6 +23,10 @@ pub const MIN_EDGE: u32 = 320;
 const MAX_CANDIDATES: usize = 64;
 const JPEG_QUALITY: u8 = 90;
 
+/// Start of the message of [`PreviewError::Read`]; the outbox uses it to tell an unreachable
+/// file from a server error.
+pub const READ_ERROR_PREFIX: &str = "cannot read ";
+
 #[derive(Debug, Error)]
 pub enum PreviewError {
     #[error("cannot read {path}: {source}")]

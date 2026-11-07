@@ -23,6 +23,8 @@ use crate::AppState;
 /// uploads wait on the network — both overlap).
 const PHOTO_BATCH: usize = 8;
 const JOB_BATCH: usize = 20;
+/// Read attempts (about a minute with the backoff) before a job goes on without a file.
+const UNREACHABLE_AFTER_ATTEMPTS: i64 = 5;
 /// Seconds between status polls of a queued/running server job.
 pub const POLL_SECS: i64 = 2;
 
@@ -120,6 +122,7 @@ enum PhotoReadiness {
 fn photo_readiness(state: &AppState, job: &JobRow) -> Result<PhotoReadiness> {
     let db = state.db();
     let mut ids = Vec::with_capacity(job.lr_catalog_uuids.len());
+    let mut skipped = Vec::new();
     let mut waiting = false;
     for uuid in &job.lr_catalog_uuids {
         match db.photo(uuid)? {
@@ -128,23 +131,41 @@ fn photo_readiness(state: &AppState, job: &JobRow) -> Result<PhotoReadiness> {
                     "photo {uuid} is not registered"
                 )))
             }
-            Some(p) if p.status == "failed" => {
-                let reason = p.last_error.unwrap_or_default();
-                return Ok(PhotoReadiness::Failed(format!(
-                    "photo {uuid} failed: {reason}"
-                )));
+            Some(p) if p.status == "uploaded" && p.remote_photo_id.is_some() => {
+                ids.extend(p.remote_photo_id)
             }
-            Some(p) => match p.remote_photo_id {
-                Some(id) if p.status == "uploaded" => ids.push(id),
-                _ => waiting = true,
-            },
+            // One broken or offline photo must not hold up the others (found when a single
+            // offline OneDrive file kept a five-photo edit job waiting forever).
+            Some(p) if p.status == "failed" || unreachable(&p) => {
+                let reason = p.last_error.unwrap_or_default();
+                skipped.push(format!("photo {uuid} skipped: {reason}"));
+            }
+            Some(_) => waiting = true,
         }
     }
-    Ok(if waiting {
-        PhotoReadiness::Waiting
-    } else {
-        PhotoReadiness::Ready(ids)
-    })
+    if waiting {
+        return Ok(PhotoReadiness::Waiting);
+    }
+    if ids.is_empty() {
+        return Ok(PhotoReadiness::Failed(format!(
+            "no usable photo ({})",
+            skipped.join("; ")
+        )));
+    }
+    for reason in &skipped {
+        tracing::warn!(job = %job.job_id, "{reason}");
+    }
+    Ok(PhotoReadiness::Ready(ids))
+}
+
+/// File still not readable after several tries: the job goes on without it. The photo
+/// itself keeps being retried, so a later job can use it once the drive is back.
+fn unreachable(photo: &crate::db::PhotoRow) -> bool {
+    photo.attempts >= UNREACHABLE_AFTER_ATTEMPTS
+        && photo
+            .last_error
+            .as_deref()
+            .is_some_and(|e| e.starts_with(crate::preview::READ_ERROR_PREFIX))
 }
 
 /// Bridge request → server request: same fields, catalog UUIDs swapped for photo ids.

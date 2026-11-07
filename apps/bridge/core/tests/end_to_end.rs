@@ -311,7 +311,8 @@ async fn unreachable_file_retries_but_broken_file_fails_job() {
         .unwrap()
         .unwrap();
     assert_eq!(job.status, "failed");
-    assert!(job.last_error.unwrap().contains("photo bad failed"));
+    let reason = job.last_error.unwrap();
+    assert!(reason.contains("no usable photo") && reason.contains("photo bad skipped"));
 }
 
 #[tokio::test]
@@ -393,4 +394,53 @@ async fn automation_is_off_by_default_and_round_trips_when_on() {
     );
     let (_, status) = call(&on, "GET", "/v1/automation/status", Some(TOKEN), None).await;
     assert_eq!(status["enabled"], json!(true));
+}
+
+#[tokio::test]
+async fn job_goes_on_without_offline_and_broken_photos() {
+    let dir = tempfile::tempdir().unwrap();
+    let fake: Fake = Arc::new(Mutex::new(FakeApi::default()));
+    let api = spawn_fake_api(fake.clone()).await;
+    let st = state(&api, dir.path());
+
+    let good = dir.path().join("good.jpg");
+    write_jpeg(&good, 2000, 1500);
+    let broken = dir.path().join("broken.nef");
+    std::fs::write(&broken, b"not a raw file").unwrap();
+    let offline = dir.path().join("offline-onedrive").join("a.raf");
+    for (uuid, path) in [("good", &good), ("bad", &broken), ("off", &offline)] {
+        call(
+            &st,
+            "POST",
+            "/v1/photos",
+            Some(TOKEN),
+            Some(photo_body(uuid, path)),
+        )
+        .await;
+    }
+    let edit = json!({"schema_version": "bridge-edit-v1",
+        "profile_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+        "lr_catalog_uuids": ["good", "bad", "off"]});
+    let (_, job) = call(&st, "POST", "/v1/jobs/edit", Some(TOKEN), Some(edit)).await;
+    let job_id = job["job_id"].as_str().unwrap().to_string();
+
+    // The offline file is retried a few times; meanwhile the job waits.
+    outbox::tick(&st).await;
+    assert_eq!(
+        st.db().job(&job_id).unwrap().unwrap().status,
+        "waiting_for_photos"
+    );
+    for _ in 0..5 {
+        st.db().retry_all_now().unwrap();
+        outbox::tick(&st).await;
+    }
+
+    // Then it runs with the one usable photo; the offline one stays pending.
+    let job = st.db().job(&job_id).unwrap().unwrap();
+    assert_eq!(job.status, "completed");
+    assert_eq!(
+        fake.lock().unwrap().jobs[0].1["photo_ids"],
+        json!(["remote-good"])
+    );
+    assert_eq!(st.db().photo("off").unwrap().unwrap().status, "pending");
 }

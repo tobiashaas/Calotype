@@ -114,7 +114,10 @@ def main() -> int:
 
     print("2. list_photos")
     listed = bridge.run("list_photos", {"limit": 5000, "format": "raw"})
-    originals = [p for p in listed["photos"] if not p.get("virtual_copy")]
+    # Files must be on disk: an offline file (OneDrive, unplugged drive) is skipped by the
+    # Bridge after a minute, which is tested in the Bridge's own tests, not here.
+    originals = [p for p in listed["photos"]
+                 if not p.get("virtual_copy") and p.get("path") and os.path.exists(p["path"])]
     pool = originals or listed["photos"]
     report.check(len(pool) >= a.photos, f"at least {a.photos} RAW photos", f"{len(pool)} found")
     step = max(1, len(pool) // max(1, a.photos))
