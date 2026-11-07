@@ -78,14 +78,14 @@ class FeatureVector(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
 
+    # One vector per photo and feature version (migration 009); length depends on the version.
     photo_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("photos.id", ondelete="CASCADE"),
         nullable=False,
-        unique=True,
     )
     model_version: Mapped[str] = mapped_column(String(64), nullable=False)
-    vector: Mapped[Any] = mapped_column(Vector(128), nullable=False)
+    vector: Mapped[Any] = mapped_column(Vector(), nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

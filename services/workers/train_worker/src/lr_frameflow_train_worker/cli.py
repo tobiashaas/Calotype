@@ -17,11 +17,11 @@ from lr_edit_serializer import from_lightroom
 from lr_frameflow_domain.jobs import JobStatus
 from lr_frameflow_domain.profiles import ProfileStatus
 from lr_frameflow_inference_pipeline import (
-    FEATURE_MODEL_VERSION,
+    CURRENT_FEATURE_VERSION,
     LR_PARAMS,
     MIN_SAMPLES,
-    extract_features,
-    train_model,
+    compute_features,
+    train_for_version,
 )
 from lr_frameflow_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
 from lr_frameflow_persistence.reaper import reap_stuck_jobs, start_reaper_thread
@@ -54,13 +54,15 @@ def _ensure_bucket(s3, bucket: str) -> None:
         s3.create_bucket(Bucket=bucket)
 
 
-def _ensure_feature_vector(session: Session, s3, bucket: str, photo) -> list[float] | None:
+def _ensure_feature_vector(
+    session: Session, s3, bucket: str, photo, version: str = CURRENT_FEATURE_VERSION
+) -> list[float] | None:
     """Return the photo's feature vector, extracting and storing it if missing.
 
     Returns None when the preview cannot be downloaded or decoded — a zero vector
     would teach the model nonsense.
     """
-    existing = FeatureVectorRepository.get_by_photo_id(session, photo.id)
+    existing = FeatureVectorRepository.get_by_photo_id(session, photo.id, version)
     if existing is not None:
         return list(existing.vector)
     try:
@@ -68,7 +70,10 @@ def _ensure_feature_vector(session: Session, s3, bucket: str, photo) -> list[flo
     except Exception as exc:
         log.warning("could not download preview photo_id=%s: %s", photo.id, exc)
         return None
-    vector = extract_features(image_bytes)
+    try:
+        vector = compute_features(image_bytes, version)
+    except ValueError:
+        vector = []
     if not any(vector):
         log.warning("preview not decodable photo_id=%s", photo.id)
         return None
@@ -77,7 +82,7 @@ def _ensure_feature_vector(session: Session, s3, bucket: str, photo) -> list[flo
         session,
         vector_id=fv_id,
         photo_id=photo.id,
-        model_version=FEATURE_MODEL_VERSION,
+        model_version=version,
         vector=vector,
     )
     PhotoRepository.set_feature_vector_id(session, photo.id, fv_id)
@@ -148,9 +153,10 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
             )
 
         # Train real model and save bytes to MinIO
-        model_bytes = train_model(feature_vectors, targets)
+        model_bytes = train_for_version(feature_vectors, targets, CURRENT_FEATURE_VERSION)
         profile_id = UUID(profile_id_str) if profile_id_str else None
-        artifact_key = f"models/{profile_id}/model-ridge-v1.joblib" if profile_id else f"models/job-{job_uuid}/model-ridge-v1.joblib"
+        artifact_name = f"model-{CURRENT_FEATURE_VERSION}.joblib"
+        artifact_key = f"models/{profile_id}/{artifact_name}" if profile_id else f"models/job-{job_uuid}/{artifact_name}"
         _ensure_bucket(s3, bucket)
         s3.put_object(Bucket=bucket, Key=artifact_key, Body=model_bytes, ContentType="application/octet-stream")
         log.info("model artifact saved key=%s n_samples=%d", artifact_key, len(feature_vectors))

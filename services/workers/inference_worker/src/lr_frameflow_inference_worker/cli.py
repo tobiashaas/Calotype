@@ -15,7 +15,7 @@ from sqlalchemy.orm import sessionmaker
 
 from lr_edit_serializer import apply_style, serialize_for_lightroom
 from lr_frameflow_domain.jobs import JobStatus
-from lr_frameflow_inference_pipeline import run_inference
+from lr_frameflow_inference_pipeline import artifact_feature_version, run_inference
 from lr_frameflow_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
 from lr_frameflow_persistence.reaper import reap_stuck_jobs, start_reaper_thread
 from lr_frameflow_persistence.repositories.edit_results import EditResultRepository
@@ -82,13 +82,16 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         s3 = _s3_client()
         bucket = os.environ.get("S3_BUCKET", "lrff-photos")
         model_bytes = s3.get_object(Bucket=bucket, Key=artifact_key)["Body"].read()
+        # The model was trained on one feature version; use exactly that one.
+        feature_version = artifact_feature_version(model_bytes)
 
         # Run inference for each photo; photos without features (no usable preview) get no result.
         for photo_id in photo_ids:
             with session_scope(factory) as session:
-                fv = FeatureVectorRepository.get_by_photo_id(session, photo_id)
+                fv = FeatureVectorRepository.get_by_photo_id(session, photo_id, feature_version)
                 if fv is None:
-                    log.warning("no feature vector, skipping photo_id=%s job_id=%s", photo_id, job_uuid)
+                    log.warning("no %s feature vector, skipping photo_id=%s job_id=%s",
+                                feature_version, photo_id, job_uuid)
                     continue
 
                 prediction = run_inference(model_bytes, list(fv.vector))

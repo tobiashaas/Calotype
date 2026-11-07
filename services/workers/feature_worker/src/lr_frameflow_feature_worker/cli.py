@@ -14,7 +14,7 @@ from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.orm import sessionmaker
 
 from lr_frameflow_domain.jobs import JobStatus
-from lr_frameflow_inference_pipeline import FEATURE_MODEL_VERSION, extract_features
+from lr_frameflow_inference_pipeline import SUPPORTED_FEATURE_VERSIONS, compute_features
 from lr_frameflow_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
 from lr_frameflow_persistence.reaper import reap_stuck_jobs, start_reaper_thread
 from lr_frameflow_persistence.repositories.feature_vectors import FeatureVectorRepository
@@ -70,9 +70,13 @@ def process_one(redis: Redis, publisher: RedisQueuePublisher, factory: sessionma
                     log.warning("photo not found, skipping photo_id=%s job_id=%s", photo_id, job_uuid)
                     continue
 
-                existing_fv = FeatureVectorRepository.get_by_photo_id(session, photo_id)
-                if existing_fv is not None:
-                    log.info("feature vector already exists, reusing photo_id=%s", photo_id)
+                # Every supported version: a profile trained on v1 needs v1, a new one v2.
+                missing = [
+                    v for v in SUPPORTED_FEATURE_VERSIONS
+                    if FeatureVectorRepository.get_by_photo_id(session, photo_id, v) is None
+                ]
+                if not missing:
+                    log.info("feature vectors already exist, reusing photo_id=%s", photo_id)
                     continue
 
                 # Download preview from MinIO. Without a usable preview no vector is stored:
@@ -84,19 +88,24 @@ def process_one(redis: Redis, publisher: RedisQueuePublisher, factory: sessionma
                     log.warning("could not download preview, skipping photo_id=%s: %s", photo_id, e)
                     continue
 
-                vector = extract_features(image_bytes)
-                if not any(vector):
-                    log.warning("preview not decodable, skipping photo_id=%s", photo_id)
-                    continue
-                fv_id = uuid4()
-                FeatureVectorRepository.create(
-                    session,
-                    vector_id=fv_id,
-                    photo_id=photo_id,
-                    model_version=FEATURE_MODEL_VERSION,
-                    vector=vector,
-                )
-                PhotoRepository.set_feature_vector_id(session, photo_id, fv_id)
+                for version in missing:
+                    try:
+                        vector = compute_features(image_bytes, version)
+                    except ValueError as e:
+                        log.warning("preview not usable for %s, skipping photo_id=%s: %s", version, photo_id, e)
+                        continue
+                    if not any(vector):
+                        log.warning("preview not decodable, skipping photo_id=%s", photo_id)
+                        continue
+                    fv_id = uuid4()
+                    FeatureVectorRepository.create(
+                        session,
+                        vector_id=fv_id,
+                        photo_id=photo_id,
+                        model_version=version,
+                        vector=vector,
+                    )
+                    PhotoRepository.set_feature_vector_id(session, photo_id, fv_id)
 
             log.info("features extracted photo_id=%s job_id=%s", photo_id, job_uuid)
 

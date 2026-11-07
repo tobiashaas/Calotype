@@ -75,10 +75,10 @@ TODO.md                # Completed + open work items — keep up to date
   - `queue` imports: domain, pydantic, redis
   - `persistence` imports: domain, sqlalchemy, psycopg
   - `observability` imports: stdlib only
-  - `inference-pipeline` imports: Pillow, numpy, scikit-learn, joblib — no DB/Redis
+  - `inference-pipeline` imports: Pillow, numpy, scikit-learn, joblib, opencv-python-headless (YuNet face box) — no DB/Redis; owns the model registry (`models.py`)
   - `services/api` imports: domain, persistence, queue — NOT workers, NOT torch
   - `edit-serializer` imports: stdlib only
-  - `culling` imports: numpy, Pillow, opencv-python-headless, mediapipe — no DB/Redis; models only via `models.py` (SHA-256, `THIRD_PARTY_MODELS.md`)
+  - `culling` imports: inference-pipeline (model registry), numpy, Pillow, opencv-python-headless, mediapipe, scikit-learn — no DB/Redis; models only via the registry (SHA-256, `THIRD_PARTY_MODELS.md`)
   - `services/workers/*` import: domain, persistence, queue, observability, inference-pipeline, edit-serializer
   - **Workers CANNOT import `lr_frameflow_api`**
   - **API CANNOT import worker modules**
@@ -166,12 +166,18 @@ On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
 
 ## ML Pipeline
 
-- **Feature vector:** 128 floats — R/G/B/Brightness histograms, 32 bins each, normalized
-- **Model:** `MultiOutputRegressor(Ridge(alpha=1.0))` with `StandardScaler`, serialized with joblib
+- **Feature versions** (one vector per photo *and* version, migration 009; `compute_features(bytes, version)`):
+  - `histogram-v1`: 128 floats — R/G/B/Brightness histograms, 32 bins each (old profiles)
+  - `histstats-face-v2` (**current**): v1 + 20 tone/color stats + 5 face values (YuNet largest face: brightness, color) = 153 floats
+- **Models** (artifact records `feature_version`; inference uses exactly that version, refuses wrong vector sizes):
+  - v1: `MultiOutputRegressor(Ridge)` + `StandardScaler` (`ridge_v1`)
+  - v2: `HistGradientBoostingRegressor` per slider (`gbr_v2`); < 30 photos → Ridge (`ridge_v2`)
+- **Benchmark** (1,837 edited Canon R6 photos from another tool, 367 held out, end-to-end through the pipeline): v1 → v2: exposure MAE 0.33 → 0.20 EV, temperature 258 → 163 K, all sliders within tolerance 14 % → 32 % (`tools/lrff_eval/holdout.py`, `model_lab.py`)
+- **Style layer:** profile `base_preset` adds the look (curve, HSL, grading …) on top of each prediction (`lr_edit_serializer.style`)
 - **10 LR params predicted:** `exposure, temp, tint, contrast, highlights, shadows, whites, blacks, vibrance, saturation`
 - **Minimum:** train worker refuses < 3 usable photos (Profile FAILED); `run_inference` raises on unreadable artifacts instead of returning zeros (zeros would reset the user's photos)
 - **Output names:** model works with internal names (`exposure`, `temp` …); `libs/edit-serializer` maps to/from LR (`Exposure2012`, `Temperature`/`IncrementalTemperature` …)
-- **Artifact path:** `models/{profile_id}/model-ridge-v1.joblib` in MinIO bucket
+- **Artifact path:** `models/{profile_id}/model-{feature_version}.joblib` in the S3 bucket
 
 ---
 

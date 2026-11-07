@@ -30,6 +30,18 @@ from lr_frameflow_inference_pipeline import extract_features  # noqa: E402
 TARGETS = ["Exposure2012", "Temperature", "Tint", "Contrast2012", "Highlights2012", "Shadows2012"]
 
 
+STATS_EDGE = 400  # statistics barely change below full size, but run ~10x faster
+
+
+def small(rgb: np.ndarray) -> tuple[np.ndarray, float]:
+    h, w = rgb.shape[:2]
+    scale = min(1.0, STATS_EDGE / max(h, w))
+    if scale == 1.0:
+        return rgb, 1.0
+    im = Image.fromarray(rgb).resize((round(w * scale), round(h * scale)), Image.BILINEAR)
+    return np.asarray(im), scale
+
+
 def tone_color_stats(rgb: np.ndarray) -> list[float]:
     f = rgb.astype(np.float32) / 255.0
     luma = 0.299 * f[..., 0] + 0.587 * f[..., 1] + 0.114 * f[..., 2]
@@ -41,11 +53,11 @@ def tone_color_stats(rgb: np.ndarray) -> list[float]:
             sat.mean(), np.percentile(sat, 90), (luma > 0.98).mean(), (luma < 0.02).mean()]
 
 
-def face_stats(rgb: np.ndarray, faces: list[dict]) -> list[float]:
+def face_stats(rgb: np.ndarray, faces: list[dict], scale: float = 1.0) -> list[float]:
     """Brightness and color of the largest face; NaN-free fallback (no face) = whole image."""
     f = rgb.astype(np.float32) / 255.0
     if faces:
-        x, y, w, h = max(faces, key=lambda d: d["rel_size"])["box"]
+        x, y, w, h = (round(v * scale) for v in max(faces, key=lambda d: d["rel_size"])["box"])
         crop = f[max(0, y): y + h, max(0, x): x + w]
         if crop.size:
             luma = 0.299 * crop[..., 0] + 0.587 * crop[..., 1] + 0.114 * crop[..., 2]
@@ -79,10 +91,10 @@ def main() -> int:
             if not preview.exists():
                 continue
             raw = preview.read_bytes()
-            rgb = np.asarray(Image.open(preview).convert("RGB"))
+            rgb, scale = small(np.asarray(Image.open(preview).convert("RGB")))
             hist = extract_features(raw)
             stats = tone_color_stats(rgb)
-            face = face_stats(rgb, faces_by_name.get(stem, []))
+            face = face_stats(rgb, faces_by_name.get(stem, []), scale)
             X["hist"].append(hist)
             X["hist+stats"].append(hist + stats)
             X["hist+stats+face"].append(hist + stats + face)
@@ -90,8 +102,18 @@ def main() -> int:
             Y.append([truth.get(k, 0.0) for k in TARGETS])
         return {k: np.array(v) for k, v in X.items()}, np.array(Y)
 
-    Xtr, Ytr = load("train.txt")
-    Xte, Yte = load("test.txt")
+    cache = a.work_dir / "model_lab_features.npz"
+    if cache.exists():
+        z = np.load(cache)
+        Xtr = {k[3:]: z[k] for k in z.files if k.startswith("tr_")}
+        Xte = {k[3:]: z[k] for k in z.files if k.startswith("te_")}
+        Ytr, Yte = z["Ytr"], z["Yte"]
+        print(f"loaded cached features from {cache}")
+    else:
+        Xtr, Ytr = load("train.txt")
+        Xte, Yte = load("test.txt")
+        np.savez(cache, Ytr=Ytr, Yte=Yte, **{f"tr_{k}": v for k, v in Xtr.items()},
+                 **{f"te_{k}": v for k, v in Xte.items()})
     print(f"train {len(Ytr)}, test {len(Yte)}, faces known for {len(faces_by_name)} photos\n")
 
     models = {

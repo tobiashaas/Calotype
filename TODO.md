@@ -99,6 +99,15 @@ See `docs/adr/005-culling-architecture.md`.
 - [ ] Scorer trained on the user's own decisions; explanations per photo; "uncertain" bucket
 - [ ] Labeling UI + `lrff-eval cull` (agreement, rescued technically-weak keepers)
 
+### Model v2 (done 2026-11-07)
+- [x] Benchmark on 1,837 real edited RAWs (another tool's output, internal measurement only): v1 Ridge 14 % all-sliders-within-tolerance
+- [x] Model lab (offline): boosting + tone/color stats + face brightness → 34 %
+- [x] Pipeline: versioned features (`histogram-v1`, `histstats-face-v2`), migration 009, `gbr_v2` artifacts with feature version, inference uses the artifact's version → end-to-end 32 %, exposure MAE 0.33 → 0.20 EV
+- [x] Style layer: `base_preset` look on top of predictions; `lrff-folder train --style preset.xmp`; XMP tone curves
+- [x] Learned culling scorer: ROC-AUC 0.42 (hand weights) → 0.74 vs. another tool's cull
+- [ ] Next model step: CNN embedding of the preview (e.g. DINOv2/EfficientNet, permissive license) as extra features; per-camera calibration
+- [ ] Predict RAW white balance relative to as-shot (needs EXIF as-shot from the RAW)
+
 ### Backlog / Nice-to-have
 - [ ] **Better model (biggest quality lever):** CNN on the image (e.g. pretrained ResNet/EfficientNet backbone, one head per slider group) instead of 128-dim histogram + Ridge; export to ONNX for optional local inference in the Bridge
 - [ ] Predict RAW white balance relative to as-shot instead of absolute Kelvin

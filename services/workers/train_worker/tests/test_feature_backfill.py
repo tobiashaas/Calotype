@@ -33,7 +33,7 @@ def repos(monkeypatch):
     stored: dict[uuid.UUID, list[float]] = {}
     linked: dict[uuid.UUID, uuid.UUID] = {}
 
-    def get_by_photo_id(session, photo_id):
+    def get_by_photo_id(session, photo_id, model_version=None):
         vec = stored.get(photo_id)
         return SimpleNamespace(vector=vec) if vec is not None else None
 
@@ -54,7 +54,7 @@ def test_missing_vector_is_extracted_and_stored(repos):
     stored, linked = repos
     photo = SimpleNamespace(id=uuid.uuid4(), s3_key="photos/a.jpg")
     vec = cli._ensure_feature_vector(None, FakeS3({"photos/a.jpg": _jpeg()}), "b", photo)
-    assert vec is not None and len(vec) == 128 and any(vec)
+    assert vec is not None and len(vec) == 153 and any(vec)  # feature version 2
     assert stored[photo.id] == vec
     assert photo.id in linked
 
@@ -62,8 +62,8 @@ def test_missing_vector_is_extracted_and_stored(repos):
 def test_existing_vector_is_reused(repos):
     stored, _ = repos
     photo = SimpleNamespace(id=uuid.uuid4(), s3_key="photos/missing.jpg")
-    stored[photo.id] = [0.5] * 128
-    assert cli._ensure_feature_vector(None, FakeS3({}), "b", photo) == [0.5] * 128
+    stored[photo.id] = [0.5] * 153
+    assert cli._ensure_feature_vector(None, FakeS3({}), "b", photo) == [0.5] * 153
 
 
 @pytest.mark.parametrize("objects", [{}, {"photos/a.jpg": b"not a jpeg"}])
