@@ -1,7 +1,7 @@
 """Train a profile in a real Lightroom and score it on held-out photos of the same catalog.
 
     python tools/lr_e2e/train_eval.py --folder 100EOSR6 --name "LR R6" [--holdout 0.2]
-           [--exclude uuids.json] [--max-train N] [--max-eval N] [--out DIR]
+           [--exclude uuids.json] [--max-train N] [--max-eval N] [--out DIR] [--skip-train]
 
 Everything goes through the plugin's automation channel, i.e. the same code as the menu items:
 training targets come from photo:getDevelopSettings(), predictions are written with
@@ -72,6 +72,7 @@ def main() -> int:
     ap.add_argument("--max-eval", type=int, default=0)
     ap.add_argument("--batch", type=int, default=100)
     ap.add_argument("--out", default="lr_e2e_out")
+    ap.add_argument("--skip-train", action="store_true", help="profile --name exists already: only score it")
     a = ap.parse_args()
 
     bridge = Bridge(bridge_config())
@@ -92,12 +93,13 @@ def main() -> int:
         test = test[: a.max_eval]
     print(f"{len(pool)} edited photos in '{a.folder}': train {len(train)}, held out {len(test)}", flush=True)
 
-    t0 = time.time()
-    trained = bridge.run("train", {"uuids": train, "name": a.name, "genre": a.genre}, timeout=4 * 3600)
-    print(f"train: {trained.get('title')} — {time.time() - t0:.0f} s", flush=True)
-    if not trained.get("ok"):
-        print(trained.get("text"))
-        return 1
+    if not a.skip_train:
+        t0 = time.time()
+        trained = bridge.run("train", {"uuids": train, "name": a.name, "genre": a.genre}, timeout=4 * 3600)
+        print(f"train: {trained.get('title')} — {time.time() - t0:.0f} s", flush=True)
+        if not trained.get("ok"):
+            print(trained.get("text"))
+            return 1
 
     preds, truth = {}, {}
     for i in range(0, len(test), a.batch):
