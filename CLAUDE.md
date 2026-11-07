@@ -173,6 +173,7 @@ On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
   - v1: `MultiOutputRegressor(Ridge)` + `StandardScaler` (`ridge_v1`)
   - v2: `HistGradientBoostingRegressor` per slider (`gbr_v2`); < 30 photos → Ridge (`ridge_v2`)
 - **Benchmark** (1,837 edited Canon R6 photos from another tool, 367 held out, end-to-end through the pipeline): v1 → v2: exposure MAE 0.33 → 0.20 EV, temperature 258 → 163 K, all sliders within tolerance 14 % → 32 % (`tools/lrff_eval/holdout.py`, `model_lab.py`)
+- **More internal yardsticks** (2026-11-07, other tools' edits, never shipped): through real Lightroom (`tools/lr_e2e/train_eval.py`) R6 33 % all-within (exposure 54 %, temperature 58 %); wedding (Aftershoot look, 620/155) 54 %; kindergarten portraits vs. Neurapix (495/123, edits exported from the catalog, `lrff-folder train --sidecars`) 49 %, exposure 88 %
 - **Style layer:** profile `base_preset` adds the look (curve, HSL, grading …) on top of each prediction (`lr_edit_serializer.style`)
 - **10 LR params predicted:** `exposure, temp, tint, contrast, highlights, shadows, whites, blacks, vibrance, saturation`
 - **Minimum:** train worker refuses < 3 usable photos (Profile FAILED); `run_inference` raises on unreadable artifacts instead of returning zeros (zeros would reset the user's photos)
