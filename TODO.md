@@ -78,8 +78,8 @@ Open:
 - [x] LR Plugin: poll job status (progress + cancel) and apply `lr_settings` in one catalog transaction
 - [x] LR Plugin tests with faked SDK modules (`luajit apps/lr-plugin/tests/run.lua`, CI job `lr-plugin`)
 - [x] First real Lightroom run (2026-11-07): plugin loads, Bridge status ok, apply on 45 R6 photos ok; fixed os.getenv missing in the sandbox
-- [ ] Rest of the Lightroom smoke test: train from Lightroom, `getDevelopSettings()` keys for JPEG/TIFF (`IncrementalTemperature`?), `applyDevelopSettings` with `WhiteBalance = "Custom"`, `appData` path
-- [ ] End-to-end smoke test: LR → Plugin → Bridge → API → Workers → back to LR
+- [ ] Rest of the Lightroom smoke test: train from Lightroom (`run.py --train N`), `getDevelopSettings()` keys for JPEG/TIFF (`IncrementalTemperature`?)
+- [x] End-to-end smoke test: LR → Plugin → Bridge → API → Workers → back to LR — automated (`tools/lr_e2e/run.py`): apply on 5 RAW, sliders = prediction, `WhiteBalance` Custom, restore; all passed 2026-11-07
 
 ### Phase 5b — Folder mode & first measurement (done 2026-11-06)
 - [x] `xmp.rs`: read `crs:` settings as training targets; write new sidecars / update existing ones (keeps ratings, keywords)

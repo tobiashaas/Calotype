@@ -23,7 +23,7 @@ LRFrameFlow is an AI-powered Lightroom Classic photo editing system. It uses an 
 | Phase 2 — Real Data Flow | ✅ Done | Workers download/upload MinIO, feature extraction, model artifact lifecycle |
 | Phase 3 — Real ML Pipeline | ✅ Done | Pillow histogram features (128-dim), Ridge regression, joblib serialization |
 | Phase 4 — Production Hardening | ✅ Done | Redis AOF, stuck-job reaper, at-least-once, heartbeat, CI lint+tests, contracts, JSON logs, rate limiting |
-| Phase 5 — Bridge & Plugin | 🟡 In progress | Bridge, LR plugin, folder mode (RAW+XMP) done; full stack verified end-to-end on 60 real CR3 (synthetic-rule test 93 % within tolerance); real-Lightroom smoke test open |
+| Phase 5 — Bridge & Plugin | 🟡 In progress | Bridge, LR plugin, folder mode (RAW+XMP) done; full stack verified end-to-end on 60 real CR3 (synthetic-rule test 93 % within tolerance); automated end-to-end test in real Lightroom passes (`tools/lr_e2e/run.py`, opt-in automation channel) |
 | Phase 6 — Culling | 🟡 Started | Labels (rating/flag/label) flow plugin→bridge→API; `libs/culling` prototype (YuNet + MediaPipe blendshapes, series, explainable baseline) at ~130 ms/photo; learned scorer open — see ADR 005 |
 
 See `TODO.md` for the detailed task breakdown.
