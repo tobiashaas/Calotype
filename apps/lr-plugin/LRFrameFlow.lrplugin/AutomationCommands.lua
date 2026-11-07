@@ -6,12 +6,17 @@ command's args and returns a JSON-serializable table. Call only from an async ta
 
 local LrApplication = import "LrApplication"
 local LrProgressScope = import "LrProgressScope"
+local LrTasks = import "LrTasks"
 
 local Actions = require "Actions"
 local Json = require "Json"
 local PhotoData = require "PhotoData"
 
 local Commands = {}
+
+-- Catalog calls yield, and Lua 5.1's pcall cannot yield ("Yielding is not allowed within a C
+-- or metamethod call", found in the first automated run). LrTasks.pcall can.
+local pcall = LrTasks.pcall or pcall
 
 local PLUGIN_VERSION = "0.2.0"
 local LIST_KEYS = { "uuid", "path", "fileFormat", "rating", "pickStatus", "isVirtualCopy" }

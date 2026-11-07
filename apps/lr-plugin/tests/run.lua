@@ -40,7 +40,7 @@ local sdk = {
       warn = function(_, msg) fake.logs[#fake.logs + 1] = msg end,
     }
   end,
-  LrTasks = { sleep = function() end },
+  LrTasks = { sleep = function() end, pcall = pcall },
   LrApplication = { versionString = function() return "15.0 (test)" end },
   LrProgressScope = function()
     return { setCaption = function() end, setPortionComplete = function() end,
