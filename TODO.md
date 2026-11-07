@@ -109,6 +109,8 @@ See `docs/adr/005-culling-architecture.md`.
 - [x] Style layer: `base_preset` look on top of predictions; `lrff-folder train --style preset.xmp`; XMP tone curves
 - [x] Learned culling scorer: ROC-AUC 0.42 (hand weights) → 0.74 vs. another tool's cull
 - [x] Tried: DINOv2-small embeddings (PCA 16–64) on top of v2 → all-3 34 % → 37 %, temperature 166 → 150 K, exposure unchanged; not worth torch (~1 GB) + 170 ms/photo yet (`tools/lrff_eval/embed_lab.py`)
+- [x] Tried: retrieval (sliders of the most similar edited photos, RefRetouch/Adaptive-Color-Grading idea): alone 14–22 % vs. 34 % for v2, blending/stacking no gain on this (very consistent, tool-generated) benchmark → repeat on a real photographer's edits (`tools/lrff_eval/retrieval_lab.py`)
+- [ ] Model research 2026-11 (licenses checked at the source): keep YuNet + MediaPipe; DINOv3 has a custom Meta license (plug-in only); test Meta Perception Encoder (Apache-2.0) and SigLIP 2 (Apache-2.0) vs. DINOv2; avoid pyiqa (PolyForm Noncommercial) and its weights (CC BY-NC-SA)
 - [ ] Next model step for exposure: EXIF context (ISO, shutter, aperture → scene EV; folder mode must send EXIF) and consistency within a series/shoot (relative to neighbours)
 - [ ] Predict RAW white balance relative to as-shot (needs EXIF as-shot from the RAW)
 
