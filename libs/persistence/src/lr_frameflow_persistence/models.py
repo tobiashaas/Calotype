@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -92,6 +92,8 @@ class FeatureVector(Base):
 
 class EditResult(Base):
     __tablename__ = "edit_results"
+    # Migration 010: one result per photo and job, so a re-run replaces instead of adding.
+    __table_args__ = (UniqueConstraint("job_id", "photo_id", name="uq_edit_results_job_photo"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
 
@@ -143,6 +145,8 @@ class Job(Base):
         nullable=True,
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Added in migration 010: workers touch it per photo, so a long job is not taken for stuck.
+    last_progress_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

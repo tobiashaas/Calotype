@@ -6,7 +6,7 @@ from typing import Any
 
 from lr_frameflow_domain import JobKind, JobStatus
 from lr_frameflow_persistence.models import Job
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 
@@ -60,18 +60,35 @@ class JobRepository:
         job.sync_status_enum(status)
         job.failure_reason = failure_reason
         if status == JobStatus.RUNNING:
-            job.started_at = datetime.now(timezone.utc)
+            job.started_at = job.last_progress_at = datetime.now(timezone.utc)
         session.flush()
         return job
 
     @staticmethod
-    def find_stuck(session: Session, older_than: datetime) -> list[Job]:
-        """Return jobs that are RUNNING and have been so since before `older_than`."""
+    def find_stuck(
+        session: Session, older_than: datetime, kinds: list[str] | None = None
+    ) -> list[Job]:
+        """RUNNING jobs without progress since before `older_than` (optionally of some kinds).
+
+        Progress = the last `touch` (once per photo), else the start. A long job that still
+        works is not stuck (found when 100-photo edit jobs behind a busy queue were re-run
+        three times and returned every result three times).
+        """
         stmt = select(Job).where(
             Job.status == JobStatus.RUNNING.value,
-            Job.started_at <= older_than,
+            func.coalesce(Job.last_progress_at, Job.started_at) <= older_than,
         )
+        if kinds is not None:
+            stmt = stmt.where(Job.kind.in_(kinds))
         return list(session.execute(stmt).scalars().all())
+
+    @staticmethod
+    def touch(session: Session, job_id: uuid.UUID) -> None:
+        """Record progress of a running job (call once per processed photo)."""
+        job = session.get(Job, job_id)
+        if job is not None:
+            job.last_progress_at = datetime.now(timezone.utc)
+            session.flush()
 
     @staticmethod
     def reset_to_queued(session: Session, job_id: uuid.UUID) -> Job | None:

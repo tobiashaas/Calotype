@@ -17,7 +17,6 @@ from lr_edit_serializer import apply_style, serialize_for_lightroom
 from lr_frameflow_domain.jobs import JobStatus
 from lr_frameflow_inference_pipeline import artifact_feature_version, run_inference
 from lr_frameflow_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
-from lr_frameflow_persistence.reaper import reap_stuck_jobs, start_reaper_thread
 from lr_frameflow_persistence.repositories.edit_results import EditResultRepository
 from lr_frameflow_persistence.repositories.feature_vectors import FeatureVectorRepository
 from lr_frameflow_persistence.repositories.jobs import JobRepository
@@ -25,7 +24,7 @@ from lr_frameflow_persistence.repositories.profiles import ProfileRepository
 from lr_frameflow_persistence.session import get_session_factory, session_scope
 from lr_frameflow_queue import consumer
 from lr_frameflow_queue.constants import QUEUE_INFERENCE
-from lr_frameflow_queue.publisher import RedisQueuePublisher, redis_from_env
+from lr_frameflow_queue.publisher import redis_from_env
 
 log = get_logger("lr_ff.inference_worker")
 
@@ -88,6 +87,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         # Run inference for each photo; photos without features (no usable preview) get no result.
         for photo_id in photo_ids:
             with session_scope(factory) as session:
+                JobRepository.touch(session, job_uuid)
                 fv = FeatureVectorRepository.get_by_photo_id(session, photo_id, feature_version)
                 if fv is None:
                     log.warning("no %s feature vector, skipping photo_id=%s job_id=%s",
@@ -97,7 +97,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
                 prediction = run_inference(model_bytes, list(fv.vector))
                 lr_settings = apply_style(serialize_for_lightroom(prediction, format_type), base_preset)
 
-                EditResultRepository.create(
+                EditResultRepository.upsert(
                     session,
                     result_id=uuid4(),
                     job_id=job_uuid,
@@ -127,16 +127,12 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
 def main() -> None:
     log.info("LR-FrameFlow inference worker — queue %s", QUEUE_INFERENCE)
     redis = redis_from_env()
-    publisher = RedisQueuePublisher(redis)
     factory = get_session_factory()
 
     configure_logging()
     start_heartbeat_thread("/tmp/lr_ff_inference_worker.heartbeat")
 
-    n = reap_stuck_jobs(factory, queue_name=QUEUE_INFERENCE, publisher=publisher)
-    if n:
-        log.warning("reaper: recovered %d stuck jobs at startup", n)
-    start_reaper_thread(factory, queue_name=QUEUE_INFERENCE, publisher=publisher, logger=log)
+    # No reaper here: a stuck edit job restarts from the feature queue (feature worker owns it).
 
     while True:
         try:

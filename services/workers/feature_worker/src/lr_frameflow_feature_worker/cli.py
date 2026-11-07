@@ -65,6 +65,7 @@ def process_one(redis: Redis, publisher: RedisQueuePublisher, factory: sessionma
 
         for photo_id in photo_ids:
             with session_scope(factory) as session:
+                JobRepository.touch(session, job_uuid)
                 photo = PhotoRepository.get_by_id(session, photo_id)
                 if photo is None:
                     log.warning("photo not found, skipping photo_id=%s job_id=%s", photo_id, job_uuid)
@@ -134,10 +135,10 @@ def main() -> None:
     start_heartbeat_thread("/tmp/lr_ff_feature_worker.heartbeat")
 
     # Recover any jobs stuck in RUNNING at startup, then run periodically.
-    n = reap_stuck_jobs(factory, queue_name=QUEUE_FEATURE, publisher=publisher)
+    n = reap_stuck_jobs(factory, queue_name=QUEUE_FEATURE, publisher=publisher, kinds=["edit"])
     if n:
         log.warning("reaper: recovered %d stuck jobs at startup", n)
-    start_reaper_thread(factory, queue_name=QUEUE_FEATURE, publisher=publisher, logger=log)
+    start_reaper_thread(factory, queue_name=QUEUE_FEATURE, publisher=publisher, kinds=["edit"], logger=log)
 
     while True:
         try:

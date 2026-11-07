@@ -3,7 +3,7 @@
 Usage (call once at worker startup, then periodically in a background thread):
 
     from lr_frameflow_persistence.reaper import reap_stuck_jobs
-    reap_stuck_jobs(factory, queue_name=QUEUE_FEATURE, publisher=publisher)
+    reap_stuck_jobs(factory, queue_name=QUEUE_FEATURE, publisher=publisher, kinds=["edit"])
 """
 
 from __future__ import annotations
@@ -30,9 +30,14 @@ def reap_stuck_jobs(
     *,
     queue_name: str,
     publisher: RedisQueuePublisher,
+    kinds: list[str],
     timeout_minutes: int = STUCK_TIMEOUT_MINUTES,
 ) -> int:
-    """Reset stuck jobs and re-enqueue their envelopes.
+    """Reset stuck jobs of `kinds` and re-enqueue them onto `queue_name`.
+
+    Each kind needs exactly one owner: the queue where its pipeline starts (edit → feature,
+    train → train). Without the filter every worker re-enqueued every stuck job onto its own
+    queue, e.g. an edit job onto the train queue.
 
     Returns the number of jobs recovered.
     """
@@ -42,7 +47,7 @@ def reap_stuck_jobs(
 
     recovered = 0
     with session_scope(factory) as session:
-        stuck = JobRepository.find_stuck(session, older_than=cutoff)
+        stuck = JobRepository.find_stuck(session, older_than=cutoff, kinds=kinds)
         for job in stuck:
             JobRepository.reset_to_queued(session, job.id)
             # Re-enqueue onto the exact queue this worker owns so it picks it up again.
@@ -63,6 +68,7 @@ def start_reaper_thread(
     *,
     queue_name: str,
     publisher: RedisQueuePublisher,
+    kinds: list[str],
     interval_seconds: int = 60,
     timeout_minutes: int = STUCK_TIMEOUT_MINUTES,
     logger=None,
@@ -80,6 +86,7 @@ def start_reaper_thread(
                     factory,
                     queue_name=queue_name,
                     publisher=publisher,
+                    kinds=kinds,
                     timeout_minutes=timeout_minutes,
                 )
                 if n and logger:

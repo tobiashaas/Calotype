@@ -98,7 +98,7 @@ jobs:
           pip install -e libs/inference-pipeline -e libs/edit-serializer
           pip install -e services/workers/train_worker pytest
       - name: Test
-        run: python -m pytest services/workers/train_worker/tests/ -v
+        run: python -m pytest services/workers/train_worker/tests/ libs/persistence/tests/ -v
 
   bridge-core:
     name: Bridge core (Rust)

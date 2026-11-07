@@ -129,6 +129,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         skipped: list[str] = []
         for photo_id in photo_ids:
             with session_scope(factory) as session:
+                JobRepository.touch(session, job_uuid)
                 photo = PhotoRepository.get_by_id(session, photo_id)
                 if photo is None:
                     skipped.append(f"{photo_id}: not found")
@@ -193,10 +194,10 @@ def main() -> None:
     configure_logging()
     start_heartbeat_thread("/tmp/lr_ff_train_worker.heartbeat")
 
-    n = reap_stuck_jobs(factory, queue_name=QUEUE_TRAIN, publisher=publisher)
+    n = reap_stuck_jobs(factory, queue_name=QUEUE_TRAIN, publisher=publisher, kinds=["train"])
     if n:
         log.warning("reaper: recovered %d stuck jobs at startup", n)
-    start_reaper_thread(factory, queue_name=QUEUE_TRAIN, publisher=publisher, logger=log)
+    start_reaper_thread(factory, queue_name=QUEUE_TRAIN, publisher=publisher, kinds=["train"], logger=log)
 
     while True:
         try:
