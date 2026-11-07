@@ -8,9 +8,9 @@ local PhotoData = require "PhotoData"
 local JobWait = {}
 
 local STATUS_TEXT = {
-  waiting_for_photos = "Preparing and uploading photos",
-  queued = "Waiting for the server",
-  running = "Working on the server",
+  waiting_for_photos = LOC "$$$/LRFrameFlow/Job/Uploading=Preparing and uploading photos",
+  queued = LOC "$$$/LRFrameFlow/Job/Queued=Waiting for the server",
+  running = LOC "$$$/LRFrameFlow/Job/Running=Working on the server",
 }
 
 local POLL_SECONDS = 2
@@ -21,7 +21,7 @@ function JobWait.registerPhotos(photos, progress)
   local result = { uuids = {}, photosByUuid = {}, formats = {}, skipped = {} }
   for i, photo in ipairs(photos) do
     if progress:isCanceled() then return nil, "canceled" end
-    progress:setCaption(string.format("Handing photo %d of %d to the Bridge", i, #photos))
+    progress:setCaption(LOC("$$$/LRFrameFlow/Job/Handing=Handing photo ^1 of ^2 to the Bridge", i, #photos))
     progress:setPortionComplete(i - 1, #photos)
     local body, formatType = PhotoData.collect(photo)
     if not body then
@@ -50,11 +50,11 @@ function JobWait.waitForJob(jobId, progress, label)
     if job then
       failures = 0
       if job.status == "completed" or job.status == "failed" then return job end
-      progress:setCaption(string.format("%s: %s ...", label, STATUS_TEXT[job.status] or job.status))
+      progress:setCaption(LOC("$$$/LRFrameFlow/Job/Status=^1: ^2 ...", label, STATUS_TEXT[job.status] or job.status))
     else
       failures = failures + 1
       if failures >= MAX_BRIDGE_FAILURES then return nil, err end
-      progress:setCaption(label .. ": waiting for the Bridge ...")
+      progress:setCaption(LOC("$$$/LRFrameFlow/Job/WaitingBridge=^1: waiting for the Bridge ...", label))
     end
     LrTasks.sleep(POLL_SECONDS)
   end

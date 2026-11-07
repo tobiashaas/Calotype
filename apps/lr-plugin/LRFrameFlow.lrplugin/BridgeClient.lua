@@ -13,9 +13,12 @@ local Log = require "Log"
 
 local BridgeClient = {}
 
+--- Returned instead of a body for "204 No Content" (e.g. no automation command waiting).
+BridgeClient.NO_CONTENT = setmetatable({}, { __tostring = function() return "no content" end })
+
 local CONFIG_DIR = "LRFrameFlow"
 local CONFIG_FILE = "bridge.json"
-local NOT_RUNNING = "The LR-FrameFlow Bridge is not running. Start the Bridge app and try again."
+local NOT_RUNNING = LOC "$$$/LRFrameFlow/Bridge/NotRunning=The LR-FrameFlow Bridge is not running. Start the Bridge app and try again."
 
 -- Lightroom's Lua sandbox has no os.getenv (and may lack `os` entirely): never call it blindly.
 local function env(name)
@@ -55,10 +58,10 @@ function BridgeClient.loadConfig()
       if ok and type(cfg) == "table" and cfg.port and cfg.token then
         return cfg, nil, path
       end
-      return nil, "The Bridge settings file is damaged: " .. path
+      return nil, LOC("$$$/LRFrameFlow/Bridge/ConfigDamaged=The Bridge settings file is damaged: ^1", path)
     end
   end
-  return nil, "No Bridge settings found. Start the LR-FrameFlow Bridge app once, then try again."
+  return nil, LOC "$$$/LRFrameFlow/Bridge/NoConfig=No Bridge settings found. Start the LR-FrameFlow Bridge app once, then try again."
 end
 
 local function request(method, path, body)
@@ -83,17 +86,18 @@ local function request(method, path, body)
     return nil, NOT_RUNNING
   end
 
+  if status == 204 then return BridgeClient.NO_CONTENT end
   local ok, data = pcall(Json.decode, raw)
   if status >= 200 and status < 300 then
-    if not ok then return nil, "The Bridge sent an unreadable answer." end
+    if not ok then return nil, LOC "$$$/LRFrameFlow/Bridge/Unreadable=The Bridge sent an unreadable answer." end
     return data
   end
   local message = ok and type(data) == "table" and data.error or raw
   Log.warn("bridge %s %s -> %s: %s", method, path, tostring(status), tostring(message))
   if status == 401 then
-    return nil, "The Bridge rejected the plugin (token mismatch). Restart Lightroom and the Bridge."
+    return nil, LOC "$$$/LRFrameFlow/Bridge/TokenMismatch=The Bridge rejected the plugin (token mismatch). Restart Lightroom and the Bridge."
   end
-  return nil, string.format("Bridge error %s: %s", tostring(status), tostring(message))
+  return nil, LOC("$$$/LRFrameFlow/Bridge/Error=Bridge error ^1: ^2", tostring(status), tostring(message))
 end
 
 function BridgeClient.health()
@@ -122,6 +126,14 @@ end
 
 function BridgeClient.profiles()
   return request("GET", "/v1/profiles")
+end
+
+function BridgeClient.automationNext()
+  return request("GET", "/v1/automation/next")
+end
+
+function BridgeClient.automationResult(id, ok, result)
+  return request("POST", "/v1/automation/commands/" .. tostring(id) .. "/result", { ok = ok, result = result })
 end
 
 return BridgeClient

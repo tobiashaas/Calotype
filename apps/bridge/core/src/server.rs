@@ -30,6 +30,14 @@ pub fn router(state: Shared) -> Router {
         .route("/v1/jobs/edit", post(queue_edit))
         .route("/v1/jobs/{job_id}", get(job_state))
         .route("/v1/profiles", get(profiles))
+        .route("/v1/automation/status", get(automation_status))
+        .route("/v1/automation/commands", post(automation_enqueue))
+        .route("/v1/automation/commands/{id}", get(automation_get))
+        .route(
+            "/v1/automation/commands/{id}/result",
+            post(automation_result),
+        )
+        .route("/v1/automation/next", get(automation_next))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_token));
     Router::new()
         .route("/health", get(health))
@@ -273,6 +281,92 @@ async fn profiles(State(state): State<Shared>) -> Response {
     match state.api.list_profiles().await {
         Ok(v) => Json(v).into_response(),
         Err(e) => error(StatusCode::BAD_GATEWAY, format!("server API: {e}")),
+    }
+}
+
+// ---- automation (opt-in end-to-end test channel, see automation.rs) -------------
+
+fn automation_off() -> Response {
+    error(
+        StatusCode::NOT_FOUND,
+        "automation is off (set \"automation\": true in bridge.json)",
+    )
+}
+
+async fn automation_status(State(state): State<Shared>) -> Response {
+    let enabled = state.config().automation;
+    Json(json!({
+        "enabled": enabled,
+        "plugin_idle_secs": state.automation.plugin_idle_secs(),
+        "commands": crate::automation::COMMANDS,
+    }))
+    .into_response()
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EnqueueReq {
+    command: String,
+    #[serde(default)]
+    args: Value,
+}
+
+async fn automation_enqueue(State(state): State<Shared>, Json(body): Json<Value>) -> Response {
+    if !state.config().automation {
+        return automation_off();
+    }
+    let req: EnqueueReq = match parse(body) {
+        Ok(r) => r,
+        Err(resp) => return resp,
+    };
+    match state.automation.enqueue(&req.command, req.args) {
+        Ok(cmd) => (StatusCode::ACCEPTED, Json(cmd)).into_response(),
+        Err(msg) => error(StatusCode::UNPROCESSABLE_ENTITY, msg),
+    }
+}
+
+async fn automation_next(State(state): State<Shared>) -> Response {
+    if !state.config().automation {
+        return automation_off();
+    }
+    match state.automation.next() {
+        Some(cmd) => Json(cmd).into_response(),
+        None => StatusCode::NO_CONTENT.into_response(),
+    }
+}
+
+async fn automation_get(State(state): State<Shared>, Path(id): Path<u64>) -> Response {
+    if !state.config().automation {
+        return automation_off();
+    }
+    match state.automation.get(id) {
+        Some(cmd) => Json(cmd).into_response(),
+        None => error(StatusCode::NOT_FOUND, "unknown command"),
+    }
+}
+
+#[derive(Deserialize)]
+struct ResultReq {
+    ok: bool,
+    #[serde(default)]
+    result: Value,
+}
+
+async fn automation_result(
+    State(state): State<Shared>,
+    Path(id): Path<u64>,
+    Json(body): Json<Value>,
+) -> Response {
+    if !state.config().automation {
+        return automation_off();
+    }
+    let req: ResultReq = match parse(body) {
+        Ok(r) => r,
+        Err(resp) => return resp,
+    };
+    match state.automation.finish(id, req.ok, req.result) {
+        Some(cmd) => Json(cmd).into_response(),
+        None => error(StatusCode::NOT_FOUND, "unknown command"),
     }
 }
 

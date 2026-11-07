@@ -18,6 +18,10 @@ pub struct BridgeConfig {
     pub port: u16,
     pub token: String,
     pub api_base_url: String,
+    /// Automation channel for end-to-end tests in Lightroom (see automation.rs). Off unless
+    /// set to true by hand; missing in older files means off.
+    #[serde(default)]
+    pub automation: bool,
 }
 
 impl BridgeConfig {
@@ -26,6 +30,7 @@ impl BridgeConfig {
             port: DEFAULT_PORT,
             token: new_token(),
             api_base_url: DEFAULT_API_BASE_URL.to_string(),
+            automation: false,
         }
     }
 }

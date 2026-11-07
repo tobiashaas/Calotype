@@ -5,6 +5,7 @@
 //! headless (`lrff-bridge-headless`) or embedded in the Tauri app.
 
 pub mod api_client;
+pub mod automation;
 pub mod config;
 pub mod db;
 pub mod folder;
@@ -32,6 +33,7 @@ pub struct AppState {
     pub api: ApiClient,
     config: RwLock<BridgeConfig>,
     db: Mutex<Db>,
+    pub automation: automation::AutomationQueue,
 }
 
 #[derive(Debug, Serialize)]
@@ -52,6 +54,7 @@ impl AppState {
             data_dir,
             config: RwLock::new(config),
             db: Mutex::new(db),
+            automation: automation::AutomationQueue::default(),
         }
     }
 

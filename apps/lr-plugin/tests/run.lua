@@ -41,7 +41,21 @@ local sdk = {
     }
   end,
   LrTasks = { sleep = function() end },
+  LrApplication = { versionString = function() return "15.0 (test)" end },
+  LrProgressScope = function()
+    return { setCaption = function() end, setPortionComplete = function() end,
+             setIndeterminate = function() end, isCanceled = function() return false end,
+             done = function() end }
+  end,
 }
+
+-- Lightroom's LOC: "$$$/Key=English default" with ^1..^9 placeholders and ^n line breaks.
+function LOC(text, ...) -- luacheck: ignore (global, as in Lightroom)
+  local args = { ... }
+  local default = text:gsub("^%$%$%$/[^=]*=", "")
+  default = default:gsub("%^n", "\n")
+  return (default:gsub("%^(%d)", function(i) return tostring(args[tonumber(i)]) end))
+end
 
 function import(name) -- luacheck: ignore (global, as in Lightroom)
   return assert(sdk[name], "no fake for " .. name)
@@ -285,10 +299,127 @@ test("wait for job stops on cancel", function()
   eq(err, "canceled", "reason")
 end)
 
+-- ------------------------------------------------------------ translations
+
+local function readFile(path)
+  local f = assert(io.open(path, "rb"))
+  local text = f:read("*a")
+  f:close()
+  return text
+end
+
+local function placeholders(text)
+  local found = {}
+  for d in text:gmatch("%^(%d)") do found[#found + 1] = d end
+  table.sort(found)
+  return table.concat(found, ",")
+end
+
+test("every UI text has a German translation with the same placeholders", function()
+  local english = {}
+  for _, file in ipairs({ "Info.lua", "BridgeClient.lua", "JobWait.lua", "Actions.lua", "TrainProfile.lua",
+                          "ApplyProfile.lua", "BridgeStatus.lua", "AutomationCommands.lua" }) do
+    local src = readFile(PLUGIN .. file)
+    for key, value in src:gmatch('"(%$%$%$/LRFrameFlow/[%w/]+)=(.-[^\\])"') do english[key] = value end
+  end
+  local german = {}
+  for key, value in readFile(PLUGIN .. "TranslatedStrings_de.txt"):gmatch('"(%$%$%$/LRFrameFlow/[%w/]+)=([^\n]-)"%s*\n') do
+    german[key] = value
+  end
+  local count = 0
+  for key, value in pairs(english) do
+    count = count + 1
+    assert(german[key], "missing German text for " .. key)
+    eq(placeholders(german[key]), placeholders(value), "placeholders of " .. key)
+  end
+  for key in pairs(german) do assert(english[key], "German text without code: " .. key) end
+  assert(count > 70, "found only " .. count .. " UI texts")
+  eq(german["$$$/LRFrameFlow/Language"], "de", "language marker")
+end)
+
+-- ------------------------------------------------------------ automation commands
+
+local function fakeCatalog(photos)
+  local byUuid = {}
+  for _, p in ipairs(photos) do byUuid[p:getRawMetadata("uuid")] = p end
+  return {
+    getPath = function() return "C:/test.lrcat" end,
+    getAllPhotos = function() return photos end,
+    findPhotoByUuid = function(_, uuid) return byUuid[uuid] end,
+    batchGetRawMetadata = function(_, list, keys)
+      local out = {}
+      for _, p in ipairs(list) do
+        local m = {}
+        for _, k in ipairs(keys) do m[k] = p:getRawMetadata(k) end
+        out[p] = m
+      end
+      return out
+    end,
+    withWriteAccessDo = function(_, _, fn) fn() end,
+    setSelectedPhotos = function() end,
+  }
+end
+
+test("automation: ping, list, read and restore develop settings", function()
+  local Commands = require "AutomationCommands"
+  local photos = { fakePhoto("a", "RAW"), fakePhoto("v", "VIDEO"), fakePhoto("b", "JPG") }
+  local catalog = fakeCatalog(photos)
+  local ok, ping = Commands.run(catalog, { command = "ping", args = {} })
+  eq(ok, true, "ping ok")
+  eq(ping.photos, 3, "photo count")
+  eq(ping.language, "en", "language marker")
+  local _, list = Commands.run(catalog, { command = "list_photos", args = { format = "raw" } })
+  eq(#list.photos, 1, "format filter")
+  eq(list.photos[1].uuid, "a", "uuid")
+  local _, dev = Commands.run(catalog, { command = "develop_settings", args = { uuids = { "a", "x" }, keys = { "Temperature" } } })
+  eq(dev.settings.a.Temperature, 5200, "read settings")
+  eq(dev.missing[1], "x", "missing uuid reported")
+  local _, set = Commands.run(catalog, { command = "set_develop_settings", args = { settings = { a = { Exposure2012 = 0.7 } } } })
+  eq(set.updated, 1, "restored")
+  eq(photos[1].applied.Exposure2012, 0.7, "applied to photo")
+end)
+
+test("automation: refuses unknown commands and reports errors instead of crashing", function()
+  local Commands = require "AutomationCommands"
+  local catalog = fakeCatalog({})
+  local ok, r = Commands.run(catalog, { command = "run", args = {} })
+  eq(ok, false, "run is not a command")
+  assert(r.error:find("unknown"), r.error)
+  ok, r = Commands.run(catalog, { command = "os.execute", args = {} })
+  eq(ok, false, "unknown command")
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  unreachable()
+  ok, r = Commands.run(catalog, { command = "apply", args = { profile = "X", uuids = {} } })
+  eq(ok, false, "bridge down is an error result")
+  assert(r.error:find("not running"), r.error)
+end)
+
+test("automation: apply runs the same flow as the menu and writes the results", function()
+  local Commands = require "AutomationCommands"
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  local photos = { fakePhoto("a", "RAW"), fakePhoto("b", "RAW") }
+  local catalog = fakeCatalog(photos)
+  respond(200, { { profile_id = "p1", name = "Test", genre = "event", format_type = "raw", status = "ready", version = 1 } })
+  respond(202, { status = "pending" })  -- register a
+  respond(202, { status = "pending" })  -- register b
+  respond(202, { job_id = "j1", status = "waiting_for_photos" })
+  respond(200, { job_id = "j1", status = "completed", results = {
+    { lr_catalog_uuid = "a", lr_settings = { Exposure2012 = 0.3, Temperature = 5600 } },
+    { lr_catalog_uuid = "b", lr_settings = { Exposure2012 = -0.2 } },
+  } })
+  local ok, r = Commands.run(catalog, { command = "apply", args = { profile = "Test", uuids = { "a", "b" } } })
+  eq(ok, true, "apply ok: " .. tostring(r.error))
+  eq(r.applied, 2, "applied")
+  eq(photos[1].applied.Temperature, 5600, "settings written")
+  eq(photos[1].applied.WhiteBalance, "Custom", "white balance custom")
+  eq(Json.decode(fake.requests[4].body).profile_id, "p1", "edit job for the chosen profile")
+end)
+
 -- ------------------------------------------------------------ syntax of UI scripts
 
 test("menu scripts compile", function()
-  for _, file in ipairs({ "Info.lua", "TrainProfile.lua", "ApplyProfile.lua", "BridgeStatus.lua" }) do
+  for _, file in ipairs({ "Info.lua", "TrainProfile.lua", "ApplyProfile.lua", "BridgeStatus.lua",
+                          "Actions.lua", "Automation.lua", "AutomationCommands.lua", "AutomationStop.lua" }) do
     assert(loadfile(PLUGIN .. file))
   end
   local info = assert(loadfile(PLUGIN .. "Info.lua"))()

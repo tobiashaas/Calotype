@@ -102,10 +102,15 @@ async fn spawn_fake_api(fake: Fake) -> String {
 }
 
 fn state(api: &str, dir: &std::path::Path) -> Arc<AppState> {
+    state_with(api, dir, false)
+}
+
+fn state_with(api: &str, dir: &std::path::Path, automation: bool) -> Arc<AppState> {
     let config = BridgeConfig {
         port: 0,
         token: TOKEN.into(),
         api_base_url: api.into(),
+        automation,
     };
     Arc::new(AppState::new(
         dir.to_path_buf(),
@@ -307,4 +312,85 @@ async fn unreachable_file_retries_but_broken_file_fails_job() {
         .unwrap();
     assert_eq!(job.status, "failed");
     assert!(job.last_error.unwrap().contains("photo bad failed"));
+}
+
+#[tokio::test]
+async fn automation_is_off_by_default_and_round_trips_when_on() {
+    let dir = tempfile::tempdir().unwrap();
+    let off = state("http://127.0.0.1:9", dir.path());
+    let (s, _) = call(
+        &off,
+        "POST",
+        "/v1/automation/commands",
+        Some(TOKEN),
+        Some(json!({"command": "ping"})),
+    )
+    .await;
+    assert_eq!(
+        s,
+        StatusCode::NOT_FOUND,
+        "off unless enabled in bridge.json"
+    );
+    let (s, _) = call(&off, "GET", "/v1/automation/next", Some(TOKEN), None).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+
+    let on = state_with("http://127.0.0.1:9", dir.path(), true);
+    let (s, _) = call(&on, "GET", "/v1/automation/next", None, None).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED, "token required");
+    let (s, err) = call(
+        &on,
+        "POST",
+        "/v1/automation/commands",
+        Some(TOKEN),
+        Some(json!({"command": "eval"})),
+    )
+    .await;
+    assert_eq!(
+        s,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "only known commands: {err}"
+    );
+
+    let (s, cmd) = call(
+        &on,
+        "POST",
+        "/v1/automation/commands",
+        Some(TOKEN),
+        Some(json!({"command": "list_photos", "args": {"limit": 3}})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::ACCEPTED);
+    let id = cmd["id"].as_u64().unwrap();
+    // the plugin picks it up …
+    let (s, next) = call(&on, "GET", "/v1/automation/next", Some(TOKEN), None).await;
+    assert_eq!(
+        (s, next["command"].as_str()),
+        (StatusCode::OK, Some("list_photos"))
+    );
+    let (s, _) = call(&on, "GET", "/v1/automation/next", Some(TOKEN), None).await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+    // … and reports back
+    let (s, _) = call(
+        &on,
+        "POST",
+        &format!("/v1/automation/commands/{id}/result"),
+        Some(TOKEN),
+        Some(json!({"ok": true, "result": {"photos": []}})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let (_, done) = call(
+        &on,
+        "GET",
+        &format!("/v1/automation/commands/{id}"),
+        Some(TOKEN),
+        None,
+    )
+    .await;
+    assert_eq!(
+        (done["status"].as_str(), done["ok"].as_bool()),
+        (Some("done"), Some(true))
+    );
+    let (_, status) = call(&on, "GET", "/v1/automation/status", Some(TOKEN), None).await;
+    assert_eq!(status["enabled"], json!(true));
 }

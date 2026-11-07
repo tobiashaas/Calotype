@@ -3,24 +3,27 @@
 local LrDialogs = import "LrDialogs"
 local LrTasks = import "LrTasks"
 
+local Automation = require "AutomationState"
 local BridgeClient = require "BridgeClient"
+
+local TITLE = LOC "$$$/LRFrameFlow/Status/Title=LR-FrameFlow Bridge"
 
 LrTasks.startAsyncTask(function()
   local cfg, cfgErr, path = BridgeClient.loadConfig()
   if not cfg then
-    LrDialogs.message("LR-FrameFlow Bridge", cfgErr, "warning")
+    LrDialogs.message(TITLE, cfgErr, "warning")
     return
   end
 
   local health, err = BridgeClient.health()
   if not health then
-    LrDialogs.message("LR-FrameFlow Bridge", err .. "\n\nSettings: " .. path, "warning")
+    LrDialogs.message(TITLE, err .. "\n\n" .. LOC("$$$/LRFrameFlow/Status/Settings=Settings: ^1", path), "warning")
     return
   end
 
   local lines = {
-    string.format("Bridge %s is running on 127.0.0.1:%d.", health.version or "?", cfg.port),
-    "Server: " .. tostring(cfg.api_base_url),
+    LOC("$$$/LRFrameFlow/Status/Running=Bridge ^1 is running on 127.0.0.1:^2.", health.version or "?", cfg.port),
+    LOC("$$$/LRFrameFlow/Status/Server=Server: ^1", tostring(cfg.api_base_url)),
   }
   local profiles, profilesErr = BridgeClient.profiles()
   if profiles then
@@ -28,10 +31,13 @@ LrTasks.startAsyncTask(function()
     for _, p in ipairs(profiles) do
       if p.status == "ready" then ready = ready + 1 end
     end
-    lines[#lines + 1] = string.format("Profiles: %d ready, %d in total.", ready, #profiles)
+    lines[#lines + 1] = LOC("$$$/LRFrameFlow/Status/Profiles=Profiles: ^1 ready, ^2 in total.", ready, #profiles)
   else
-    lines[#lines + 1] = "Server not reachable — jobs wait in the Bridge queue. (" .. profilesErr .. ")"
+    lines[#lines + 1] = LOC("$$$/LRFrameFlow/Status/ServerDown=Server not reachable — jobs wait in the Bridge queue. (^1)", profilesErr)
   end
-  lines[#lines + 1] = "Settings: " .. path
-  LrDialogs.message("LR-FrameFlow Bridge", table.concat(lines, "\n"), "info")
+  if Automation.enabled then
+    lines[#lines + 1] = LOC "$$$/LRFrameFlow/Status/Automation=Automation channel is ON (test mode)."
+  end
+  lines[#lines + 1] = LOC("$$$/LRFrameFlow/Status/Settings=Settings: ^1", path)
+  LrDialogs.message(TITLE, table.concat(lines, "\n"), "info")
 end)
