@@ -69,13 +69,22 @@ impl FolderPhoto {
 
 /// RAW files directly in `dir` (not recursive), sorted by name.
 pub fn scan(dir: &Path) -> Result<Vec<FolderPhoto>> {
+    scan_with_sidecars(dir, None)
+}
+
+/// Like [`scan`], but the sidecars may live in another folder (same file names). Lets
+/// edits that exist only in a catalog be exported as XMPs without touching the RAW folder.
+pub fn scan_with_sidecars(dir: &Path, sidecars: Option<&Path>) -> Result<Vec<FolderPhoto>> {
     let mut photos = Vec::new();
     for entry in std::fs::read_dir(dir).with_context(|| format!("cannot read {}", dir.display()))? {
         let path = entry?.path();
         if !path.is_file() || !is_raw(&path) {
             continue;
         }
-        let sidecar = xmp::sidecar_path(&path);
+        let mut sidecar = xmp::sidecar_path(&path);
+        if let (Some(other), Some(name)) = (sidecars, sidecar.file_name()) {
+            sidecar = other.join(name);
+        }
         let (has_sidecar, settings, decisions) = match std::fs::read_to_string(&sidecar) {
             Ok(text) => (
                 true,
@@ -153,6 +162,21 @@ mod tests {
         assert!(photos[0].is_edited());
         assert_eq!(photos[0].settings["Temperature"], serde_json::json!(5600));
         assert!(!photos[1].has_sidecar && !photos[1].is_edited());
+    }
+
+    #[test]
+    fn sidecars_can_live_in_another_folder() {
+        let raws = tempfile::tempdir().unwrap();
+        let side = tempfile::tempdir().unwrap();
+        std::fs::write(raws.path().join("a.cr3"), b"raw").unwrap();
+        std::fs::write(
+            side.path().join("a.xmp"),
+            r#"<x:xmpmeta><rdf:Description crs:Exposure2012="+0.50"/></x:xmpmeta>"#,
+        )
+        .unwrap();
+        let photos = scan_with_sidecars(raws.path(), Some(side.path())).unwrap();
+        assert!(photos[0].has_sidecar && photos[0].is_edited());
+        assert!(!scan(raws.path()).unwrap()[0].has_sidecar);
     }
 
     #[test]

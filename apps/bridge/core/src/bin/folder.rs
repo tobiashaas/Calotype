@@ -9,6 +9,8 @@
 //! train --style <preset.xmp>: a Lightroom preset as the profile's style layer — the model
 //!              predicts exposure/white balance/tone per photo, the preset adds the look.
 //! --files-from <list>: only these files (one name or path per line), e.g. a train/test split.
+//! train --sidecars <dir>: read the XMPs from another folder (e.g. edits exported from a
+//!              catalog) — the RAW folder stays untouched.
 //! --out <dir>: write sidecars there instead of next to the RAWs (read-only cards,
 //!              evaluation against existing edits). The source folder is never touched.
 
@@ -52,6 +54,9 @@ enum Command {
         /// Lightroom preset (.xmp) whose look is layered on every prediction.
         #[arg(long)]
         style: Option<PathBuf>,
+        /// Read the XMP sidecars from this folder instead of next to the RAWs.
+        #[arg(long)]
+        sidecars: Option<PathBuf>,
     },
     /// Apply a profile to the RAWs in a folder and write XMP sidecars.
     Apply {
@@ -212,8 +217,16 @@ impl Bridge {
 }
 
 /// Scan the folder, optionally keeping only the files named in a list.
-fn scan_selected(dir: &Path, files_from: Option<&Path>) -> Result<Vec<FolderPhoto>> {
-    let photos = folder::scan(dir)?;
+/// Which photos of a folder to use, and where their sidecars live.
+#[derive(Clone, Copy, Default)]
+struct Selection<'a> {
+    files_from: Option<&'a Path>,
+    sidecars: Option<&'a Path>,
+}
+
+fn scan_selected(dir: &Path, selection: Selection) -> Result<Vec<FolderPhoto>> {
+    let photos = folder::scan_with_sidecars(dir, selection.sidecars)?;
+    let files_from = selection.files_from;
     let Some(list) = files_from else {
         return Ok(photos);
     };
@@ -247,7 +260,7 @@ async fn train(
     name: &str,
     genre: &str,
     color: &str,
-    files_from: Option<&Path>,
+    selection: Selection<'_>,
     style: Option<&Path>,
 ) -> Result<()> {
     let base_preset = match style {
@@ -267,7 +280,7 @@ async fn train(
         }
         None => None,
     };
-    let (edited, other): (Vec<_>, Vec<_>) = scan_selected(dir, files_from)?
+    let (edited, other): (Vec<_>, Vec<_>) = scan_selected(dir, selection)?
         .into_iter()
         .partition(FolderPhoto::is_edited);
     println!(
@@ -336,9 +349,15 @@ async fn apply(
     }
     let name = profile["name"].as_str().unwrap_or(wanted).to_string();
     // With --out nothing next to the RAWs is overwritten, so existing edits do not block.
-    let (todo, edited): (Vec<_>, Vec<_>) = scan_selected(dir, files_from)?
-        .into_iter()
-        .partition(|p| force || out.is_some() || !p.is_edited());
+    let (todo, edited): (Vec<_>, Vec<_>) = scan_selected(
+        dir,
+        Selection {
+            files_from,
+            sidecars: None,
+        },
+    )?
+    .into_iter()
+    .partition(|p| force || out.is_some() || !p.is_edited());
     if let Some(out) = out {
         std::fs::create_dir_all(out)?;
     }
@@ -417,6 +436,7 @@ async fn main() -> Result<()> {
             color,
             files_from,
             style,
+            sidecars,
         } => {
             train(
                 &bridge,
@@ -424,7 +444,10 @@ async fn main() -> Result<()> {
                 &name,
                 &genre,
                 &color,
-                files_from.as_deref(),
+                Selection {
+                    files_from: files_from.as_deref(),
+                    sidecars: sidecars.as_deref(),
+                },
                 style.as_deref(),
             )
             .await

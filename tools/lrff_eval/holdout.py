@@ -3,7 +3,7 @@
     python tools/lrff_eval/holdout.py split <raw_dir> <work_dir> [--test 0.2] [--seed 7]
     lrff-folder train <raw_dir> --name "X" --files-from <work_dir>/train.txt
     lrff-folder apply <raw_dir> --profile "X" --files-from <work_dir>/test.txt --out <work_dir>/pred
-    python tools/lrff_eval/holdout.py score <raw_dir> <work_dir>
+    python tools/lrff_eval/holdout.py score <raw_dir> <work_dir> [--sidecars <dir>]
 
 `split` only reads: it lists RAWs whose sidecar holds develop settings and splits them.
 `apply --out` writes predictions into the work folder, so the source folder (e.g. a camera
@@ -49,18 +49,21 @@ def split(raw_dir: Path, work: Path, test_share: float, seed: int) -> None:
     print(f"{len(names)} edited RAWs: {len(names) - len(test)} train, {len(test)} test → {work}")
 
 
-def score(raw_dir: Path, work: Path) -> int:
+def score(raw_dir: Path, work: Path, sidecars: Path | None = None) -> int:
     def names(f: str) -> list[str]:
-        return [n for n in (work / f).read_text(encoding="utf-8").split() if n]
+        return [n for n in (work / f).read_text(encoding="utf-8").splitlines() if n.strip()]
 
-    train = [read_xmp((raw_dir / n).with_suffix(".xmp")) for n in names("train.txt")]
+    def truth(n: str) -> dict:
+        return read_xmp(((sidecars or raw_dir) / n).with_suffix(".xmp"))
+
+    train = [truth(n) for n in names("train.txt")]
     rows, missing = [], 0
     for n in names("test.txt"):
         pred = (work / "pred" / n).with_suffix(".xmp")
         if not pred.exists():
             missing += 1
             continue
-        rows.append((read_xmp((raw_dir / n).with_suffix(".xmp")), read_xmp(pred)))
+        rows.append((truth(n), read_xmp(pred)))
     if not rows:
         print("no predictions — run `lrff-folder apply ... --out <work_dir>/pred` first")
         return 1
@@ -81,11 +84,12 @@ def main() -> int:
     c = sub.add_parser("score")
     c.add_argument("raw_dir", type=Path)
     c.add_argument("work_dir", type=Path)
+    c.add_argument("--sidecars", type=Path, help="real XMPs live here, not next to the RAWs")
     a = ap.parse_args()
     if a.cmd == "split":
         split(a.raw_dir, a.work_dir, a.test, a.seed)
         return 0
-    return score(a.raw_dir, a.work_dir)
+    return score(a.raw_dir, a.work_dir, a.sidecars)
 
 
 if __name__ == "__main__":
