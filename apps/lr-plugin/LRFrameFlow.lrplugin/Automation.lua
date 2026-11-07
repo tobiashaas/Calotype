@@ -4,29 +4,26 @@ Off by default. When on, the plugin asks the Bridge every two seconds for a test
 (GET /v1/automation/next), runs it with AutomationCommands and posts the result back.
 
 Lightroom specifics this file is built around (each one found in a real run):
-- Reading an undefined global raises an error in Lightroom, so globals are read with rawget.
-- The global table survives "Reload Plug-in" and the new plugin starts before the old one
-  is unloaded: every start takes a new generation number and a loop runs only while its
+- Reading an undefined global raises an error, and the plugin environment has no _G:
+  this file uses no globals at all.
+- On "Reload Plug-in" the new plugin starts before the old one is unloaded: every start
+  takes a new generation number (kept in the plugin prefs) and a loop runs only while its
   number is current, so an old loop ends by itself.
 - Catalog and HTTP calls yield; plain pcall cannot yield, LrTasks.pcall can. ]]
 
 local LrApplication = import "LrApplication"
 local LrDialogs = import "LrDialogs"
+local LrPrefs = import "LrPrefs"
 local LrTasks = import "LrTasks"
 
-local GENERATION_KEY = "LRFF_AUTOMATION_GENERATION"
-
-local function readGlobal(name)
-  local ok, value = pcall(rawget, _G, name)
-  if ok then return value end
-  return nil
-end
-
-local generation = (readGlobal(GENERATION_KEY) or 0) + 1
-rawset(_G, GENERATION_KEY, generation)
+-- The generation lives in the plugin's prefs, not in a global: Lightroom's plugin
+-- environment has no _G, and reading it aborted the start without any message.
+local prefs = LrPrefs.prefsForPlugin()
+local generation = (tonumber(prefs.automationGeneration) or 0) + 1
+prefs.automationGeneration = generation
 
 local function current()
-  return readGlobal(GENERATION_KEY) == generation
+  return prefs.automationGeneration == generation
 end
 
 LrTasks.startAsyncTask(function()
@@ -36,8 +33,12 @@ LrTasks.startAsyncTask(function()
     local BridgeClient = require "BridgeClient"
     local Log = require "Log"
 
-    local cfg = BridgeClient.loadConfig()
-    if not cfg or cfg.automation ~= true then return end
+    local cfg, cfgErr = BridgeClient.loadConfig()
+    if not cfg then
+      Log.warn("automation: no bridge config (%s)", tostring(cfgErr))
+      return
+    end
+    if cfg.automation ~= true then return end
     AutomationState.enabled = true
     Log.info("automation channel on (generation %d)", generation)
 

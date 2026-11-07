@@ -424,16 +424,25 @@ end)
 
 -- ------------------------------------------------------------ syntax of UI scripts
 
-test("automation init runs under Lightroom's strict globals", function()
+test("automation init runs in a Lightroom-like plugin environment", function()
   fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t", automation = false })
   local started
+  local prefs = {}
+  sdk.LrPrefs = { prefsForPlugin = function() return prefs end }
   sdk.LrTasks.startAsyncTask = function(fn) started = true; fn() end
-  strictGlobals()
-  local ok, err = pcall(assert(loadfile(PLUGIN .. "Automation.lua")))
-  setmetatable(_G, nil)
+  -- Like Lightroom: the plugin's own environment, no _G, unknown names are an error.
+  -- (Reading _G aborted the real start without any message.)
+  local env = { import = import, LOC = LOC, require = require, pcall = pcall,
+                tostring = tostring, tonumber = tonumber, type = type, error = error }
+  setmetatable(env, { __index = function(_, name) error("undefined global " .. tostring(name), 2) end })
+  local chunk = assert(loadfile(PLUGIN .. "Automation.lua"))
+  setfenv(chunk, env)
+  local ok, err = pcall(chunk)
   eq(ok, true, "init: " .. tostring(err))
   eq(started, true, "task started")
-  eq(rawget(_G, "LRFF_AUTOMATION_GENERATION") >= 1, true, "generation set")
+  eq(prefs.automationGeneration, 1, "generation in prefs")
+  ok, err = pcall(chunk)
+  eq(prefs.automationGeneration, 2, "reload takes the next generation")
 end)
 
 test("menu scripts compile", function()
