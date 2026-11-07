@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import math
+
 import cv2
 import numpy as np
 
@@ -29,6 +31,8 @@ class Face:
     eyes_closed: float | None = None      # 0 open … 1 closed (max of both eyes)
     smile: float | None = None            # 0 … 1
     mouth_open: float | None = None       # 0 … 1
+    looking_down: float | None = None     # 0 … 1, gaze below the camera (eyeLookDown*)
+    head_pitch: float | None = None       # degrees from the face's transformation matrix
     blendshapes: dict[str, float] = field(default_factory=dict)
 
     @property
@@ -47,6 +51,8 @@ class FaceAnalyzer:
         options = vision.FaceLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=str(model_path("face_landmarker"))),
             output_face_blendshapes=True,
+            # head pose: separates "eyes closed" from "head and eyes lowered"
+            output_facial_transformation_matrixes=True,
             num_faces=1,
         )
         self._landmarker = vision.FaceLandmarker.create_from_options(options)
@@ -73,7 +79,9 @@ class FaceAnalyzer:
             out.append(((int(x), int(y), int(bw), int(bh)), float(row[-1])))
         return out
 
-    def _expression(self, rgb: np.ndarray, box: tuple[int, int, int, int]) -> dict[str, float]:
+    def _expression(
+        self, rgb: np.ndarray, box: tuple[int, int, int, int]
+    ) -> tuple[dict[str, float], float | None]:
         import mediapipe as mp
 
         x, y, bw, bh = box
@@ -81,21 +89,27 @@ class FaceAnalyzer:
         h, w = rgb.shape[:2]
         crop = rgb[max(0, y - my): min(h, y + bh + my), max(0, x - mx): min(w, x + bw + mx)]
         if crop.size == 0:
-            return {}
+            return {}, None
         if max(crop.shape[:2]) < 192:  # tiny face: upscale so the landmarker can read it
             f = 192 / max(crop.shape[:2])
             crop = cv2.resize(crop, None, fx=f, fy=f, interpolation=cv2.INTER_CUBIC)
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(crop))
         result = self._landmarker.detect(image)
         if not result.face_blendshapes:
-            return {}
-        return {c.category_name: float(c.score) for c in result.face_blendshapes[0]}
+            return {}, None
+        shapes = {c.category_name: float(c.score) for c in result.face_blendshapes[0]}
+        pitch = None
+        matrices = getattr(result, "facial_transformation_matrixes", None)
+        if matrices:
+            r = np.asarray(matrices[0])[:3, :3]
+            pitch = math.degrees(math.atan2(r[2, 1], r[2, 2]))
+        return shapes, pitch
 
     def analyze(self, rgb: np.ndarray, gray: np.ndarray) -> list[Face]:
         area = float(rgb.shape[0] * rgb.shape[1])
         faces = []
         for box, score in self.detect(rgb):
-            bs = self._expression(rgb, box)
+            bs, pitch = self._expression(rgb, box)
             face = Face(
                 box=box,
                 score=score,
@@ -107,5 +121,7 @@ class FaceAnalyzer:
                 face.eyes_closed = max(bs.get("eyeBlinkLeft", 0.0), bs.get("eyeBlinkRight", 0.0))
                 face.smile = (bs.get("mouthSmileLeft", 0.0) + bs.get("mouthSmileRight", 0.0)) / 2
                 face.mouth_open = bs.get("jawOpen", 0.0)
+                face.looking_down = max(bs.get("eyeLookDownLeft", 0.0), bs.get("eyeLookDownRight", 0.0))
+                face.head_pitch = pitch
             faces.append(face)
         return faces

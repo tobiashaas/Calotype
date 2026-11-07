@@ -60,7 +60,8 @@ def load_or_analyze(previews: list[Path], cache: Path | None) -> list[PhotoFeatu
         for d in raw:
             faces = [Face(box=tuple(f["box"]), score=f["score"], rel_size=f["rel_size"],
                           sharpness=f["sharpness"], eyes_closed=f["eyes_closed"], smile=f["smile"],
-                          mouth_open=f["mouth_open"]) for f in d["faces"]]
+                          mouth_open=f["mouth_open"], looking_down=f.get("looking_down"),
+                          head_pitch=f.get("head_pitch")) for f in d["faces"]]
             out.append(PhotoFeatures(
                 name=d["name"], width=d["width"], height=d["height"], sharpness=d["sharpness"],
                 center_sharpness=d["center_sharpness"], mean_luma=d["mean_luma"],

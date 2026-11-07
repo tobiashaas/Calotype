@@ -20,7 +20,8 @@ from lr_frameflow_culling.scoring import group_series
 # get opposite weights that cancel out, and the explanations then contradict each other.
 FEATURES = [
     "subject_sharpness", "sharpness_rank_in_series", "best_in_series",
-    "series_size_log", "face_count", "largest_face", "eyes_closed", "smile", "mouth_open",
+    "series_size_log", "face_count", "largest_face", "eyes_closed", "looking_down", "smile",
+    "mouth_open",
     "laughing_closed_eyes", "no_face", "face_clipped", "clipped_highlights", "mean_luma",
     "crushed_shadows",
 ]
@@ -35,6 +36,7 @@ LABELS = {
     "face_count": ("several faces", "few faces"),
     "largest_face": ("large face", "small or no face"),
     "eyes_closed": ("eyes closed", "eyes open"),
+    "looking_down": ("looking down", "looking up or ahead"),
     "smile": ("smiling", "no smile"),
     "mouth_open": ("mouth open", "mouth closed"),
     "laughing_closed_eyes": ("laughing with closed eyes", "no laughing with closed eyes"),
@@ -76,7 +78,9 @@ def feature_matrix(photos: list[PhotoFeatures]) -> np.ndarray:
         rows.append([
             p.subject_sharpness, series_rank[i], best[i], np.log(sizes[i]),
             len(p.faces), max((f.rel_size for f in faces), default=0.0) ** 0.5,
-            p.eyes_closed or 0.0, p.smile or 0.0, max((f.mouth_open or 0.0 for f in faces), default=0.0),
+            p.eyes_closed or 0.0,
+            max((f.looking_down or 0.0 for f in faces), default=0.0),
+            p.smile or 0.0, max((f.mouth_open or 0.0 for f in faces), default=0.0),
             float(p.laughing_closed_eyes), float(not p.faces), p.face_clipped, p.clipped_highlights,
             p.mean_luma, p.crushed_shadows,
         ])
