@@ -70,7 +70,8 @@ Open:
 - [x] Bridge: orientation from RAW container (TIFF IFD0 / CR3 `CMT1`) or JPEG EXIF; verified on 30 real Canon CR3 (portrait + landscape)
 - [x] Bridge: pick smallest embedded JPEG covering 1200 px instead of full-size → ~200 ms/photo (release) instead of 2–5 s
 - [x] API + Bridge: `profile_id` and short `failure_reason` in job status (workers store a one-line reason, traceback stays in the log)
-- [ ] Bridge: test corpus for NEF/ARW/RAF/DNG (only CR3 verified so far); parallel preview building for big shoots
+- [x] Bridge: parallel uploads (8 at a time); Canon CR2 verified (179 files), DCT-scaled decoding for full-size-only JPEGs
+- [ ] Bridge: test corpus for NEF/ARW/RAF/DNG (Canon CR2/CR3 verified so far)
 - [ ] API: update `lr_develop_settings` when an already uploaded photo is registered again (retraining after edits)
 - [x] LR Plugin `apps/lr-plugin/LRFrameFlow.lrplugin`: menu items Train / Apply / Bridge status
 - [x] LR Plugin: send file path + `getDevelopSettings()` + catalog UUID + EXIF to bridge
@@ -91,6 +92,8 @@ See `docs/adr/005-culling-architecture.md`.
 - [x] Plugin: read star ratings, pick/reject flags, color labels (`lr_metadata`); folder mode reads `xmp:Rating`/`xmp:Label`; API refreshes settings + decisions on re-upload (migration 008)
 - [x] `THIRD_PARTY_MODELS.md` + model registry with SHA-256 download (`libs/culling/models.py`)
 - [x] `libs/culling` prototype: sharpness (subject/face), exposure (face clipping), YuNet faces, MediaPipe blendshapes (eyes closed, smile), dHash series, explainable baseline — 130 ms/photo on 60 real CR3
+- [x] Learned scorer (`libs/culling/learned.py`): ROC-AUC 0.74 vs. 0.42 for hand weights against another tool's cull
+- [ ] Learned scorer from the user's own ratings (needs rated photos from Lightroom)
 - [ ] Swappable model interface via config (`face_detector: yunet | …`)
 - [ ] Content/moment features: image embeddings (DINOv2/CLIP), interaction (hug, kiss, eye contact), candid vs. posed
 - [ ] Series via embeddings + capture time instead of dHash

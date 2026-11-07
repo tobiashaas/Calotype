@@ -28,7 +28,9 @@ Vertrag der lokalen API: [`packages/contracts/openapi/plugin-bridge-api.yaml`](.
   Backoff (2 s … 5 min). Abgelehnte Anfragen (4xx) und kaputte Dateien → `failed` mit Grund.
 - **Vorschau = unbearbeitetes Bild:** bei RAW das kleinste eingebettete Kamera-JPEG, das
   1200 px abdeckt (sonst das größte), bei JPEG/TIFF/PNG die Datei selbst; längste Seite
-  ≤ 1200 px, Ausrichtung aus RAW-Container bzw. EXIF angewendet. Canon CR3: ~200 ms pro Foto.
+  ≤ 1200 px, Ausrichtung aus RAW-Container bzw. EXIF angewendet. Enthält eine RAW nur ein
+  Vollformat-JPEG (z. B. Canon CR2), wird es direkt verkleinert dekodiert (DCT-Skalierung).
+  Gemessen: Canon CR3 ~200 ms, Canon CR2 ~300 ms pro Foto (lokale SSD).
 
 ## Ordner-Modus (ohne Lightroom)
 
@@ -38,6 +40,13 @@ Vertrag der lokalen API: [`packages/contracts/openapi/plugin-bridge-api.yaml`](.
 lrff-folder train  <ordner> --name "Business Warm" --genre business   # bearbeitete RAWs (RAW + XMP)
 lrff-folder apply  <ordner> --profile "Business Warm"                  # schreibt IMG_0001.xmp neben jede RAW
 lrff-folder profiles
+
+# Stil-Ebene: Modell bestimmt Belichtung/WB/Ton pro Foto, das Preset den Look
+lrff-folder train  <ordner> --name "Business + Look" --style mein-preset.xmp
+
+# Train/Test-Aufteilung und Ausgabe in einen anderen Ordner (Quelle bleibt unberührt)
+lrff-folder train  <ordner> --name X --files-from train.txt
+lrff-folder apply  <ordner> --profile X --files-from test.txt --out <ausgabe>
 ```
 
 - Training nutzt nur RAWs, deren XMP Develop-Settings enthält (`crs:Exposure2012` …).
