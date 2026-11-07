@@ -108,7 +108,8 @@ See `docs/adr/005-culling-architecture.md`.
 - [x] Pipeline: versioned features (`histogram-v1`, `histstats-face-v2`), migration 009, `gbr_v2` artifacts with feature version, inference uses the artifact's version → end-to-end 32 %, exposure MAE 0.33 → 0.20 EV
 - [x] Style layer: `base_preset` look on top of predictions; `lrff-folder train --style preset.xmp`; XMP tone curves
 - [x] Learned culling scorer: ROC-AUC 0.42 (hand weights) → 0.74 vs. another tool's cull
-- [ ] Next model step: CNN embedding of the preview (e.g. DINOv2/EfficientNet, permissive license) as extra features; per-camera calibration
+- [x] Tried: DINOv2-small embeddings (PCA 16–64) on top of v2 → all-3 34 % → 37 %, temperature 166 → 150 K, exposure unchanged; not worth torch (~1 GB) + 170 ms/photo yet (`tools/lrff_eval/embed_lab.py`)
+- [ ] Next model step for exposure: EXIF context (ISO, shutter, aperture → scene EV; folder mode must send EXIF) and consistency within a series/shoot (relative to neighbours)
 - [ ] Predict RAW white balance relative to as-shot (needs EXIF as-shot from the RAW)
 
 ### Backlog / Nice-to-have
