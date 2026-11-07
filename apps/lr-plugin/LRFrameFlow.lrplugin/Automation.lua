@@ -28,9 +28,9 @@ LrTasks.startAsyncTask(function()
   if not cfg or cfg.automation ~= true then return end
   AutomationState.enabled = true
   Log.info("automation channel on (generation %d)", generation)
-  while current() do
+  local function step()
     local command, err = BridgeClient.automationNext()
-    if not current() then break end -- a newer plugin took over while we were waiting
+    if not current() then return end -- a newer plugin took over while we were waiting
     if command == BridgeClient.NO_CONTENT then
       LrTasks.sleep(2)
     elseif command then
@@ -40,6 +40,14 @@ LrTasks.startAsyncTask(function()
       if postErr then Log.warn("automation: result not delivered: %s", postErr) end
     else
       Log.warn("automation: %s", tostring(err))
+      LrTasks.sleep(5)
+    end
+  end
+  while current() do
+    -- One failing step must never end the channel (a yield error inside plain pcall once did).
+    local ok, err = LrTasks.pcall(step)
+    if not ok then
+      Log.warn("automation step failed: %s", tostring(err))
       LrTasks.sleep(5)
     end
   end
