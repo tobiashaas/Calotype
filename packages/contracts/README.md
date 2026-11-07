@@ -1,11 +1,11 @@
-# API- und Daten-Contracts
+# API and data contracts
 
-Dieses Verzeichnis ist die **Kanonical Version** für:
+This directory is the **canonical version** for:
 
-- REST-Schnittstelle zwischen **Bridge** und **FastAPI**: `openapi/bridge-api.yaml`
-- JSON-Schemas für payloads, Envelopes und Events: `json-schema/` (insb. **`job-envelope-v1`** für Redis)
+- REST interface between **Bridge** and **FastAPI**: `openapi/bridge-api.yaml`
+- JSON schemas for payloads, envelopes and events: `json-schema/` (especially **`job-envelope-v1`** for Redis)
 
-## CI Contract-Checks (Empfehlung)
+## CI contract checks (recommended)
 
 ```bash
 pip install openapi-spec-validator check-jsonschema
@@ -14,6 +14,6 @@ check-jsonschema --schemafile json-schema/job-train-request-v1.schema.json examp
 check-jsonschema --schemafile json-schema/job-envelope-v1.schema.json examples/job-envelope.example.json
 ```
 
-Automatisch: Root-Skript `python scripts/validate_contracts.py` oder Workflow `.github/workflows/ci.yml`.
+Automated: root script `python scripts/validate_contracts.py` or workflow `.github/workflows/ci.yml`.
 
-Typgenerierung für Bridge oder Python-Client ist optional (`datamodel-codegen`, `openapi-generator-cli`).
+Type generation for the Bridge or a Python client is optional (`datamodel-codegen`, `openapi-generator-cli`).

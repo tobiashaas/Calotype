@@ -1,26 +1,26 @@
 # edit-serializer
 
-Übersetzt zwischen den internen Modell-Parametern und Lightroom-Classic-Develop-Settings.
-Reine Transformation, keine Abhängigkeiten.
+Translates between the internal model parameters and Lightroom Classic develop settings.
+Pure transformation, no dependencies.
 
-| Richtung | Funktion | Einsatz |
+| Direction | Function | Use |
 |---|---|---|
-| Lightroom → intern | `from_lightroom(settings, format_type)` | Train-Worker: Trainingsziele aus `photo:getDevelopSettings()` |
-| intern → Lightroom | `to_lightroom(params, format_type)` / `serialize_for_lightroom` | Inference-Worker: Werte für `photo:applyDevelopSettings()` |
+| Lightroom → internal | `from_lightroom(settings, format_type)` | Train worker: training targets from `photo:getDevelopSettings()` |
+| internal → Lightroom | `to_lightroom(params, format_type)` / `serialize_for_lightroom` | Inference worker: values for `photo:applyDevelopSettings()` |
 
-`to_lightroom` begrenzt jeden Wert auf den Regler-Bereich und rundet auf Lightrooms
-Genauigkeit (Belichtung 2 Nachkommastellen, sonst ganze Zahlen).
+`to_lightroom` clamps every value to the slider range and rounds to Lightroom's
+precision (exposure 2 decimal places, otherwise whole numbers).
 
-| intern | RAW | JPEG/TIFF | Bereich |
+| internal | RAW | JPEG/TIFF | Range |
 |---|---|---|---|
 | `exposure` | `Exposure2012` | `Exposure2012` | −5 … +5 |
 | `temp` | `Temperature` (Kelvin) | `IncrementalTemperature` | 2000 … 50000 / −100 … +100 |
 | `tint` | `Tint` | `IncrementalTint` | −150 … +150 / −100 … +100 |
 | `contrast`, `highlights`, `shadows`, `whites`, `blacks` | `*2012` | `*2012` | −100 … +100 |
-| `vibrance`, `saturation` | `Vibrance`, `Saturation` | gleich | −100 … +100 |
+| `vibrance`, `saturation` | `Vibrance`, `Saturation` | same | −100 … +100 |
 
-Fehlende Lightroom-Werte zählen als neutral (0). Ausnahme: Bei RAW gibt es für fehlende
-`Temperature` keinen sinnvollen Standard — das Foto wird dann nicht zum Training genutzt.
+Missing Lightroom values count as neutral (0). Exception: for RAW there is no sensible default
+for a missing `Temperature` — the photo is then not used for training.
 
 ```bash
 pip install -e "libs/edit-serializer[dev]"

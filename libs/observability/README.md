@@ -1,3 +1,3 @@
 # lr-frameflow-observability
 
-Minimale strukturierte Logs; später erweiterbar um OpenTelemetry.
+Minimal structured logs; can be extended with OpenTelemetry later.

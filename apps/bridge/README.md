@@ -1,88 +1,88 @@
 # Bridge (Tauri + Rust)
 
-Lokaler Dienst zwischen Lightroom-Plugin und Server-API (siehe
+Local service between the Lightroom plugin and the server API (see
 [ADR 004](../../docs/adr/004-bridge-localhost-architecture.md)).
 
 ```
-Plugin ──HTTP 127.0.0.1:47600──▶ Bridge ──SQLite-Outbox──▶ Server-API
-       ◀── Status + lr_settings ──        ◀── Polling ───
+Plugin ──HTTP 127.0.0.1:47600──▶ Bridge ──SQLite outbox──▶ Server API
+       ◀── status + lr_settings ──        ◀── polling ───
 ```
 
-| Ordner | Inhalt |
+| Folder | Contents |
 |---|---|
-| `core/` | `lrff-bridge-core`: lokale API (axum), Outbox (SQLite), Vorschau aus der Originaldatei, API-Client. Ohne Tauri testbar, läuft auch headless. |
-| `src-tauri/` | Desktop-App: startet den Kern, Statusfenster, Befehle `bridge_status` / `set_api_base_url` / `retry_now`. |
-| `ui/` | Statusfenster (statisches HTML/JS, kein Bundler). |
+| `core/` | `lrff-bridge-core`: local API (axum), outbox (SQLite), preview from the original file, API client. Testable without Tauri, also runs headless. |
+| `src-tauri/` | Desktop app: starts the core, status window, commands `bridge_status` / `set_api_base_url` / `retry_now`. |
+| `ui/` | Status window (static HTML/JS, no bundler). |
 
-Vertrag der lokalen API: [`packages/contracts/openapi/plugin-bridge-api.yaml`](../../packages/contracts/openapi/plugin-bridge-api.yaml).
+Contract of the local API: [`packages/contracts/openapi/plugin-bridge-api.yaml`](../../packages/contracts/openapi/plugin-bridge-api.yaml).
 
-## Was die Bridge tut
+## What the Bridge does
 
-- **Lokale API** nur auf `127.0.0.1`. Beim ersten Start entsteht `bridge.json` (Port,
-  Zufalls-Token, Server-Adresse) im Datenordner: `%APPDATA%\LRFrameFlow` bzw.
-  `~/Library/Application Support/LRFrameFlow` (überschreibbar mit `LRFF_BRIDGE_DATA_DIR`).
-  Jeder `/v1`-Aufruf braucht den Header `X-LRFF-Token`.
-- **Outbox:** Fotos und Jobs landen zuerst in `bridge.sqlite3`. Eine Hintergrundschleife
-  baut Vorschauen, lädt hoch, legt Jobs an (fester `Idempotency-Key`) und pollt den Status.
-  Netzfehler, 5xx/429 und nicht erreichbare Dateien (abgesteckte Platte) → neuer Versuch mit
-  Backoff (2 s … 5 min). Abgelehnte Anfragen (4xx) und kaputte Dateien → `failed` mit Grund.
-- **Vorschau = unbearbeitetes Bild:** bei RAW das kleinste eingebettete Kamera-JPEG, das
-  1200 px abdeckt (sonst das größte), bei JPEG/TIFF/PNG die Datei selbst; längste Seite
-  ≤ 1200 px, Ausrichtung aus RAW-Container bzw. EXIF angewendet. Enthält eine RAW nur ein
-  Vollformat-JPEG (z. B. Canon CR2), wird es direkt verkleinert dekodiert (DCT-Skalierung).
-  Gemessen: Canon CR3 ~200 ms, Canon CR2 ~300 ms pro Foto (lokale SSD).
+- **Local API** on `127.0.0.1` only. On first start, `bridge.json` (port,
+  random token, server address) is created in the data folder: `%APPDATA%\LRFrameFlow` or
+  `~/Library/Application Support/LRFrameFlow` (override with `LRFF_BRIDGE_DATA_DIR`).
+  Every `/v1` call needs the `X-LRFF-Token` header.
+- **Outbox:** photos and jobs land in `bridge.sqlite3` first. A background loop
+  builds previews, uploads, creates jobs (fixed `Idempotency-Key`) and polls the status.
+  Network errors, 5xx/429 and unreachable files (unplugged drive) → retry with
+  backoff (2 s … 5 min). Rejected requests (4xx) and broken files → `failed` with a reason.
+- **Preview = unedited image:** for RAW, the smallest embedded camera JPEG that
+  covers 1200 px (otherwise the largest); for JPEG/TIFF/PNG, the file itself. Longest side
+  ≤ 1200 px, orientation from the RAW container or EXIF applied. If a RAW contains only a
+  full-size JPEG (e.g. Canon CR2), it is decoded directly at reduced size (DCT scaling).
+  Measured: Canon CR3 ~200 ms, Canon CR2 ~300 ms per photo (local SSD).
 
-## Ordner-Modus (ohne Lightroom)
+## Folder mode (without Lightroom)
 
-`lrff-folder` arbeitet mit RAW + XMP-Sidecars und spricht mit der laufenden Bridge:
+`lrff-folder` works with RAW + XMP sidecars and talks to the running Bridge:
 
 ```bash
-lrff-folder train  <ordner> --name "Business Warm" --genre business   # bearbeitete RAWs (RAW + XMP)
-lrff-folder apply  <ordner> --profile "Business Warm"                  # schreibt IMG_0001.xmp neben jede RAW
+lrff-folder train  <folder> --name "Business Warm" --genre business   # edited RAWs (RAW + XMP)
+lrff-folder apply  <folder> --profile "Business Warm"                  # writes IMG_0001.xmp next to each RAW
 lrff-folder profiles
 
-# Stil-Ebene: Modell bestimmt Belichtung/WB/Ton pro Foto, das Preset den Look
-lrff-folder train  <ordner> --name "Business + Look" --style mein-preset.xmp
+# Style layer: the model sets exposure/WB/tone per photo, the preset sets the look
+lrff-folder train  <folder> --name "Business + Look" --style my-preset.xmp
 
-# Train/Test-Aufteilung und Ausgabe in einen anderen Ordner (Quelle bleibt unberührt)
-lrff-folder train  <ordner> --name X --files-from train.txt
-lrff-folder apply  <ordner> --profile X --files-from test.txt --out <ausgabe>
+# Train/test split and output to another folder (source stays untouched)
+lrff-folder train  <folder> --name X --files-from train.txt
+lrff-folder apply  <folder> --profile X --files-from test.txt --out <output>
 ```
 
-- Training nutzt nur RAWs, deren XMP Develop-Settings enthält (`crs:Exposure2012` …).
-- `apply` überspringt bereits bearbeitete Fotos (deine XMPs); `--force` aktualisiert nur die
-  `crs:`-Werte darin und lässt Sterne, Stichwörter usw. stehen. Neue XMPs tragen
-  `crs:ProcessVersion="15.4"` und `lrff:Profile="…"`.
-- Danach den Ordner in Lightroom importieren — die Fotos sind sofort bearbeitet. Für Fotos, die
-  schon im Katalog sind, ist das Plugin der richtige Weg.
-- Foto-IDs außerhalb eines Katalogs: `file-` + SHA-256 über Größe, erstes und letztes MiB
-  (stabil bei Verschieben/Umbenennen).
+- Training uses only RAWs whose XMP contains develop settings (`crs:Exposure2012` …).
+- `apply` skips photos that are already edited (your XMPs); `--force` updates only the
+  `crs:` values in them and leaves stars, keywords etc. in place. New XMPs carry
+  `crs:ProcessVersion="15.4"` and `lrff:Profile="…"`.
+- Then import the folder into Lightroom — the photos are edited right away. For photos that
+  are already in the catalog, the plugin is the right way.
+- Photo IDs outside a catalog: `file-` + SHA-256 over size, first and last MiB
+  (stable when moving/renaming).
 
-## Entwickeln
+## Development
 
 ```bash
-# Kern: Tests + Lint (schnell, ohne Tauri)
+# Core: tests + lint (fast, without Tauri)
 cargo test -p lrff-bridge-core
 cargo clippy -p lrff-bridge-core --all-targets -- -D warnings
 
-# Vorschau-Extraktion an echten RAWs prüfen (Zeit, Größe, Ausrichtung)
-cargo run --release -p lrff-bridge-core --example preview -- <out-dir> <raw-dateien>
+# Check preview extraction on real RAWs (time, size, orientation)
+cargo run --release -p lrff-bridge-core --example preview -- <out-dir> <raw-files>
 
-# Ohne Fenster laufen lassen
+# Run without a window
 cargo run -p lrff-bridge-core --bin lrff-bridge-headless
 
-# Desktop-App
+# Desktop app
 npm install
-npm run dev        # Debug-Fenster
-npm run build      # Installer (MSI/NSIS bzw. .dmg)
+npm run dev        # debug window
+npm run build      # installer (MSI/NSIS or .dmg)
 ```
 
-Windows braucht die MSVC Build Tools und WebView2 (bei Windows 11 vorinstalliert).
+Windows needs the MSVC Build Tools and WebView2 (preinstalled on Windows 11).
 
-## Bekannte Grenzen
+## Known limits
 
-- Schließen des Fensters beendet die Bridge (Tray-Modus folgt).
-- Fotos, die schon hochgeladen sind, werden bei erneuter Registrierung nicht aktualisiert —
-  die Server-API ist pro `lr_catalog_uuid` idempotent und übernimmt neue Develop-Settings nicht.
-- Vorschauen werden nacheinander gebaut (4 pro Durchlauf) — für große Shootings parallelisieren.
-- Ordner-Modus schreibt nur RAW-Sidecars; JPEG/TIFF tragen XMP in der Datei selbst.
+- Closing the window quits the Bridge (tray mode will follow).
+- Photos that are already uploaded are not updated when registered again —
+  the server API is idempotent per `lr_catalog_uuid` and does not take over new develop settings.
+- Previews are built one after another (4 per pass) — parallelize for large shoots.
+- Folder mode writes RAW sidecars only; JPEG/TIFF carry XMP inside the file itself.

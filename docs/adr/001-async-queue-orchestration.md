@@ -1,19 +1,19 @@
-# ADR 001 — Asynchrone Job-Orchestrierung über Queue
+# ADR 001 — Asynchronous job orchestration via a queue
 
-- **Status:** Akzeptiert
-- **Datum:** 2026-05-01
-- **Entscheider:** Maintainer
+- **Status:** Accepted
+- **Date:** 2026-05-01
+- **Deciders:** Maintainer
 
-## Kontext
+## Context
 
-Die Lightroom-Pipeline besteht aus teuren Schritten (Features, Embedding, Retrieval, Inferenz). Ein synchron blockierender FastAPI-Handler würde Timeouts riskieren und Skalierung verhindern.
+The Lightroom pipeline consists of expensive steps (features, embedding, retrieval, inference). A synchronously blocking FastAPI handler would risk timeouts and prevent scaling.
 
-## Entscheidung
+## Decision
 
-- FastAPI gibt **HTTP 202** mit `job_id` zurück und persistiert Payload + Zustände in Postgres (`jobs` später via Migrationen).
-- Lang laufende Schritte laufen **asynchron** in dedizierten **Worker-Prozessen**, angebunden über **Redis als Queue** (`REDIS_URL` in [`infra/compose/env.example`](../../infra/compose/env.example)). Alternativen wie Temporal können später ohne Verlust der Modularität evaluiert werden.
+- FastAPI returns **HTTP 202** with `job_id` and persists payload + states in Postgres (`jobs` later via migrations).
+- Long-running steps run **asynchronously** in dedicated **worker processes**, connected via **Redis as a queue** (`REDIS_URL` in [`infra/compose/env.example`](../../infra/compose/env.example)). Alternatives such as Temporal can be evaluated later without losing modularity.
 
-## Folgen / Trade-offs
+## Consequences / trade-offs
 
-- **Positiv:** Horizontales Skalieren für `inference_worker`, saubere Trennung API vs. Arbeit, weniger kopplende Retries möglich (Idempotency-Key Header).
-- **Negativ:** Zusätzlicher Betrieb (Redis), erhöhte Komplexität lokal gegenüber allem-in-Prozess — entspricht jedoch dem Skalierungsziel aus dem Produktkonzept.
+- **Positive:** Horizontal scaling for `inference_worker`, clean separation of API vs. work, retries with less coupling possible (Idempotency-Key header).
+- **Negative:** Additional operations (Redis), more local complexity compared with everything-in-process — but this matches the scaling goal from the product concept.

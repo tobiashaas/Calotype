@@ -1,36 +1,36 @@
 # MVP Plan — LRFrameFlow
 
-**Stand:** 2026-05-15  
-**Ziel:** Vollständig funktionierendes System vom LR-Plugin bis zur Rückspielung der Develop-Settings, mit echter ML-Pipeline — schrittweise aufgebaut, nie blind.
+**As of:** 2026-05-15  
+**Goal:** A fully working system from the LR plugin to writing the develop settings back, with a real ML pipeline — built step by step, never blind.
 
 ---
 
-## Leitprinzipien
+## Guiding principles
 
-- **Domain first.** Bevor Code entsteht, steht das Datenmodell. Alles andere leitet sich daraus ab.
-- **End-to-End vor Perfektion.** Jede Phase endet mit einem lauffähigen, testbaren System — kein toter Code.
-- **Stubs sind okay, Lücken nicht.** Ein Stub der echte Daten durch echte Infrastruktur schickt ist besser als perfekter Code der nirgendwo angeschlossen ist.
-- **Contracts sind heilig.** JSON-Schema und OpenAPI werden vor der Implementierung aktualisiert, nicht danach.
+- **Domain first.** The data model exists before any code. Everything else derives from it.
+- **End-to-end before perfection.** Every phase ends with a runnable, testable system — no dead code.
+- **Stubs are fine, gaps are not.** A stub that sends real data through real infrastructure is better than perfect code that is connected to nothing.
+- **Contracts are sacred.** JSON Schema and OpenAPI are updated before the implementation, not after.
 
 ---
 
-## Domain-Modell (beschlossen, gilt für alle Phasen)
+## Domain model (decided, applies to all phases)
 
 ```
 Photo
-├── id                    UUID, intern vergeben
-├── lr_catalog_uuid       String — von LR Classic vergeben, stabiler Identifier
-├── s3_key                String — Pfad der JPEG-Preview in MinIO
-├── exif_snapshot         JSONB — Kamera, ISO, Belichtung, Brennweite etc.
-├── lr_develop_settings   JSONB — aktuelle LR-Einstellungen beim Export (Baseline)
-├── feature_vector_id     → FeatureVector (nullable, null bis extrahiert)
+├── id                    UUID, assigned internally
+├── lr_catalog_uuid       String — assigned by LR Classic, stable identifier
+├── s3_key                String — path of the JPEG preview in MinIO
+├── exif_snapshot         JSONB — camera, ISO, exposure, focal length etc.
+├── lr_develop_settings   JSONB — current LR settings at export (baseline)
+├── feature_vector_id     → FeatureVector (nullable, null until extracted)
 └── created_at
 
 FeatureVector
 ├── id                    UUID
 ├── photo_id              → Photo
-├── model_version         String — Versionierung des Extraktions-Algorithmus
-├── vector                pgvector — Dimension abhängig von model_version
+├── model_version         String — versioning of the extraction algorithm
+├── vector                pgvector — dimension depends on model_version
 └── created_at
 
 Profile
@@ -40,27 +40,27 @@ Profile
 ├── format_type           "raw" | "jpeg_tiff"
 ├── color_type            "color" | "bw"
 ├── status                "draft" | "training" | "ready" | "failed"
-├── version               Int — hochzählen bei Retraining
-├── base_preset           JSONB — optionaler LR-Preset als Startpunkt
-├── model_artifact_key    String nullable — S3-Key der gespeicherten Modellgewichte
-├── lr_output_keys        JSONB — welche LR-Parameter dieses Profil vorhersagt
-│                                 z.B. ["exposure", "contrast", "highlights", ...]
+├── version               Int — incremented on retraining
+├── base_preset           JSONB — optional LR preset as a starting point
+├── model_artifact_key    String nullable — S3 key of the stored model weights
+├── lr_output_keys        JSONB — which LR parameters this profile predicts
+│                                 e.g. ["exposure", "contrast", "highlights", ...]
 ├── failure_reason        String nullable
 └── created_at / updated_at
 
-Job (Erweiterung bestehend)
-└── profile_id            → Profile (nullable, required für Edit-Jobs)
+Job (extension of existing)
+└── profile_id            → Profile (nullable, required for edit jobs)
 ```
 
-**Kernentscheidungen:**
-- Feature-Vektoren sind **Photo-unabhängig von Profilen** — einmal berechnen, beliebig oft nutzen
-- Ein Profil speichert **sowohl** ML-Gewichte (MinIO) **als auch** LR-Parameter-Template (DB)
-- Fotos werden über `lr_catalog_uuid` identifiziert — LR ist die Quelle der Wahrheit für IDs
-- Zurückspielen = LR Develop Settings als JSON, niemals RAW-Manipulation
+**Key decisions:**
+- Feature vectors are **per photo, independent of profiles** — compute once, use as often as needed
+- A profile stores **both** ML weights (MinIO) **and** an LR parameter template (DB)
+- Photos are identified by `lr_catalog_uuid` — LR is the source of truth for IDs
+- Writing back = LR develop settings as JSON, never RAW manipulation
 
 ---
 
-## Datenfluss (Gesamtbild)
+## Data flow (big picture)
 
 ```
 ┌─────────────┐    Preview+Meta    ┌────────┐    HTTP POST    ┌─────┐
@@ -80,19 +80,19 @@ Job (Erweiterung bestehend)
      ┌──────────▼──────────┐   ┌───────────▼────────────────────────┐
      │   Feature Worker    │   │         Train Worker               │
      │                     │   │                                    │
-     │ 1. Lade Preview      │   │ 1. Lade Photo-Features            │
-     │    aus MinIO        │   │ 2. Trainiere Modell                │
-     │ 2. Extrahiere       │   │ 3. Speichere Gewichte → MinIO      │
-     │    Features         │   │ 4. Update Profile → ready          │
-     │ 3. Speichere        │   └────────────────────────────────────┘
+     │ 1. Load preview     │   │ 1. Load photo features             │
+     │    from MinIO       │   │ 2. Train model                     │
+     │ 2. Extract          │   │ 3. Save weights → MinIO            │
+     │    features         │   │ 4. Update profile → ready          │
+     │ 3. Save             │   └────────────────────────────────────┘
      │    pgvector         │
      │ 4. Forward →        │   ┌────────────────────────────────────┐
      │    inference queue  │   │       Inference Worker             │
      └─────────────────────┘   │                                    │
-                                │ 1. Lade Profil + Gewichte         │
-                                │ 2. Lade Feature-Vektor            │
-                                │ 3. Berechne LR-Settings           │
-                                │ 4. Speichere Result → DB/MinIO    │
+                                │ 1. Load profile + weights         │
+                                │ 2. Load feature vector            │
+                                │ 3. Compute LR settings            │
+                                │ 4. Save result → DB/MinIO         │
                                 │ 5. Job → completed                 │
                                 └────────────────────────────────────┘
 ```
@@ -101,30 +101,30 @@ Job (Erweiterung bestehend)
 
 ## Phase 1 — Domain Foundation
 
-**Ziel:** Vollständiges DB-Schema, Domain-Modelle, aktualisierte Contracts. Kein Worker-Code, kein ML. Aber echte Tabellen, echte Migrations, echte Schemas.
+**Goal:** Complete DB schema, domain models, updated contracts. No worker code, no ML. But real tables, real migrations, real schemas.
 
-### 1.1 Domain Library (`libs/domain`)
+### 1.1 Domain library (`libs/domain`)
 
-- `Photo`, `FeatureVector`, `Profile` als Pydantic-Modelle / Enums
-- `ProfileStatus` Enum: `draft | training | ready | failed`
-- Erweitere `JobKind` falls nötig
+- `Photo`, `FeatureVector`, `Profile` as Pydantic models / enums
+- `ProfileStatus` enum: `draft | training | ready | failed`
+- Extend `JobKind` if needed
 
 ### 1.2 Persistence (`libs/persistence`)
 
-Neue SQLAlchemy-Modelle:
+New SQLAlchemy models:
 
 ```python
-# models.py Ergänzungen
+# models.py additions
 class Photo(Base): ...
 class FeatureVector(Base): ...
 class Profile(Base): ...
 ```
 
-`Job`-Modell erweitern:
+Extend the `Job` model:
 - `profile_id: UUID | None` (FK → profiles)
-- `started_at: datetime | None` (für Stuck-Job-Detection, Phase 4)
+- `started_at: datetime | None` (for stuck-job detection, Phase 4)
 
-Neue Repositories:
+New repositories:
 - `PhotoRepository`: create, get_by_lr_uuid, get_by_id
 - `ProfileRepository`: create, get_by_id, set_status, set_artifact
 - `FeatureVectorRepository`: create, get_by_photo_id
@@ -139,75 +139,75 @@ Neue Repositories:
 006_add_started_at_to_jobs.py
 ```
 
-### 1.4 Contracts aktualisieren (`packages/contracts`)
+### 1.4 Update contracts (`packages/contracts`)
 
-JSON Schemas aktualisieren/erstellen:
-- `job-train-request-v1.schema.json` — bereits vorhanden, bleibt
-- `job-edit-request-v1.schema.json` — bereits vorhanden, bleibt
-- `photo-upload-v1.schema.json` — **neu**: was das Plugin ans Backend schickt
-- `edit-result-v1.schema.json` — **neu**: LR Develop Settings die zurückgegeben werden
+Update/create JSON schemas:
+- `job-train-request-v1.schema.json` — already exists, stays
+- `job-edit-request-v1.schema.json` — already exists, stays
+- `photo-upload-v1.schema.json` — **new**: what the plugin sends to the backend
+- `edit-result-v1.schema.json` — **new**: LR develop settings that are returned
 
-OpenAPI `bridge-api.yaml` erweitern:
-- `POST /v1/photos` — Photo hochladen (Preview + Metadata)
-- `GET /v1/profiles` — Liste aller Profile
-- `GET /v1/profiles/{profile_id}` — Profil-Status
+Extend OpenAPI `bridge-api.yaml`:
+- `POST /v1/photos` — upload a photo (preview + metadata)
+- `GET /v1/profiles` — list of all profiles
+- `GET /v1/profiles/{profile_id}` — profile status
 
-### 1.5 API-Routen (`services/api`)
+### 1.5 API routes (`services/api`)
 
-Neue Endpoints:
-- `POST /v1/photos` — nimmt Multipart (JPEG Preview + JSON Metadata), lädt in MinIO, erstellt `Photo`-Record, gibt `photo_id` zurück
-- `GET /v1/profiles` — listet Profile
-- `GET /v1/profiles/{profile_id}` — Profil-Details inkl. Status
+New endpoints:
+- `POST /v1/photos` — accepts multipart (JPEG preview + JSON metadata), uploads to MinIO, creates a `Photo` record, returns `photo_id`
+- `GET /v1/profiles` — lists profiles
+- `GET /v1/profiles/{profile_id}` — profile details including status
 
-`POST /v1/jobs/edit` anpassen:
-- muss `profile_id` validieren (existiert das Profil? ist es `ready`?)
-- muss `photo_ids` auf bekannte Photos prüfen
+Adjust `POST /v1/jobs/edit`:
+- must validate `profile_id` (does the profile exist? is it `ready`?)
+- must check `photo_ids` against known photos
 
-**Deliverable:** `docker compose up` → Migrations laufen durch → alle Endpoints erreichbar → Contracts validieren in CI.
+**Deliverable:** `docker compose up` → migrations run through → all endpoints reachable → contracts validate in CI.
 
 ---
 
 ## Phase 2 — End-to-End Pipeline (Stubs)
 
-**Ziel:** Echter Datenfluss von Bridge bis zur Rückgabe von LR-Settings. Worker-Logik ist noch Stub (keine echten ML-Berechnungen), aber alle Statusübergänge, DB-Writes und Queue-Nachrichten sind real.
+**Goal:** Real data flow from the Bridge to returning LR settings. Worker logic is still a stub (no real ML computations), but all status transitions, DB writes and queue messages are real.
 
-### 2.1 Feature Worker
+### 2.1 Feature worker
 
 ```
 consume lrff:jobs:feature
-→ lade Preview aus MinIO (s3_key aus Photo-Record)
-→ berechne Stub-Features (z.B. 64-dimensionaler Nullvektor)
-→ schreibe FeatureVector in DB (pgvector)
+→ load preview from MinIO (s3_key from the Photo record)
+→ compute stub features (e.g. 64-dimensional zero vector)
+→ write FeatureVector to DB (pgvector)
 → update Photo.feature_vector_id
 → forward envelope → lrff:jobs:inference
 ```
 
-### 2.2 Train Worker
+### 2.2 Train worker
 
 ```
 consume lrff:jobs:train
-→ lade alle photo_ids aus dem Payload
-→ lade deren FeatureVectors (wenn nicht vorhanden: Job FAILED mit klarer Meldung)
-→ Stub: "trainiere" ein Modell (speichere leere JSON-Datei in MinIO)
+→ load all photo_ids from the payload
+→ load their FeatureVectors (if missing: job FAILED with a clear message)
+→ stub: "train" a model (save an empty JSON file in MinIO)
 → update Profile: model_artifact_key, status → ready
 → Job → completed
 ```
 
-### 2.3 Inference Worker
+### 2.3 Inference worker
 
 ```
 consume lrff:jobs:inference
-→ lade profile_id aus envelope.payload
-→ lade Profile (model_artifact_key)
-→ lade FeatureVector des Photos
-→ Stub: gib base_preset zurück (oder leere Settings)
-→ speichere EditResult in DB/MinIO
-→ Job → completed, result_key gesetzt
+→ load profile_id from envelope.payload
+→ load Profile (model_artifact_key)
+→ load the photo's FeatureVector
+→ stub: return base_preset (or empty settings)
+→ save EditResult in DB/MinIO
+→ Job → completed, result_key set
 ```
 
 ### 2.4 EditResult
 
-Neues Konzept — wo landet das Ergebnis?
+New concept — where does the result end up?
 
 ```
 EditResult
@@ -215,135 +215,135 @@ EditResult
 ├── job_id        → Job
 ├── photo_id      → Photo
 ├── profile_id    → Profile
-├── s3_key        String nullable — vollständige Settings-Datei in MinIO
-├── lr_settings   JSONB — kompakte Develop-Settings direkt in DB
-│                         (für schnellen Abruf ohne MinIO-Roundtrip)
+├── s3_key        String nullable — full settings file in MinIO
+├── lr_settings   JSONB — compact develop settings directly in the DB
+│                         (for fast retrieval without a MinIO round trip)
 └── created_at
 ```
 
-Neuer Endpoint:
-- `GET /v1/jobs/{job_id}/result` — gibt `lr_settings` zurück wenn Job completed
+New endpoint:
+- `GET /v1/jobs/{job_id}/result` — returns `lr_settings` when the job is completed
 
-### 2.5 Bridge (Tauri — Minimal)
+### 2.5 Bridge (Tauri — minimal)
 
-Für Phase 2 reicht ein minimales Tauri-Backend:
-- Nimmt Photo-Daten vom LR-Plugin entgegen (lokaler HTTP-Server auf einem Port)
-- Ruft `POST /v1/photos` auf
-- Ruft `POST /v1/jobs/edit` oder `POST /v1/jobs/train` auf
-- Pollt `GET /v1/jobs/{job_id}` bis completed
-- Gibt `lr_settings` an LR-Plugin zurück
+For Phase 2 a minimal Tauri backend is enough:
+- Accepts photo data from the LR plugin (local HTTP server on a port)
+- Calls `POST /v1/photos`
+- Calls `POST /v1/jobs/edit` or `POST /v1/jobs/train`
+- Polls `GET /v1/jobs/{job_id}` until completed
+- Returns `lr_settings` to the LR plugin
 
-### 2.6 LR Plugin (Lua — Minimal)
+### 2.6 LR plugin (Lua — minimal)
 
-- Export-Dialog: ausgewählte Fotos als JPEG-Preview (1200px längste Seite)
-- Schickt Preview + EXIF + aktuelle Develop-Settings an Bridge
-- Wartet auf Result (einfaches Polling mit Progress-Dialog)
-- Wendet `lr_settings` mit `photo:developSettings` an
+- Export dialog: selected photos as JPEG preview (1200px longest side)
+- Sends preview + EXIF + current develop settings to the Bridge
+- Waits for the result (simple polling with a progress dialog)
+- Applies `lr_settings` with `photo:developSettings`
 
-**Deliverable:** Foto in LR auswählen → Train-Job starten → Edit-Job starten → LR-Settings werden auf das Foto angewendet. Alles mit Stub-Werten, aber der gesamte Datenfluss funktioniert.
+**Deliverable:** Select a photo in LR → start a train job → start an edit job → LR settings are applied to the photo. Everything with stub values, but the whole data flow works.
 
 ---
 
-## Phase 3 — Echte ML-Pipeline
+## Phase 3 — Real ML Pipeline
 
-**Ziel:** Reale Feature-Extraktion, reales Training, reale Inference. Stubs werden durch echte Algorithmen ersetzt — DB-Schema bleibt unverändert.
+**Goal:** Real feature extraction, real training, real inference. Stubs are replaced by real algorithms — the DB schema stays unchanged.
 
-### 3.1 Feature-Extraktion (`libs/inference-pipeline`)
+### 3.1 Feature extraction (`libs/inference-pipeline`)
 
-MVP-Features (kein Deep Learning nötig):
+MVP features (no deep learning needed):
 ```
-- Farbhistogramm RGB + HSL (je 32 bins = 192 Werte)
-- Globale Stats: Helligkeit, Kontrast, Sättigung (Mittelwert + Stddev)
-- Tonkurven-Charakteristik (Highlights/Shadows/Midtones Verhältnis)
-- Schärfe-Schätzung (Laplacian-Varianz)
+- Color histogram RGB + HSL (32 bins each = 192 values)
+- Global stats: brightness, contrast, saturation (mean + stddev)
+- Tone curve characteristics (highlights/shadows/midtones ratio)
+- Sharpness estimate (Laplacian variance)
 ```
-→ ~200-dimensionaler Vektor, schnell zu berechnen, kein GPU-Bedarf
+→ ~200-dimensional vector, fast to compute, no GPU needed
 
-Später als Drop-in: CLIP-Embedding (512/768 dim) — `model_version`-Feld in `FeatureVector` macht das sauber austauschbar.
+Later as a drop-in: CLIP embedding (512/768 dim) — the `model_version` field in `FeatureVector` makes this cleanly swappable.
 
-### 3.2 Training (`libs/` neues Paket: `lr-model-trainer`)
+### 3.2 Training (`libs/` new package: `lr-model-trainer`)
 
-MVP-Modell: **Gradient Boosted Trees** (XGBoost/LightGBM) pro LR-Parameter
+MVP model: **gradient boosted trees** (XGBoost/LightGBM) per LR parameter
 ```
 Input:  FeatureVector (200 dim)
 Output: Dict[lr_param_name → float]
-        z.B. {"exposure": 0.3, "contrast": 15, "highlights": -20, ...}
+        e.g. {"exposure": 0.3, "contrast": 15, "highlights": -20, ...}
 ```
 
-Pro Profil wird ein Modell trainiert — gespeichert als Pickle/ONNX in MinIO.
+One model is trained per profile — stored as Pickle/ONNX in MinIO.
 
-Training-Daten: die `lr_develop_settings` der Trainingsfotos sind die Labels.
+Training data: the `lr_develop_settings` of the training photos are the labels.
 
 ### 3.3 Inference
 
 ```
-FeatureVector  →  lade Modell aus MinIO  →  predict LR-Settings
+FeatureVector  →  load model from MinIO  →  predict LR settings
 ```
 
-Output direkt als `lr_settings` JSONB → kein Umweg.
+Output directly as `lr_settings` JSONB → no detour.
 
-### 3.4 Qualitätssicherung
+### 3.4 Quality assurance
 
-- Mean Absolute Error pro LR-Parameter als Trainingsmetrik
-- Gespeichert in `Profile.training_metrics` (JSONB, neues Feld)
-- Sichtbar im Bridge-UI
+- Mean absolute error per LR parameter as the training metric
+- Stored in `Profile.training_metrics` (JSONB, new field)
+- Visible in the Bridge UI
 
-**Deliverable:** Echter Lerneffekt — System lernt aus echten LR-Einstellungen und überträgt den Stil auf neue Fotos.
+**Deliverable:** A real learning effect — the system learns from real LR settings and transfers the style to new photos.
 
 ---
 
 ## Phase 4 — Production Hardening
 
-**Ziel:** Das System ist zuverlässig, nicht nur funktional. Keine Job-Verluste, keine stuck States, keine Connection-Leaks.
+**Goal:** The system is reliable, not just functional. No lost jobs, no stuck states, no connection leaks.
 
-### 4.1 Zuverlässige Queue (At-Least-Once Delivery)
+### 4.1 Reliable queue (at-least-once delivery)
 
-Aktuelles Problem: `BLPOP` entfernt sofort — Worker-Absturz = Job weg.
+Current problem: `BLPOP` removes immediately — worker crash = job gone.
 
-Lösung mit Redis `LMOVE`:
+Solution with Redis `LMOVE`:
 ```
-BLMOVE {queue} {queue}:processing RIGHT LEFT (atomisch)
-→ verarbeiten
-→ LREM {queue}:processing 1 {payload} (Ack)
+BLMOVE {queue} {queue}:processing RIGHT LEFT (atomic)
+→ process
+→ LREM {queue}:processing 1 {payload} (ack)
 
-Recovery-Task (beim Worker-Start + periodisch):
+Recovery task (at worker start + periodically):
 → scan {queue}:processing
-→ Jobs älter als N Minuten → zurück in {queue}
+→ jobs older than N minutes → back into {queue}
 ```
 
-### 4.2 Stuck-Job-Recovery
+### 4.2 Stuck-job recovery
 
-- Worker setzt `started_at` beim Aufnehmen eines Jobs
-- Cron-Job (oder Worker-Startup-Check): Jobs mit `status=running` und `started_at < now() - 10min` → zurück auf `queued`, `attempt + 1`
-- Nach `max_attempts` (z.B. 3): `failed` mit Reason "max_attempts_exceeded"
+- The worker sets `started_at` when it picks up a job
+- Cron job (or worker startup check): jobs with `status=running` and `started_at < now() - 10min` → back to `queued`, `attempt + 1`
+- After `max_attempts` (e.g. 3): `failed` with reason "max_attempts_exceeded"
 
-### 4.3 Retry-Logik
+### 4.3 Retry logic
 
-`attempt`-Feld im Envelope wird endlich genutzt:
+The `attempt` field in the envelope finally gets used:
 ```python
 MAX_ATTEMPTS = 3
 if envelope.attempt >= MAX_ATTEMPTS:
     push_dead_letter(...)
     set_status(FAILED, "max_attempts_exceeded")
 else:
-    # re-enqueue mit attempt+1 und exponential backoff
+    # re-enqueue with attempt+1 and exponential backoff
 ```
 
-### 4.4 Connection Management in Workers
+### 4.4 Connection management in workers
 
-Aktuell wird pro Job eine neue Redis/DB-Connection erstellt. Fix:
+Currently a new Redis/DB connection is created per job. Fix:
 ```python
-# main() einmalig:
+# main() once:
 redis_client = redis_from_env()
 publisher = RedisQueuePublisher(redis_client)
 session_factory = get_session_factory()
 
-# process_one() nimmt diese als Parameter
+# process_one() takes these as parameters
 ```
 
-### 4.5 Redis Persistenz
+### 4.5 Redis persistence
 
-`docker-compose.yml` Redis ergänzen:
+Add to Redis in `docker-compose.yml`:
 ```yaml
 redis:
   command: redis-server --appendonly yes
@@ -351,53 +351,53 @@ redis:
     - redis_data:/data
 ```
 
-### 4.6 CI erweitern
+### 4.6 Extend CI
 
-- Ruff linting als eigener CI-Job
-- API-Endpoint-Tests (pytest + httpx TestClient)
-- Worker-Unit-Tests (mock Redis + DB)
-- Docker-Build-Check
+- Ruff linting as its own CI job
+- API endpoint tests (pytest + httpx TestClient)
+- Worker unit tests (mock Redis + DB)
+- Docker build check
 
-### 4.7 DB-Trigger für `updated_at`
+### 4.7 DB trigger for `updated_at`
 
-SQLAlchemy `onupdate` ist unzuverlässig bei direktem SQL. Postgres-Trigger:
+SQLAlchemy `onupdate` is unreliable with direct SQL. Postgres trigger:
 ```sql
 CREATE TRIGGER set_updated_at
 BEFORE UPDATE ON jobs
 FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
--- (analog für photos, profiles)
+-- (likewise for photos, profiles)
 ```
 
 ---
 
-## Offene Entscheidungen (bewusst vertagt)
+## Open decisions (deliberately deferred)
 
-| Thema | Entscheidung nötig bis | Notiz |
+| Topic | Decision needed by | Note |
 |-------|----------------------|-------|
-| Auth zwischen Bridge ↔ API | Phase 2 | Shared Secret reicht für MVP |
-| SSE vs. Polling für Job-Status | Phase 2 | Polling-Intervall: 2s, SSE als Phase-5-Feature |
-| LR Plugin: welche LR-Parameter lernen? | Phase 3 | Initiale Liste festlegen, in `lr_output_keys` |
-| Modell-Format: Pickle vs. ONNX | Phase 3 | ONNX bevorzugt (portabler) |
-| Multi-User / Auth | Post-MVP | Aktuell: single-user, kein Auth |
+| Auth between Bridge ↔ API | Phase 2 | A shared secret is enough for the MVP |
+| SSE vs. polling for job status | Phase 2 | Polling interval: 2s, SSE as a Phase 5 feature |
+| LR plugin: which LR parameters to learn? | Phase 3 | Define an initial list, in `lr_output_keys` |
+| Model format: Pickle vs. ONNX | Phase 3 | ONNX preferred (more portable) |
+| Multi-user / auth | Post-MVP | Currently: single user, no auth |
 
 ---
 
-## Meilensteine
+## Milestones
 
 ```
-Phase 1  ──▶  Alle Tabellen existieren, Contracts aktuell, API hat Photo/Profile-Endpoints
-Phase 2  ──▶  Foto in LR → LR-Settings zurück (Stub-Werte, echter Datenfluss)
-Phase 3  ──▶  Echter Lerneffekt nachweisbar (MAE < Baseline)
-Phase 4  ──▶  Kein Job-Verlust unter simuliertem Worker-Absturz
+Phase 1  ──▶  All tables exist, contracts up to date, API has photo/profile endpoints
+Phase 2  ──▶  Photo in LR → LR settings back (stub values, real data flow)
+Phase 3  ──▶  Real learning effect demonstrable (MAE < baseline)
+Phase 4  ──▶  No job loss under a simulated worker crash
 ```
 
 ---
 
-## Was wir bewusst NICHT im MVP bauen
+## What we deliberately do NOT build in the MVP
 
-- Multi-User / Accounts
-- Web-UI (Bridge-Desktop reicht)
-- Batch-Optimierungen (viele Fotos parallel)
-- Modell-Versionierung mit A/B-Testing
-- Cloud-Deployment / Kubernetes
-- Deep-Learning-Features (CLIP etc.) — kommt als Drop-in nach Phase 3
+- Multi-user / accounts
+- Web UI (the Bridge desktop app is enough)
+- Batch optimizations (many photos in parallel)
+- Model versioning with A/B testing
+- Cloud deployment / Kubernetes
+- Deep learning features (CLIP etc.) — comes as a drop-in after Phase 3

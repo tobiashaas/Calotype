@@ -1,4 +1,4 @@
-Thin FastAPI layer: enqueue jobs (202 Accepted), keine Bildverarbeitung im Request-Pfad.
+Thin FastAPI layer: enqueue jobs (202 Accepted), no image processing in the request path.
 
 ```bash
 cd services/api

@@ -1,35 +1,35 @@
 # culling
 
-Merkmale für die Bildauswahl und ein erklärbarer Start-Bewerter
-([ADR 005](../../docs/adr/005-culling-architecture.md)). Reine Bildanalyse auf der
-Bridge-Vorschau (≤ 1200 px, aufrecht, unbearbeitet) — keine DB, kein Redis.
+Features for photo selection and an explainable starter scorer
+([ADR 005](../../docs/adr/005-culling-architecture.md)). Pure image analysis on the
+Bridge preview (≤ 1200 px, upright, unedited) — no DB, no Redis.
 
-| Modul | Inhalt |
+| Module | Contents |
 |---|---|
-| `technical.py` | Schärfe (Laplace-Varianz, feste Messgröße, kleine Regionen nie hochskaliert), Belichtung/Clipping, dHash |
-| `faces.py` | YuNet findet Gesichter, MediaPipe liest je Gesicht Augen zu, Lächeln, Mund offen (Blendshapes) |
-| `analyze.py` | `PhotoFeatures` pro Foto: relevante Gesichter, Motiv-Schärfe, Clipping auf dem Gesicht |
-| `scoring.py` | Serien (aufeinanderfolgende ähnliche Bilder), Start-Bewerter mit Begründungen, Körbe keep/uncertain/reject |
-| `learned.py` | Gelernter Bewerter: logistische Regression über dieselben Merkmale, trainiert aus Entscheidungen (Sterne/Picks); Erklärungen beschreiben das Foto („+ großes Gesicht; + Augen offen") |
-| `models.py` | Re-Export der Modell-Registry aus `inference-pipeline` (SHA-256, [THIRD_PARTY_MODELS.md](../../THIRD_PARTY_MODELS.md)) |
+| `technical.py` | Sharpness (Laplacian variance, fixed measuring size, small regions never upscaled), exposure/clipping, dHash |
+| `faces.py` | YuNet finds faces, MediaPipe reads eyes closed, smile, mouth open per face (blendshapes) |
+| `analyze.py` | `PhotoFeatures` per photo: relevant faces, subject sharpness, clipping on the face |
+| `scoring.py` | Bursts (consecutive similar images), starter scorer with reasons, buckets keep/uncertain/reject |
+| `learned.py` | Learned scorer: logistic regression over the same features, trained from decisions (stars/picks); explanations describe the photo ("+ large face; + eyes open") |
+| `models.py` | Re-export of the model registry from `inference-pipeline` (SHA-256, [THIRD_PARTY_MODELS.md](../../THIRD_PARTY_MODELS.md)) |
 
-Regeln des Start-Bewerters (die Gewichte werden später aus deinen Sternen/Markierungen gelernt):
+Rules of the starter scorer (the weights are later learned from your stars/flags):
 
-- Technische Mängel sind Belege, kein Veto — ein starker Ausdruck halbiert den Unschärfe-Abzug.
-- Lachen mit geschlossenen Augen ist ein Moment, kein Fehler.
-- Schärfe zählt relativ zum Shooting (gleiche Werte = gleicher Rang, ab 5 Fotos).
-- Helles Fenster im Hintergrund ist kein Fehler, ein ausgefressenes Gesicht schon.
-- In einer Serie gewinnt das beste Bild; die anderen landen in „uncertain", nicht im Müll.
+- Technical flaws are evidence, not a veto — a strong expression halves the blur penalty.
+- Laughing with closed eyes is a moment, not a mistake.
+- Sharpness counts relative to the shoot (equal values = equal rank, from 5 photos up).
+- A bright window in the background is not a flaw; a blown-out face is.
+- In a burst the best image wins; the others land in "uncertain", not in the trash.
 
 ```bash
 pip install -e libs/culling
-python tools/lrff_eval/cull_report.py <vorschau-ordner>   # Kontaktbogen (HTML, lokal) + Zeiten
+python tools/lrff_eval/cull_report.py <preview-folder>   # contact sheet (HTML, local) + timings
 pytest libs/culling/tests
 ```
 
-Benchmark gegen den Cull eines anderen Tools (1.837 Fotos, 367 zurückgehalten): Start-Gewichte
-ROC-AUC 0,42 (schlechter als Zufall für diesen Shoot), gelernte Gewichte 0,74, Übereinstimmung
-46 % → 71 % (`tools/lrff_eval/cull_learn.py`). Geschmack lässt sich nicht vorgeben — er wird gelernt.
+Benchmark against another tool's cull (1,837 photos, 367 held out for testing): starter weights
+ROC-AUC 0.42 (worse than chance for this shoot), learned weights 0.74, agreement
+46 % → 71 % (`tools/lrff_eval/cull_learn.py`). Taste cannot be prescribed — it is learned.
 
-Gemessen auf 60 Canon-CR3-Vorschauen (Business-Shooting): ~130 ms pro Foto auf CPU,
-Modelle laden in ~2 s.
+Measured on 60 Canon CR3 previews (business shoot): ~130 ms per photo on CPU,
+models load in ~2 s.

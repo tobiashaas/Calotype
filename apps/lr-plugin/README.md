@@ -1,50 +1,50 @@
 # Lightroom Classic Plugin (Lua)
 
-Die Oberfläche von LR-FrameFlow in Lightroom. Das Plugin spricht nur mit der lokalen
-[Bridge](../bridge/README.md); Vorschau, Upload, Wiederholungen und Server-Kommunikation
-erledigt die Bridge ([ADR 004](../../docs/adr/004-bridge-localhost-architecture.md)).
+The LR-FrameFlow interface in Lightroom. The plugin talks only to the local
+[Bridge](../bridge/README.md); previews, uploads, retries and server communication
+are handled by the Bridge ([ADR 004](../../docs/adr/004-bridge-localhost-architecture.md)).
 
-## Installieren
+## Install
 
-1. Bridge-App einmal starten (legt `bridge.json` mit Port und Token an).
-2. Lightroom Classic: **Datei → Zusatzmodul-Manager → Hinzufügen** → Ordner
-   `apps/lr-plugin/LRFrameFlow.lrplugin` wählen.
+1. Start the Bridge app once (creates `bridge.json` with port and token).
+2. Lightroom Classic: **File → Plug-in Manager → Add** → choose the folder
+   `apps/lr-plugin/LRFrameFlow.lrplugin`.
 
-## Menüpunkte
+## Menu items
 
-**Bibliothek → Zusatzmoduloptionen** (und **Datei → Zusatzmoduloptionen**):
+**Library → Plug-in Extras** (and **File → Plug-in Extras**):
 
-| Menüpunkt | Was passiert |
+| Menu item | What happens |
 |---|---|
-| Train profile from selected photos... | Fragt Name, Genre, Farbe/SW ab. Übergibt die Fotos (Pfad + aktuelle Develop-Settings als Lernziel) an die Bridge und wartet auf das Training. Mindestens 3 Fotos, nur RAW **oder** nur JPEG/TIFF. |
-| Apply profile to selected photos... | Zeigt fertige Profile, übergibt die passenden Fotos, wartet und schreibt die vorhergesagten Werte mit `photo:applyDevelopSettings` in **einem** Katalog-Schritt (Bearbeiten → Rückgängig wirkt). |
-| Bridge status... | Läuft die Bridge? Server erreichbar? Wie viele Profile sind fertig? |
+| Train profile from selected photos... | Asks for name, genre, color/B&W. Hands the photos (path + current develop settings as the learning target) to the Bridge and waits for training. At least 3 photos, only RAW **or** only JPEG/TIFF. |
+| Apply profile to selected photos... | Shows finished profiles, hands over the matching photos, waits and writes the predicted values with `photo:applyDevelopSettings` in **one** catalog step (Edit → Undo works). |
+| Bridge status... | Is the Bridge running? Is the server reachable? How many profiles are ready? |
 
-Abbrechen im Fortschrittsbalken beendet nur das Warten — die Bridge arbeitet weiter.
+Cancel in the progress bar only stops the waiting — the Bridge keeps working.
 
-## Dateien
+## Files
 
-| Datei | Zweck |
+| File | Purpose |
 |---|---|
-| `Info.lua` | Plugin-Manifest, Menüeinträge |
-| `BridgeClient.lua` | HTTP zur Bridge (`X-LRFF-Token`), liest `bridge.json` |
-| `PhotoData.lua` | UUID, Pfad, Develop-Settings, EXIF pro Foto; RAW vs. JPEG/TIFF |
-| `JobWait.lua` | Fotos registrieren, Job mit Fortschritt/Abbrechen abwarten |
-| `TrainProfile.lua`, `ApplyProfile.lua`, `BridgeStatus.lua` | Menüaktionen |
-| `Json.lua` | Kleiner JSON-Encoder/-Decoder (Lightroom bringt keinen mit) |
-| `Log.lua` | Log-Datei `LRFrameFlow.log` in `Dokumente/LrClassicLogs` |
+| `Info.lua` | Plugin manifest, menu entries |
+| `BridgeClient.lua` | HTTP to the Bridge (`X-LRFF-Token`), reads `bridge.json` |
+| `PhotoData.lua` | UUID, path, develop settings, EXIF per photo; RAW vs. JPEG/TIFF |
+| `JobWait.lua` | Register photos, wait for a job with progress/cancel |
+| `TrainProfile.lua`, `ApplyProfile.lua`, `BridgeStatus.lua` | Menu actions |
+| `Json.lua` | Small JSON encoder/decoder (Lightroom ships none) |
+| `Log.lua` | Log file `LRFrameFlow.log` in `Documents/LrClassicLogs` |
 
-## Testen ohne Lightroom
+## Testing without Lightroom
 
-Die Tests ersetzen Lightrooms SDK-Module durch Attrappen (Lua 5.1 / LuaJIT wie in Lightroom):
+The tests replace Lightroom's SDK modules with stubs (Lua 5.1 / LuaJIT, as in Lightroom):
 
 ```bash
 luajit apps/lr-plugin/tests/run.lua
 ```
 
-## Erster echter Lightroom-Test (07.11.2026)
+## First real Lightroom test (2026-11-07)
 
-- ✅ Plugin lädt, findet `bridge.json` (`%APPDATA%\LRFrameFlow`), Bridge-Status zeigt Server und Profile.
-- ✅ „Apply profile" auf 45 Canon-R6-Fotos: Vorschau → Bridge → Server → Worker → `applyDevelopSettings`, Look plausibel.
-- 🐞 Behoben: Lightrooms Lua-Sandbox hat kein `os.getenv` (Tests bilden das jetzt nach).
-- ⏳ Noch prüfen: Training aus Lightroom, JPEG/TIFF (`IncrementalTemperature`), Weißabgleich „Benutzerdefiniert" nach dem Anwenden, Stil-Profil mit S/W.
+- ✅ Plugin loads, finds `bridge.json` (`%APPDATA%\LRFrameFlow`), Bridge status shows server and profiles.
+- ✅ "Apply profile" on 45 Canon R6 photos: preview → Bridge → server → worker → `applyDevelopSettings`, look plausible.
+- 🐞 Fixed: Lightroom's Lua sandbox has no `os.getenv` (the tests now replicate this).
+- ⏳ Still to check: training from Lightroom, JPEG/TIFF (`IncrementalTemperature`), white balance "Custom" after applying, style profile with B&W.

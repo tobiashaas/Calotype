@@ -1,3 +1,3 @@
 # lr-frameflow-domain
 
-Reine Domänentypen (Job-Arten, Status), ohne SQLAlchemy oder FastAPI.
+Pure domain types (job kinds, statuses), without SQLAlchemy or FastAPI.

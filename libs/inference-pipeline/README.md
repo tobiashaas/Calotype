@@ -1,3 +1,3 @@
 # lr-frameflow-inference-pipeline
 
-Deterministische Schrittkette ohne Seiteneffekte (`normalize → … → confidence`). Später echte Impls hinter gleichen Schnittstellen.
+Deterministic step chain without side effects (`normalize → … → confidence`). Later, real implementations behind the same interfaces.
