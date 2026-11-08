@@ -121,7 +121,7 @@ See `docs/adr/005-culling-architecture.md`.
 - [ ] Zero-shot text prompts on SigLIP 2 / Perception Encoder ("blurry photo", "people hugging", "candid moment") as culling features — untested
 - [ ] Next model step for exposure: EXIF context (ISO, shutter, aperture → scene EV; folder mode must send EXIF) and consistency within a series/shoot (relative to neighbours)
 - [ ] Predict RAW white balance relative to as-shot (needs EXIF as-shot from the RAW). Why it matters (2026-11-08): a profile trained on one shoot/camera (R6) applied to another (5D, same look) gets exposure MAE 0.28 EV (guessing 0.64) but temperature only 21–26 % within ±150 K — absolute Kelvin carries the camera. Not possible via the SDK: `applyDevelopSettings{WhiteBalance="As Shot"}` keeps the old Temperature value (Lightroom recomputes only when rendering). Needs as-shot multipliers from the RAW + a per-camera mapping to Lightroom's Kelvin (LibRaw is LGPL — prefer an own parser in the Bridge)
-- [ ] Benchmarks: report contiguous-block / other-shoot splits, not only random splits — random splits put near-identical neighbours into training (R6: all-6 within 34 % random vs. 9 % by blocks)
+- [ ] Benchmarks: report contiguous-block / other-shoot splits, not only random splits — random splits put near-identical neighbours into training (R6: all-6 within 34 % random vs. 9 % by blocks). Stronger regularization (shallow boosting, Ridge α 10–100) does not help across shoots (exposure ~30 % either way) — the gap is in the data, not the model
 
 ### Straighten & people (done 2026-11-08)
 - [x] Straighten from the photo's own lines (keystone-aware), Lightroom crop keys verified in Lightroom, option in edit requests / plugin (DE/EN) / `lrff-folder apply --straighten`; own crops stay
