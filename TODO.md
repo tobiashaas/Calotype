@@ -117,6 +117,15 @@ See `docs/adr/005-culling-architecture.md`.
 - [ ] Next model step for exposure: EXIF context (ISO, shutter, aperture → scene EV; folder mode must send EXIF) and consistency within a series/shoot (relative to neighbours)
 - [ ] Predict RAW white balance relative to as-shot (needs EXIF as-shot from the RAW)
 
+### Straighten & people (done 2026-11-08)
+- [x] Straighten from the photo's own lines (keystone-aware), Lightroom crop keys verified in Lightroom, option in edit requests / plugin (DE/EN) / `lrff-folder apply --straighten`; own crops stay
+- [x] Server under load: long jobs were re-run by the reaper and returned results 2–3×; progress heartbeat, one reaper per job kind, upserted edit results (migration 010)
+- [x] Culling measured against the photographer's real choice (exports in the catalog), leave-one-group-out (`tools/lrff_eval/cull_groups.py`)
+- [x] Group photos by person (SFace, Apache-2.0); ranking within each person gave no gain on kindergarten shoots
+- [ ] Subject mask ("person pops") in the style layer: write the mask definition (Lightroom computes the mask itself — `.acr` sidecars); test via plugin and XMP together with the user
+- [ ] Straighten: let the user judge the contact sheets; learn from the user's own corrections once there are some
+- [ ] Culling within a person's photos: better moment/expression cues (see embedding result in the culling notes)
+
 ### Backlog / Nice-to-have
 - [ ] **Better model (biggest quality lever):** CNN on the image (e.g. pretrained ResNet/EfficientNet backbone, one head per slider group) instead of 128-dim histogram + Ridge; export to ONNX for optional local inference in the Bridge
 - [ ] Predict RAW white balance relative to as-shot instead of absolute Kelvin

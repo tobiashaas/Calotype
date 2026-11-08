@@ -56,7 +56,7 @@ services/
     inference_worker/  # lrff:jobs:inference → run inference → EditResult
 infra/
   compose/             # docker-compose.yml: Postgres 16+pgvector, Redis 7, MinIO
-  migrations/          # Alembic migrations (001–007)
+  migrations/          # Alembic migrations (001–011)
 docs/
   adr/                 # Architecture Decision Records
   plan/                # mvp.md — phased plan
@@ -117,6 +117,9 @@ TODO.md                # Completed + open work items — keep up to date
 | `apps/bridge/core/src/xmp.rs` | Read/write Adobe `crs:` XMP sidecars (ProcessVersion 15.4, `lrff:Profile`) |
 | `apps/bridge/core/src/bin/folder.rs` | `lrff-folder train/apply/profiles` — folder mode without Lightroom |
 | `libs/culling/src/lr_frameflow_culling/scoring.py` | Series + explainable baseline (keep/uncertain/reject with reasons) |
+| `libs/culling/src/lr_frameflow_culling/identity.py` | SFace face embeddings + grouping photos by person |
+| `libs/inference-pipeline/src/lr_frameflow_inference_pipeline/straighten.py` | Tilt from the photo's own lines (keystone-aware) + Lightroom crop keys |
+| `tools/lr_e2e/straighten_check.py` | Straighten end-to-end in a real Lightroom (angle + crop arrive, own crops stay, restore) |
 | `tools/lrff_eval/cull_report.py` | Culling prototype on a preview folder → local HTML contact sheet + timing |
 | `THIRD_PARTY_MODELS.md` | Every downloaded model with license and SHA-256 — permissive only |
 | `tools/lrff_eval/synthetic.py` | Synthetic-rule test: make rule XMPs, score predictions vs. rule and vs. guessing |
@@ -125,7 +128,7 @@ TODO.md                # Completed + open work items — keep up to date
 | `packages/contracts/json-schema/photo-upload-v1.schema.json` | Photo upload metadata schema |
 | `infra/compose/docker-compose.yml` | Local infra (Postgres, Redis, MinIO) |
 | `infra/compose/.env` | Local port overrides (Postgres 5433, MinIO 9100) |
-| `infra/migrations/versions/` | Migrations 001–007 |
+| `infra/migrations/versions/` | Migrations 001–011 (010 job progress + unique edit results, 011 `photos.analysis`) |
 
 ---
 
@@ -157,8 +160,9 @@ Train flow detail:
 
 Edit flow detail:
 1. API validates Profile is READY + all photo_ids exist, enqueues to `lrff:jobs:feature`
-2. `feature_worker`: downloads JPEG from MinIO, extracts 128-dim histogram vector, saves FeatureVector (skips photos whose preview is missing/undecodable — never stores zero vectors), forwards to `lrff:jobs:inference`
-3. `inference_worker`: loads `.joblib` from MinIO (missing artifact → job FAILED), predicts 10 params per photo, converts to LR develop settings via `to_lightroom` (clamped, LR key names), saves EditResult; photos without feature vector get no result
+2. `feature_worker`: downloads JPEG from MinIO, extracts the feature vectors of every supported version, saves FeatureVector (skips photos whose preview is missing/undecodable — never stores zero vectors); measures the tilt once per photo (`photos.analysis.straighten`); forwards to `lrff:jobs:inference`
+3. `inference_worker`: loads `.joblib` from MinIO (missing artifact → job FAILED), predicts 10 params per photo, converts to LR develop settings via `to_lightroom` (clamped, LR key names), adds the style layer and — if the request has `straighten: true` and the photo has clear reference lines — Lightroom crop keys; upserts EditResult (one per photo and job); photos without feature vector get no result
+4. Workers touch `jobs.last_progress_at` per photo; the reaper re-runs only jobs without progress for 10 min, each kind from its first queue (edit → feature, train → train)
 
 On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
 
@@ -174,6 +178,7 @@ On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
   - v2: `HistGradientBoostingRegressor` per slider (`gbr_v2`); < 30 photos → Ridge (`ridge_v2`)
 - **Benchmark** (1,837 edited Canon R6 photos from another tool, 367 held out, end-to-end through the pipeline): v1 → v2: exposure MAE 0.33 → 0.20 EV, temperature 258 → 163 K, all sliders within tolerance 14 % → 32 % (`tools/lrff_eval/holdout.py`, `model_lab.py`)
 - **More internal yardsticks** (2026-11-07, other tools' edits, never shipped): through real Lightroom (`tools/lr_e2e/train_eval.py`) R6 33 % all-within (exposure 54 %, temperature 58 %); wedding (Aftershoot look, 620/155) 54 %; kindergarten portraits vs. Neurapix (495/123, edits exported from the catalog, `lrff-folder train --sidecars`) 49 %, exposure 88 %
+- **Straighten** (`straighten.py`): only nearly plumb verticals and long horizons vote, keystone modelled (lean grows with distance from the centre, tilt = value at the centre); < 5 agreeing lines or no lines on both sides → no rotation. Crop = largest aspect-keeping rectangle, stored like Lightroom: corners of the rotated rectangle in the unrotated sensor frame (verified in Lightroom via `straighten_probe`). Rotates 3–6 % of event/wedding photos; there median 0.2–0.3° from another tool's angle (never rotating: 0.6–0.7°). Plugin keeps photos with an own crop.
 - **Style layer:** profile `base_preset` adds the look (curve, HSL, grading …) on top of each prediction (`lr_edit_serializer.style`)
 - **10 LR params predicted:** `exposure, temp, tint, contrast, highlights, shadows, whites, blacks, vibrance, saturation`
 - **Minimum:** train worker refuses < 3 usable photos (Profile FAILED); `run_inference` raises on unreadable artifacts instead of returning zeros (zeros would reset the user's photos)
