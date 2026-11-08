@@ -24,6 +24,11 @@ FEATURES = [
     "mouth_open",
     "laughing_closed_eyes", "no_face", "face_clipped", "clipped_highlights", "mean_luma",
     "crushed_shadows",
+    # Compared with the rest of its series: of near-identical shots the photographer keeps the
+    # one with the best expression, not only the sharpest (ROC-AUC 0.628 → 0.658 against a
+    # photographer's exports on five kindergarten groups, each held out as a whole).
+    "smile_rank_in_series", "eyes_open_rank_in_series", "face_size_rank_in_series",
+    "mouth_open_rank_in_series",
 ]
 
 # Readable name for a high / low value of each feature: explanations describe the photo
@@ -45,6 +50,10 @@ LABELS = {
     "clipped_highlights": ("blown highlights", "highlights intact"),
     "mean_luma": ("bright", "dark"),
     "crushed_shadows": ("crushed shadows", "open shadows"),
+    "smile_rank_in_series": ("best smile of its series", "weaker smile than its series"),
+    "eyes_open_rank_in_series": ("eyes more open than its series", "eyes less open than its series"),
+    "face_size_rank_in_series": ("closer than its series", "farther than its series"),
+    "mouth_open_rank_in_series": ("mouth more open than its series", "mouth more closed than its series"),
 }
 
 
@@ -61,7 +70,14 @@ def feature_matrix(photos: list[PhotoFeatures]) -> np.ndarray:
     """One row per photo, in FEATURES order. Ranks are within the given shoot."""
     series = np.array(group_series(photos))
     sharp = np.array([p.subject_sharpness for p in photos], dtype=float)
+    cues = np.array([
+        [p.smile or 0.0, 1.0 - (p.eyes_closed or 0.0),
+         max((f.rel_size for f in p.relevant_faces), default=0.0),
+         max((f.mouth_open or 0.0 for f in p.relevant_faces), default=0.0)]
+        for p in photos
+    ], dtype=float).reshape(len(photos), 4)
     series_rank = np.full(len(photos), 0.5)
+    cue_rank = np.full((len(photos), 4), 0.5)
     best = np.zeros(len(photos))
     sizes = np.zeros(len(photos))
     for s in set(series.tolist()):
@@ -70,6 +86,8 @@ def feature_matrix(photos: list[PhotoFeatures]) -> np.ndarray:
         if len(idx) > 1:
             series_rank[idx] = _rank(sharp[idx])
             best[idx[np.argmax(sharp[idx])]] = 1.0
+            for j in range(4):
+                cue_rank[idx, j] = _rank(cues[idx, j])
         else:
             best[idx] = 1.0
     rows = []
@@ -82,7 +100,7 @@ def feature_matrix(photos: list[PhotoFeatures]) -> np.ndarray:
             max((f.looking_down or 0.0 for f in faces), default=0.0),
             p.smile or 0.0, max((f.mouth_open or 0.0 for f in faces), default=0.0),
             float(p.laughing_closed_eyes), float(not p.faces), p.face_clipped, p.clipped_highlights,
-            p.mean_luma, p.crushed_shadows,
+            p.mean_luma, p.crushed_shadows, *cue_rank[i],
         ])
     return np.array(rows, dtype=float)
 
