@@ -25,7 +25,7 @@ from PIL import Image, ImageDraw
 sys.path.insert(0, str(Path(__file__).parent))
 from common import top_description  # noqa: E402
 
-from tarsier_inference_pipeline.straighten import estimate_tilt  # noqa: E402
+from calotype_inference_pipeline.straighten import estimate_tilt  # noqa: E402
 
 
 def reference_angle(raw_dir: Path, stem: str) -> float | None:

@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Tarsier Bridge ↔ API
+  title: Calotype Bridge ↔ API
   version: "0.1.0"
   description: |
     Thin Gateway: Jobs werden asynchron eingereiht (`202 Accepted`).

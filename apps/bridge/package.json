@@ -1,8 +1,8 @@
 {
-  "name": "tarsier-bridge",
+  "name": "calotype-bridge",
   "private": true,
   "version": "0.1.0",
-  "description": "Tarsier Bridge — Tauri CLI wrapper",
+  "description": "Calotype Bridge — Tauri CLI wrapper",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",

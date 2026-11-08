@@ -1,8 +1,8 @@
 """Hold-out test on real edits: how close does a profile get to edits it never saw?
 
     python tools/eval/holdout.py split <raw_dir> <work_dir> [--test 0.2] [--seed 7]
-    tarsier-folder train <raw_dir> --name "X" --files-from <work_dir>/train.txt
-    tarsier-folder apply <raw_dir> --profile "X" --files-from <work_dir>/test.txt --out <work_dir>/pred
+    calotype-folder train <raw_dir> --name "X" --files-from <work_dir>/train.txt
+    calotype-folder apply <raw_dir> --profile "X" --files-from <work_dir>/test.txt --out <work_dir>/pred
     python tools/eval/holdout.py score <raw_dir> <work_dir> [--sidecars <dir>]
 
 `split` only reads: it lists RAWs whose sidecar holds develop settings and splits them.
@@ -65,7 +65,7 @@ def score(raw_dir: Path, work: Path, sidecars: Path | None = None) -> int:
             continue
         rows.append((truth(n), read_xmp(pred)))
     if not rows:
-        print("no predictions — run `tarsier-folder apply ... --out <work_dir>/pred` first")
+        print("no predictions — run `calotype-folder apply ... --out <work_dir>/pred` first")
         return 1
     print(f"\n{len(rows)} test photos scored ({missing} without prediction), {len(train)} trained on\n")
     summary = score_table(rows, train)

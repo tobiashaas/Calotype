@@ -3,20 +3,20 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tarsier-worker-cull"
+name = "calotype-worker-cull"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "tarsier-domain",
-    "tarsier-persistence",
-    "tarsier-queue",
-    "tarsier-observability",
-    "tarsier-culling",
+    "calotype-domain",
+    "calotype-persistence",
+    "calotype-queue",
+    "calotype-observability",
+    "calotype-culling",
     "boto3>=1.35",
 ]
 
 [project.scripts]
-tarsier-cull-worker = "tarsier_cull_worker.cli:main"
+calotype-cull-worker = "calotype_cull_worker.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

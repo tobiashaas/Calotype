@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from tarsier_inference_pipeline import (
+from calotype_inference_pipeline import (
     FEATURE_DIM,
     LR_PARAMS,
     extract_features,

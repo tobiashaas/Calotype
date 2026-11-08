@@ -10,7 +10,7 @@ Plugin ──HTTP 127.0.0.1:47600──▶ Bridge ──SQLite outbox──▶ S
 
 | Folder | Contents |
 |---|---|
-| `core/` | `tarsier-bridge-core`: local API (axum), outbox (SQLite), preview from the original file, API client. Testable without Tauri, also runs headless. |
+| `core/` | `calotype-bridge-core`: local API (axum), outbox (SQLite), preview from the original file, API client. Testable without Tauri, also runs headless. |
 | `src-tauri/` | Desktop app: starts the core, status window, commands `bridge_status` / `set_api_base_url` / `retry_now`. |
 | `ui/` | Status window (static HTML/JS, no bundler). |
 
@@ -19,9 +19,9 @@ Contract of the local API: [`packages/contracts/openapi/plugin-bridge-api.yaml`]
 ## What the Bridge does
 
 - **Local API** on `127.0.0.1` only. On first start, `bridge.json` (port,
-  random token, server address) is created in the data folder: `%APPDATA%\Tarsier` or
-  `~/Library/Application Support/Tarsier` (override with `TARSIER_BRIDGE_DATA_DIR`).
-  Every `/v1` call needs the `X-Tarsier-Token` header.
+  random token, server address) is created in the data folder: `%APPDATA%\Calotype` or
+  `~/Library/Application Support/Calotype` (override with `CALOTYPE_BRIDGE_DATA_DIR`).
+  Every `/v1` call needs the `X-Calotype-Token` header.
 - **Outbox:** photos and jobs land in `bridge.sqlite3` first. A background loop
   builds previews, uploads, creates jobs (fixed `Idempotency-Key`) and polls the status.
   Network errors, 5xx/429 and unreachable files (unplugged drive) → retry with
@@ -34,25 +34,25 @@ Contract of the local API: [`packages/contracts/openapi/plugin-bridge-api.yaml`]
 
 ## Folder mode (without Lightroom)
 
-`tarsier-folder` works with RAW + XMP sidecars and talks to the running Bridge:
+`calotype-folder` works with RAW + XMP sidecars and talks to the running Bridge:
 
 ```bash
-tarsier-folder train  <folder> --name "Business Warm" --genre business   # edited RAWs (RAW + XMP)
-tarsier-folder apply  <folder> --profile "Business Warm"                  # writes IMG_0001.xmp next to each RAW
-tarsier-folder profiles
+calotype-folder train  <folder> --name "Business Warm" --genre business   # edited RAWs (RAW + XMP)
+calotype-folder apply  <folder> --profile "Business Warm"                  # writes IMG_0001.xmp next to each RAW
+calotype-folder profiles
 
 # Style layer: the model sets exposure/WB/tone per photo, the preset sets the look
-tarsier-folder train  <folder> --name "Business + Look" --style my-preset.xmp
+calotype-folder train  <folder> --name "Business + Look" --style my-preset.xmp
 
 # Train/test split and output to another folder (source stays untouched)
-tarsier-folder train  <folder> --name X --files-from train.txt
-tarsier-folder apply  <folder> --profile X --files-from test.txt --out <output>
+calotype-folder train  <folder> --name X --files-from train.txt
+calotype-folder apply  <folder> --profile X --files-from test.txt --out <output>
 ```
 
 - Training uses only RAWs whose XMP contains develop settings (`crs:Exposure2012` …).
 - `apply` skips photos that are already edited (your XMPs); `--force` updates only the
   `crs:` values in them and leaves stars, keywords etc. in place. New XMPs carry
-  `crs:ProcessVersion="15.4"` and `tarsier:Profile="…"`.
+  `crs:ProcessVersion="15.4"` and `calotype:Profile="…"`.
 - Then import the folder into Lightroom — the photos are edited right away. For photos that
   are already in the catalog, the plugin is the right way.
 - Photo IDs outside a catalog: `file-` + SHA-256 over size, first and last MiB
@@ -62,14 +62,14 @@ tarsier-folder apply  <folder> --profile X --files-from test.txt --out <output>
 
 ```bash
 # Core: tests + lint (fast, without Tauri)
-cargo test -p tarsier-bridge-core
-cargo clippy -p tarsier-bridge-core --all-targets -- -D warnings
+cargo test -p calotype-bridge-core
+cargo clippy -p calotype-bridge-core --all-targets -- -D warnings
 
 # Check preview extraction on real RAWs (time, size, orientation)
-cargo run --release -p tarsier-bridge-core --example preview -- <out-dir> <raw-files>
+cargo run --release -p calotype-bridge-core --example preview -- <out-dir> <raw-files>
 
 # Run without a window
-cargo run -p tarsier-bridge-core --bin tarsier-bridge-headless
+cargo run -p calotype-bridge-core --bin calotype-bridge-headless
 
 # Desktop app
 npm install

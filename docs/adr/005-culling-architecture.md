@@ -52,7 +52,7 @@ penalized as "eyes closed".
 - Returned to Lightroom as stars/flags/color labels (plugin) or `xmp:Rating`/
   `xmp:Label` (folder mode).
 
-### 4. Measurement (`tarsier-eval cull`)
+### 4. Measurement (`calotype-eval cull`)
 
 The yardstick is the photographer's decisions, split into a training and a test set:
 
@@ -70,7 +70,7 @@ The yardstick is the photographer's decisions, split into a training and a test 
   weights; every model is listed with source and license in `THIRD_PARTY_MODELS.md`.
 - Non-commercial or copyleft models (e.g. AGPL) can be plugged in locally,
   but are never shipped. Models or values from other products are not used.
-- `tarsier-eval` compares models on the photographer's own photos before a default is switched.
+- `calotype-eval` compares models on the photographer's own photos before a default is switched.
 
 ## Consequences / trade-offs
 

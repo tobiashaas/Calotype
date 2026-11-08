@@ -3,13 +3,13 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tarsier-persistence"
+name = "calotype-persistence"
 version = "0.1.0"
-description = "SQLAlchemy models and repositories for Tarsier"
+description = "SQLAlchemy models and repositories for Calotype"
 requires-python = ">=3.11"
 readme = "README.md"
 dependencies = [
-  "tarsier-domain",
+  "calotype-domain",
   "sqlalchemy>=2.0.36",
   "psycopg[binary]>=3.2",
   "pgvector>=0.3",

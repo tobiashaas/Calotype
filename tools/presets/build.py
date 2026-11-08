@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "presets"
-GROUP = "Tarsier"
+GROUP = "Calotype"
 NS = uuid.UUID("6f1c4b52-7a0e-4c55-9b7e-2f3a1d0c9e11")   # stable preset UUIDs per name
 
 # Curve points (input, output), 0–255. A lifted first point = matte blacks; a lowered last
@@ -145,7 +145,7 @@ LOOKS: list[dict] = [
 # Mask types (Lightroom's format): subtype 1 = subject, 2 = sky, 0 + category 22 = background,
 # 3 + category = part of a person (2 face skin, 3 iris and pupil, 8 eye sclera, 12 teeth).
 # Local values are stored as -1…1 (slider value / 100).
-RETOUCH_GROUP = "Tarsier Retouch"
+RETOUCH_GROUP = "Calotype Retouch"
 RETOUCH: list[dict] = [
     {
         "id": "subject", "name": "Lift subject", "name_de": "Person hervorheben",
@@ -195,19 +195,19 @@ RETOUCH: list[dict] = [
 
 
 def retouch_xmp(r: dict) -> str:
-    """A preset that adds one AI-mask correction named "Tarsier <id>"."""
+    """A preset that adds one AI-mask correction named "Calotype <id>"."""
     uid = lambda key: str(uuid.uuid5(NS, key)).replace("-", "").upper()  # noqa: E731
     head = {
         "PresetType": "Normal", "Cluster": "", "UUID": uid("retouch-" + r["id"]),
         "SupportsAmount": "False", "SupportsColor": "True", "SupportsMonochrome": "True",
         "SupportsHighDynamicRange": "True", "SupportsNormalDynamicRange": "True",
         "SupportsSceneReferred": "True", "SupportsOutputReferred": "True", "CameraModelRestriction": "",
-        "Copyright": "CC0 — Tarsier contributors", "ContactInfo": "",
+        "Copyright": "CC0 — Calotype contributors", "ContactInfo": "",
         "Version": "15.4", "ProcessVersion": "15.4", "HasSettings": "True",
     }
     lines = [
         '<?xpacket begin="\ufeff" id="W5M0MpCehiHzreSzNTczkc9d"?>',
-        '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Tarsier">',
+        '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Calotype">',
         ' <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">',
         '  <rdf:Description rdf:about=""',
         '    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"',
@@ -219,7 +219,7 @@ def retouch_xmp(r: dict) -> str:
     lines += [
         "   <crs:MaskGroupBasedCorrections>", "    <rdf:Seq>", "     <rdf:li>", "      <rdf:Description",
         '       crs:What="Correction"', '       crs:CorrectionAmount="1"', '       crs:CorrectionActive="true"',
-        f'       crs:CorrectionName="Tarsier {r["id"]}"',
+        f'       crs:CorrectionName="Calotype {r["id"]}"',
         f'       crs:CorrectionSyncID="{uid("group-" + r["id"])}"{local}>',
         "      <crs:CorrectionMasks>", "       <rdf:Seq>",
     ]
@@ -261,14 +261,14 @@ def preset_xmp(look: dict) -> str:
         "SupportsMonochrome": "True", "SupportsHighDynamicRange": "True",
         "SupportsNormalDynamicRange": "True", "SupportsSceneReferred": "True",
         "SupportsOutputReferred": "True", "CameraModelRestriction": "",
-        "Copyright": "CC0 — Tarsier contributors", "ContactInfo": "",
+        "Copyright": "CC0 — Calotype contributors", "ContactInfo": "",
         "Version": "15.4", "ProcessVersion": "15.4", "HasSettings": "True",
         "ToneCurveName2012": "Custom",
         **{k: str(v) for k, v in settings.items()},
     }
     lines = [
         '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>',
-        '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Tarsier">',
+        '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Calotype">',
         ' <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">',
         '  <rdf:Description rdf:about=""',
         '    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"',

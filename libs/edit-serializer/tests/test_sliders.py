@@ -1,6 +1,6 @@
 import pytest
 
-from tarsier_edit_serializer import from_lightroom, serialize_for_lightroom, slider_specs, to_lightroom
+from calotype_edit_serializer import from_lightroom, serialize_for_lightroom, slider_specs, to_lightroom
 
 INTERNAL = {
     "exposure", "temp", "tint", "contrast", "highlights",

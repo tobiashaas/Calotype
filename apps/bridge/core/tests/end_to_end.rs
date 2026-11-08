@@ -12,9 +12,9 @@ use http_body_util::BodyExt;
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
-use tarsier_bridge_core::config::BridgeConfig;
-use tarsier_bridge_core::db::Db;
-use tarsier_bridge_core::{outbox, server, AppState};
+use calotype_bridge_core::config::BridgeConfig;
+use calotype_bridge_core::db::Db;
+use calotype_bridge_core::{outbox, server, AppState};
 
 const TOKEN: &str = "test-token";
 
@@ -148,7 +148,7 @@ async fn call(
         .uri(uri)
         .header("content-type", "application/json");
     if let Some(t) = token {
-        req = req.header("x-tarsier-token", t);
+        req = req.header("x-calotype-token", t);
     }
     let body = body
         .map(|b| Body::from(b.to_string()))
@@ -280,7 +280,7 @@ async fn edit_job_roundtrip_with_retry() {
     let (key, body) = &f.jobs[0];
     assert_eq!(
         key.as_deref(),
-        Some(format!("tarsier-bridge-{job_id}").as_str())
+        Some(format!("calotype-bridge-{job_id}").as_str())
     );
     assert_eq!(body["schema_version"], "edit-request-v1");
     assert_eq!(body["photo_ids"], json!(["remote-lr-1"]));

@@ -17,7 +17,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from tarsier_culling import FaceAnalyzer, analyze, score
+from calotype_culling import FaceAnalyzer, analyze, score
 
 BUCKET_COLOR = {"keep": "#2f7d4f", "uncertain": "#b07a12", "reject": "#b3261e"}
 

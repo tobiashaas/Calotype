@@ -280,7 +280,7 @@ impl Db {
                 kind,
                 request.to_string(),
                 serde_json::to_string(uuids)?,
-                format!("tarsier-bridge-{job_id}"),
+                format!("calotype-bridge-{job_id}"),
                 t
             ],
         )?;

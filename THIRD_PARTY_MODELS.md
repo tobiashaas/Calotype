@@ -1,14 +1,14 @@
 # Third-party models
 
-Every machine-learning model Tarsier downloads or ships is listed here. A model is only
+Every machine-learning model Calotype downloads or ships is listed here. A model is only
 added when **both code and weights** are under a permissive license (MIT, Apache-2.0, BSD)
 — so the project stays open source and every user, including professional photographers,
 may use it commercially ([ADR 005](docs/adr/005-culling-architecture.md)).
 
 Models are **not stored in the repository**. They are downloaded on first use, checked
-against the SHA-256 below and cached in `%LOCALAPPDATA%\Tarsier\models`
-(`~/.cache/Tarsier/models` elsewhere; override with `TARSIER_MODEL_DIR`). The registry in
-code: `libs/culling/src/tarsier_culling/models.py`.
+against the SHA-256 below and cached in `%LOCALAPPDATA%\Calotype\models`
+(`~/.cache/Calotype/models` elsewhere; override with `CALOTYPE_MODEL_DIR`). The registry in
+code: `libs/culling/src/calotype_culling/models.py`.
 
 | Name | Used for | License (code / weights) | Source | SHA-256 |
 |---|---|---|---|---|

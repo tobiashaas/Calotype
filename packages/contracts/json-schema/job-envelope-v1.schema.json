@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.tarsier.photo/job-envelope-v1.schema.json",
+  "$id": "https://schemas.calotype.xyz/job-envelope-v1.schema.json",
   "title": "JobEnvelopeV1",
   "type": "object",
   "additionalProperties": false,

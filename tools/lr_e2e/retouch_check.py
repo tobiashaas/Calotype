@@ -58,12 +58,12 @@ def main() -> int:
         for u in uuids:
             ours = state[u]["masks"]
             names = [g["name"] for g in ours]
-            report.check(len(names) == len(set(names)) and "Tarsier subject" in names,
+            report.check(len(names) == len(set(names)) and "Calotype subject" in names,
                          "no duplicates after two runs, subject mask present", ", ".join(names))
             report.check(all(g["computed"] == g["masks"] for g in ours), "every kept mask is computed")
             report.check(state[u]["all_masks"] - len(ours) == before[u]["all_masks"],
                          "the photo's own masks are untouched")
-            report.check("Tarsier: before" in state[u]["snapshots"] or "Tarsier: vorher" in state[u]["snapshots"],
+            report.check("Calotype: before" in state[u]["snapshots"] or "Calotype: vorher" in state[u]["snapshots"],
                          "original kept as snapshot")
     finally:
         bridge.run("remove_retouch", {"uuids": uuids})

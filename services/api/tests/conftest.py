@@ -15,8 +15,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from tarsier_api.deps import get_publisher, get_session, get_storage
-from tarsier_api.main import app
+from calotype_api.deps import get_publisher, get_session, get_storage
+from calotype_api.main import app
 
 # ---------------------------------------------------------------------------
 # In-memory store — a simple dict-based fake that mimics the DB
@@ -159,20 +159,20 @@ def client(store, mock_publisher, mock_storage) -> Generator[TestClient, None, N
         return store.edit_results.get(str(job_id), [])
 
     patches = [
-        patch("tarsier_api.main.JobRepository.create", side_effect=_job_create),
-        patch("tarsier_api.main.JobRepository.get_by_id", side_effect=_job_get_by_id),
-        patch("tarsier_api.main.JobRepository.get_by_idempotency_key", side_effect=_job_get_by_idempotency_key),
-        patch("tarsier_api.main.ProfileRepository.create", side_effect=_profile_create),
-        patch("tarsier_api.main.ProfileRepository.get_by_id", side_effect=_profile_get_by_id),
-        patch("tarsier_api.main.ProfileRepository.list_all", side_effect=_profile_list_all),
-        patch("tarsier_api.main.PhotoRepository.create", side_effect=_photo_create),
-        patch("tarsier_api.main.PhotoRepository.refresh", side_effect=_photo_refresh),
-        patch("tarsier_api.main.PhotoRepository.get_by_id", side_effect=_photo_get_by_id),
-        patch("tarsier_api.main.PhotoRepository.get_by_lr_catalog_uuid", side_effect=_photo_get_by_lr_catalog_uuid),
-        patch("tarsier_api.main.EditResultRepository.get_all_by_job_id", side_effect=_edit_result_get_all),
-        patch("tarsier_api.main.CullResultRepository.get_all_by_job_id",
+        patch("calotype_api.main.JobRepository.create", side_effect=_job_create),
+        patch("calotype_api.main.JobRepository.get_by_id", side_effect=_job_get_by_id),
+        patch("calotype_api.main.JobRepository.get_by_idempotency_key", side_effect=_job_get_by_idempotency_key),
+        patch("calotype_api.main.ProfileRepository.create", side_effect=_profile_create),
+        patch("calotype_api.main.ProfileRepository.get_by_id", side_effect=_profile_get_by_id),
+        patch("calotype_api.main.ProfileRepository.list_all", side_effect=_profile_list_all),
+        patch("calotype_api.main.PhotoRepository.create", side_effect=_photo_create),
+        patch("calotype_api.main.PhotoRepository.refresh", side_effect=_photo_refresh),
+        patch("calotype_api.main.PhotoRepository.get_by_id", side_effect=_photo_get_by_id),
+        patch("calotype_api.main.PhotoRepository.get_by_lr_catalog_uuid", side_effect=_photo_get_by_lr_catalog_uuid),
+        patch("calotype_api.main.EditResultRepository.get_all_by_job_id", side_effect=_edit_result_get_all),
+        patch("calotype_api.main.CullResultRepository.get_all_by_job_id",
               side_effect=lambda session, job_id: store.cull_results.get(str(job_id), [])),
-        patch("tarsier_api.storage.upload_photo"),
+        patch("calotype_api.storage.upload_photo"),
     ]
 
     app.dependency_overrides[get_session] = lambda: MagicMock()

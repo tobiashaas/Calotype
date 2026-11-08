@@ -1,8 +1,8 @@
 //! Folder mode without Lightroom. Talks to the running Bridge like the plugin does.
 //!
-//!     tarsier-folder train  <DIR> --name "Business Warm" [--genre business] [--color color]
-//!     tarsier-folder apply  <DIR> --profile "Business Warm" [--force] [--out <DIR>]
-//!     tarsier-folder profiles
+//!     calotype-folder train  <DIR> --name "Business Warm" [--genre business] [--color color]
+//!     calotype-folder apply  <DIR> --profile "Business Warm" [--force] [--out <DIR>]
+//!     calotype-folder profiles
 //!
 //! train: edited RAWs (RAW + XMP with develop settings) are the training material.
 //! apply: unedited RAWs get a new XMP sidecar; import the folder into Lightroom afterwards.
@@ -25,15 +25,15 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use serde_json::{json, Map, Value};
 
-use tarsier_bridge_core::config::{self, BridgeConfig};
-use tarsier_bridge_core::folder::{self, FolderPhoto};
-use tarsier_bridge_core::xmp;
+use calotype_bridge_core::config::{self, BridgeConfig};
+use calotype_bridge_core::folder::{self, FolderPhoto};
+use calotype_bridge_core::xmp;
 
 #[derive(Parser)]
 #[command(
-    name = "tarsier-folder",
+    name = "calotype-folder",
     version,
-    about = "Tarsier folder mode (RAW + XMP, no Lightroom)"
+    about = "Calotype folder mode (RAW + XMP, no Lightroom)"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -130,7 +130,7 @@ impl Bridge {
         let mut req = self
             .http
             .request(method, format!("{}{path}", self.base))
-            .header("X-Tarsier-Token", &self.token);
+            .header("X-Calotype-Token", &self.token);
         if let Some(b) = body {
             req = req.json(b);
         }
@@ -288,7 +288,7 @@ async fn cull(
             r["reason"].as_str().unwrap_or(""),
         )
         .with_context(|| format!("cannot update {}", photo.sidecar.display()))?;
-        let tmp = target.with_extension("xmp.tarsier-tmp");
+        let tmp = target.with_extension("xmp.calotype-tmp");
         std::fs::write(&tmp, text)?;
         std::fs::rename(&tmp, &target)
             .with_context(|| format!("cannot write {}", target.display()))?;
@@ -450,7 +450,7 @@ async fn find_profile(bridge: &Bridge, wanted: &str) -> Result<Value> {
         .unwrap_or_default();
     let ready: Vec<&&Value> = matches.iter().filter(|p| p["status"] == "ready").collect();
     match (matches.len(), ready.len()) {
-        (0, _) => bail!("no profile \"{wanted}\" — see `tarsier-folder profiles`"),
+        (0, _) => bail!("no profile \"{wanted}\" — see `calotype-folder profiles`"),
         (_, 0) => bail!("profile \"{wanted}\" is not ready yet"),
         (_, 1) => Ok((*ready[0]).clone()),
         _ => bail!("several ready profiles are called \"{wanted}\" — use the profile id"),

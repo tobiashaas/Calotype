@@ -7,10 +7,10 @@ from datetime import datetime, timezone
 
 from sqlalchemy.dialects import postgresql
 
-from tarsier_persistence import reaper
-from tarsier_persistence.models import EditResult, Job
-from tarsier_persistence.repositories.edit_results import EditResultRepository
-from tarsier_persistence.repositories.jobs import JobRepository
+from calotype_persistence import reaper
+from calotype_persistence.models import EditResult, Job
+from calotype_persistence.repositories.edit_results import EditResultRepository
+from calotype_persistence.repositories.jobs import JobRepository
 
 
 class CaptureSession:

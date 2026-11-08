@@ -3,7 +3,7 @@
     python tools/lr_e2e/cull_check.py --folder 100EOSR6 [--photos 80] [--offset 0]
 
 Sorts N consecutive photos of a folder with the same code as the menu item. Checks that every
-photo got a decision, that the collections "Tarsier > <test set>" hold them, and that
+photo got a decision, that the collections "Calotype > <test set>" hold them, and that
 stars, flags and develop settings are untouched. The test collection set is removed at the end.
 """
 

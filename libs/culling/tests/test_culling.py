@@ -5,10 +5,10 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from tarsier_culling.analyze import PhotoFeatures
-from tarsier_culling.faces import Face
-from tarsier_culling.scoring import SERIES_MAX_DISTANCE, group_series, score
-from tarsier_culling.technical import dhash, exposure, hamming, region_sharpness, sharpness
+from calotype_culling.analyze import PhotoFeatures
+from calotype_culling.faces import Face
+from calotype_culling.scoring import SERIES_MAX_DISTANCE, group_series, score
+from calotype_culling.technical import dhash, exposure, hamming, region_sharpness, sharpness
 
 
 def _texture(seed: int = 0, size: int = 800) -> np.ndarray:
@@ -122,7 +122,7 @@ def test_photos_without_faces_still_get_a_decision():
 
 def test_learned_scorer_picks_up_the_photographers_taste():
     """Labels say: smiles are kept, closed eyes are not. The weights must follow."""
-    from tarsier_culling.learned import LearnedScorer
+    from calotype_culling.learned import LearnedScorer
 
     rng = np.random.default_rng(0)
     photos, keep = [], []

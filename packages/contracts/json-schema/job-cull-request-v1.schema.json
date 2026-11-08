@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.tarsier.photo/job-cull-request-v1.schema.json",
+  "$id": "https://schemas.calotype.xyz/job-cull-request-v1.schema.json",
   "title": "CullJobRequestV1",
   "type": "object",
   "additionalProperties": true,

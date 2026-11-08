@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tarsier_inference_worker.cli import straighten_settings
+from calotype_inference_worker.cli import straighten_settings
 
 
 def test_clear_reference_gives_lightroom_crop_keys():

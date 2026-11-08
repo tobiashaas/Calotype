@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 
-from tarsier_culling.analyze import PhotoFeatures
-from tarsier_culling.cull import cull, decision_from_metadata
-from tarsier_culling.faces import Face
+from calotype_culling.analyze import PhotoFeatures
+from calotype_culling.cull import cull, decision_from_metadata
+from calotype_culling.faces import Face
 
 
 def _photo(i: int, sharp: float, eyes_closed: float) -> PhotoFeatures:

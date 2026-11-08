@@ -3,21 +3,21 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tarsier-worker-inference"
+name = "calotype-worker-inference"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "tarsier-domain",
-    "tarsier-persistence",
-    "tarsier-queue",
-    "tarsier-observability",
-    "tarsier-inference-pipeline",
-    "tarsier-edit-serializer",
+    "calotype-domain",
+    "calotype-persistence",
+    "calotype-queue",
+    "calotype-observability",
+    "calotype-inference-pipeline",
+    "calotype-edit-serializer",
     "boto3>=1.35",
 ]
 
 [project.scripts]
-tarsier-inference-worker = "tarsier_inference_worker.cli:main"
+calotype-inference-worker = "calotype_inference_worker.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -119,9 +119,9 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy
-        run: cargo clippy -p tarsier-bridge-core --all-targets -- -D warnings
+        run: cargo clippy -p calotype-bridge-core --all-targets -- -D warnings
       - name: Test
-        run: cargo test -p tarsier-bridge-core
+        run: cargo test -p calotype-bridge-core
 
   lr-plugin:
     name: Lightroom plugin (Lua)

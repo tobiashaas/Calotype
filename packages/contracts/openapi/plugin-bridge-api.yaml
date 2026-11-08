@@ -1,14 +1,14 @@
 openapi: 3.0.3
 info:
-  title: Tarsier Plugin ↔ Bridge (local)
+  title: Calotype Plugin ↔ Bridge (local)
   version: "0.1.0"
   description: |
     Local API of the Bridge, used by the Lightroom plugin (see ADR 004).
 
     - Binds to `127.0.0.1` only. Port and token are in `bridge.json` in the Bridge data
-      directory (`%APPDATA%\Tarsier` on Windows,
-      `~/Library/Application Support/Tarsier` on macOS).
-    - Every `/v1` call needs the header `X-Tarsier-Token`.
+      directory (`%APPDATA%\Calotype` on Windows,
+      `~/Library/Application Support/Calotype` on macOS).
+    - Every `/v1` call needs the header `X-Calotype-Token`.
     - The plugin works with Lightroom catalog UUIDs only. The Bridge builds previews,
       uploads, submits jobs and polls the server API in the background (SQLite outbox
       with retries), so every write returns `202` immediately.
@@ -152,10 +152,10 @@ components:
     token:
       type: apiKey
       in: header
-      name: X-Tarsier-Token
+      name: X-Calotype-Token
   responses:
     Unauthorized:
-      description: Missing or wrong X-Tarsier-Token
+      description: Missing or wrong X-Calotype-Token
     Invalid:
       description: Request body invalid
       content:

@@ -28,9 +28,9 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 from common import top_description  # noqa: E402
 
-from tarsier_culling import FaceAnalyzer, analyze, score  # noqa: E402
-from tarsier_culling.analyze import PhotoFeatures  # noqa: E402
-from tarsier_culling.faces import Face  # noqa: E402
+from calotype_culling import FaceAnalyzer, analyze, score  # noqa: E402
+from calotype_culling.analyze import PhotoFeatures  # noqa: E402
+from calotype_culling.faces import Face  # noqa: E402
 
 RAW_SUFFIXES = (".CR3", ".CR2", ".NEF", ".ARW", ".RAF", ".DNG")
 

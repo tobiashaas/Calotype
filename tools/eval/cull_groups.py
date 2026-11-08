@@ -28,9 +28,9 @@ from sklearn.metrics import roc_auc_score
 sys.path.insert(0, str(Path(__file__).parent))
 from cull_compare import load_or_analyze  # noqa: E402
 
-from tarsier_culling import score  # noqa: E402
-from tarsier_culling.identity import group_people  # noqa: E402
-from tarsier_culling.learned import LearnedScorer  # noqa: E402
+from calotype_culling import score  # noqa: E402
+from calotype_culling.identity import group_people  # noqa: E402
+from calotype_culling.learned import LearnedScorer  # noqa: E402
 
 
 PERSON_COLS = ("ref/person", "ref mix")

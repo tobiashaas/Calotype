@@ -1,6 +1,6 @@
-# Tarsier
+# Calotype
 
-Open-source, AI-assisted editing and culling for **Lightroom Classic**. Tarsier learns *your*
+Open-source, AI-assisted editing and culling for **Lightroom Classic**. Calotype learns *your*
 style from photos you have already edited and *your* taste from photos you have already rated —
 and it runs on your own machine.
 
@@ -15,17 +15,17 @@ and it runs on your own machine.
 - **Culling:** sorts a shoot into *Keep / Check / Sort out* with a reason per photo ("best of its
   series", "eyes closed", …). It learns from the stars and flags you already gave; without them it
   uses explainable starter rules. Nothing you set is overwritten — results are collections.
-- **Folder mode:** the same without Lightroom, on RAW + XMP folders (`tarsier-folder train / apply /
+- **Folder mode:** the same without Lightroom, on RAW + XMP folders (`calotype-folder train / apply /
   cull`), optionally writing into a separate output folder.
 
-- **Upstream:** [github.com/tobiashaas/tarsier](https://github.com/tobiashaas/tarsier)
+- **Upstream:** [github.com/tobiashaas/calotype](https://github.com/tobiashaas/calotype)
 
 ## Architecture
 
 ```text
 Lightroom plugin (Lua) ─┐
                         ├→ Bridge (Rust, 127.0.0.1) → API (FastAPI, 202) → Redis queues → workers
-tarsier-folder (CLI) ──────┘   previews from the RAW,                          feature · train ·
+calotype-folder (CLI) ──────┘   previews from the RAW,                          feature · train ·
                             SQLite outbox, retries                           inference · cull
                                                        Postgres (+ pgvector) · S3-compatible storage
 ```
@@ -38,7 +38,7 @@ Decisions are recorded in [`docs/adr/`](docs/adr/) (queue, Bridge, culling).
 ```text
 apps/
   lr-plugin/        # Lightroom Classic plugin (Lua 5.1), German/English UI
-  bridge/           # Rust: core (local API, outbox, previews, XMP, tarsier-folder) + Tauri shell
+  bridge/           # Rust: core (local API, outbox, previews, XMP, calotype-folder) + Tauri shell
 packages/
   contracts/        # OpenAPI + JSON Schema — source of truth, validated in CI
 services/
@@ -62,7 +62,7 @@ tools/
 ```bash
 # infrastructure
 cp infra/compose/env.example infra/compose/.env
-cd infra/compose && docker compose -p tarsier up -d && cd ../..
+cd infra/compose && docker compose -p calotype up -d && cd ../..
 
 # Python (one venv for all components)
 python -m venv .venv && .venv\Scripts\activate          # Windows
@@ -73,14 +73,14 @@ pip install -e services/api -e services/workers/feature_worker -e services/worke
 cd infra/migrations && alembic upgrade head && cd ../..
 
 # API and workers (each in its own terminal)
-uvicorn tarsier_api.main:app --host 127.0.0.1 --port 8080
-tarsier-feature-worker; tarsier-train-worker; tarsier-inference-worker; tarsier-cull-worker
+uvicorn calotype_api.main:app --host 127.0.0.1 --port 8080
+calotype-feature-worker; calotype-train-worker; calotype-inference-worker; calotype-cull-worker
 
 # Bridge (Rust)
-cd apps/bridge && cargo run --release -p tarsier-bridge-core --bin tarsier-bridge-headless
+cd apps/bridge && cargo run --release -p calotype-bridge-core --bin calotype-bridge-headless
 ```
 
-Then add `apps/lr-plugin/Tarsier.lrplugin` in Lightroom's Plug-in Manager. Details:
+Then add `apps/lr-plugin/Calotype.lrplugin` in Lightroom's Plug-in Manager. Details:
 [`CLAUDE.md`](CLAUDE.md) (developer overview), [`apps/lr-plugin/README.md`](apps/lr-plugin/README.md),
 [`apps/bridge/README.md`](apps/bridge/README.md).
 
@@ -91,7 +91,7 @@ All of these run in CI (`.github/workflows/ci.yml`):
 ```bash
 python scripts/validate_contracts.py
 pytest libs services                                  # Python libs, API, workers
-cd apps/bridge && cargo test -p tarsier-bridge-core      # Bridge, incl. end-to-end against a fake API
+cd apps/bridge && cargo test -p calotype-bridge-core      # Bridge, incl. end-to-end against a fake API
 luajit apps/lr-plugin/tests/run.lua                   # plugin with a faked Lightroom SDK
 ```
 

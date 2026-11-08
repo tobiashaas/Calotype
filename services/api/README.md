@@ -5,5 +5,5 @@ cd services/api
 python -m venv .venv
 .venv\\Scripts\\activate
 pip install -e ".[dev]"
-uvicorn tarsier_api.main:app --reload
+uvicorn calotype_api.main:app --reload
 ```

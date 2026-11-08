@@ -1,19 +1,19 @@
 [package]
-name = "tarsier-bridge-core"
-description = "Tarsier Bridge core: local API for the Lightroom plugin, SQLite outbox, previews"
+name = "calotype-bridge-core"
+description = "Calotype Bridge core: local API for the Lightroom plugin, SQLite outbox, previews"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [lib]
-name = "tarsier_bridge_core"
+name = "calotype_bridge_core"
 
 [[bin]]
-name = "tarsier-bridge-headless"
+name = "calotype-bridge-headless"
 path = "src/bin/headless.rs"
 
 [[bin]]
-name = "tarsier-folder"
+name = "calotype-folder"
 path = "src/bin/folder.rs"
 
 [dependencies]

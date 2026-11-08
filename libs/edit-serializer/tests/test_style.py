@@ -1,4 +1,4 @@
-from tarsier_edit_serializer import apply_style, style_settings
+from calotype_edit_serializer import apply_style, style_settings
 
 PRESET = {
     # look

@@ -48,22 +48,27 @@ fn new_token() -> String {
     )
 }
 
-/// `TARSIER_BRIDGE_DATA_DIR`, else `%APPDATA%\Tarsier` / `~/Library/Application Support/Tarsier`.
+/// `CALOTYPE_BRIDGE_DATA_DIR`, else `%APPDATA%\Calotype` / `~/Library/Application Support/Calotype`.
 ///
-/// Before the rename (ADR 006) this was `LRFrameFlow` / `LRFF_BRIDGE_DATA_DIR`: the old variable
-/// is still read, and an existing old folder is moved to the new place once (token, queue and
-/// settings stay).
+/// Before the rename (ADR 006) this was `LRFrameFlow` (briefly `Tarsier`) with
+/// `LRFF_BRIDGE_DATA_DIR` / `TARSIER_BRIDGE_DATA_DIR`: the old variables are still read, and an
+/// existing old folder is moved to the new place once (token, queue and settings stay).
 pub fn default_data_dir() -> Result<PathBuf> {
-    for var in ["TARSIER_BRIDGE_DATA_DIR", "LRFF_BRIDGE_DATA_DIR"] {
+    for var in [
+        "CALOTYPE_BRIDGE_DATA_DIR",
+        "TARSIER_BRIDGE_DATA_DIR",
+        "LRFF_BRIDGE_DATA_DIR",
+    ] {
         if let Some(dir) = std::env::var_os(var) {
             return Ok(PathBuf::from(dir));
         }
     }
     let base = dirs::data_dir().context("no per-user data directory on this system")?;
-    Ok(migrate_old_dir(
-        &base.join("LRFrameFlow"),
-        base.join("Tarsier"),
-    ))
+    let mut dir = base.join("Calotype");
+    for old in ["Tarsier", "LRFrameFlow"] {
+        dir = migrate_old_dir(&base.join(old), dir);
+    }
+    Ok(dir)
 }
 
 /// Move `old` to `new` when only the old folder exists; returns the folder to use.
@@ -115,7 +120,10 @@ mod tests {
     #[test]
     fn old_data_folder_moves_once_to_the_new_name() {
         let base = tempfile::tempdir().unwrap();
-        let (old, new) = (base.path().join("LRFrameFlow"), base.path().join("Tarsier"));
+        let (old, new) = (
+            base.path().join("LRFrameFlow"),
+            base.path().join("Calotype"),
+        );
         std::fs::create_dir_all(&old).unwrap();
         std::fs::write(old.join(CONFIG_FILE), "{}").unwrap();
         assert_eq!(migrate_old_dir(&old, new.clone()), new);

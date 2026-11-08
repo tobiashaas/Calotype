@@ -3,20 +3,20 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tarsier-worker-feature"
+name = "calotype-worker-feature"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "tarsier-domain",
-    "tarsier-persistence",
-    "tarsier-queue",
-    "tarsier-observability",
-    "tarsier-inference-pipeline",
+    "calotype-domain",
+    "calotype-persistence",
+    "calotype-queue",
+    "calotype-observability",
+    "calotype-inference-pipeline",
     "boto3>=1.35",
 ]
 
 [project.scripts]
-tarsier-feature-worker = "tarsier_feature_worker.cli:main"
+calotype-feature-worker = "calotype_feature_worker.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -7,11 +7,11 @@ the rule. Because the rule is known exactly, the score shows whether the whole c
 (preview → features → training → inference → XMP) works and how precise it is.
 
     python tools/eval/synthetic.py make  <raw_dir> <preview_dir> [--holdout 0.25]
-    tarsier-folder train <raw_dir> --name "Synthetic rule"
-    tarsier-folder apply <raw_dir> --profile "Synthetic rule"
+    calotype-folder train <raw_dir> --name "Synthetic rule"
+    calotype-folder apply <raw_dir> --profile "Synthetic rule"
     python tools/eval/synthetic.py score <raw_dir>
 
-Previews come from the Bridge (`cargo run --release -p tarsier-bridge-core --example preview`),
+Previews come from the Bridge (`cargo run --release -p calotype-bridge-core --example preview`),
 so the rule sees exactly the image the model sees. Nothing here touches the originals'
 folder: run it on a copy.
 """
@@ -77,7 +77,7 @@ def xmp(settings: dict[str, float]) -> str:
         return f"{int(v):+d}" if v else "0"
 
     attrs = "\n".join(f'    crs:{k}="{fmt(k, v)}"' for k, v in settings.items())
-    return f"""<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="tarsier-eval synthetic rule">
+    return f"""<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="calotype-eval synthetic rule">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about=""
     xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
@@ -138,7 +138,7 @@ def score(raw_dir: Path) -> int:
             continue
         rows.append((expected, read_xmp(sidecar)))
     if not rows:
-        print("no predictions found — run `tarsier-folder apply` first")
+        print("no predictions found — run `calotype-folder apply` first")
         return 1
 
     print(f"\n{len(rows)} test photos scored ({len(missing)} without prediction), {len(train)} trained on\n")

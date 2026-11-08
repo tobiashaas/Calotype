@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{Map, Number, Value};
 
 pub const CRS_NS: &str = "http://ns.adobe.com/camera-raw-settings/1.0/";
-pub const TARSIER_NS: &str = "https://tarsier.photo/ns/1.0/";
+pub const CALOTYPE_NS: &str = "https://calotype.xyz/ns/1.0/";
 /// Current Lightroom process version. Without it, Adobe treats the values as the 2003
 /// process and the `*2012` sliders would be misread.
 pub const PROCESS_VERSION: &str = "15.4";
@@ -348,12 +348,12 @@ fn curve_elements(settings: &Map<String, Value>) -> Vec<(String, String)> {
 pub fn new_sidecar(settings: &Map<String, Value>, profile: &str) -> String {
     let mut out = String::new();
     out.push_str("<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n");
-    out.push_str("<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"Tarsier\">\n");
+    out.push_str("<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"Calotype\">\n");
     out.push_str(" <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n");
     out.push_str("  <rdf:Description rdf:about=\"\"\n");
     out.push_str(&format!("    xmlns:crs=\"{CRS_NS}\"\n"));
-    out.push_str(&format!("    xmlns:tarsier=\"{TARSIER_NS}\"\n"));
-    out.push_str(&format!("    tarsier:Profile=\"{}\"\n", escape(profile)));
+    out.push_str(&format!("    xmlns:calotype=\"{CALOTYPE_NS}\"\n"));
+    out.push_str(&format!("    calotype:Profile=\"{}\"\n", escape(profile)));
     for (k, v) in with_required(settings) {
         out.push_str(&format!("    crs:{k}=\"{}\"\n", escape(&v)));
     }
@@ -396,18 +396,18 @@ pub fn update_sidecar(
             missing.push(format!("crs:{k}=\"{}\"", escape(&v)));
         }
     }
-    let marker = format!("tarsier:Profile=\"{}\"", escape(profile));
-    let has_tarsier_ns = xmp.contains(TARSIER_NS);
+    let marker = format!("calotype:Profile=\"{}\"", escape(profile));
+    let has_calotype_ns = xmp.contains(CALOTYPE_NS);
     let has_crs_ns = xmp.contains(CRS_NS);
     let mut insert = Vec::new();
     if !has_crs_ns {
         insert.push(format!("xmlns:crs=\"{CRS_NS}\""));
     }
-    if !has_tarsier_ns {
-        insert.push(format!("xmlns:tarsier=\"{TARSIER_NS}\""));
+    if !has_calotype_ns {
+        insert.push(format!("xmlns:calotype=\"{CALOTYPE_NS}\""));
     }
-    if let Some(pos) = xmp.find("tarsier:Profile=\"") {
-        let value_start = pos + "tarsier:Profile=\"".len();
+    if let Some(pos) = xmp.find("calotype:Profile=\"") {
+        let value_start = pos + "calotype:Profile=\"".len();
         let value_end = value_start + xmp[value_start..].find('"')?;
         xmp.replace_range(value_start..value_end, &escape(profile));
     } else {
@@ -444,7 +444,9 @@ const XMP_NS: &str = "http://ns.adobe.com/xap/1.0/";
 fn upgrade_old_attributes(xmp: &str) -> String {
     let mut out = xmp.to_string();
     for name in ["Profile", "Cull", "CullReason"] {
-        out = out.replace(&format!("lrff:{name}=\""), &format!("tarsier:{name}=\""));
+        for old in ["lrff", "tarsier"] {
+            out = out.replace(&format!("{old}:{name}=\""), &format!("calotype:{name}=\""));
+        }
     }
     out
 }
@@ -478,14 +480,14 @@ fn set_top_attr(xmp: &mut String, name: &str, value: &str) -> Option<()> {
     Some(())
 }
 
-/// Write a culling decision: color label + `tarsier:Cull` / `tarsier:CullReason`. Stars, develop
+/// Write a culling decision: color label + `calotype:Cull` / `calotype:CullReason`. Stars, develop
 /// settings and everything else in an existing sidecar stay as they are.
 pub fn set_cull(existing: Option<&str>, bucket: &str, reason: &str) -> Option<String> {
     let mut xmp = match existing {
         Some(text) if top_description(text).is_some() => upgrade_old_attributes(text),
         _ => concat!(
             "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n",
-            "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"Tarsier\">\n",
+            "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"Calotype\">\n",
             " <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n",
             "  <rdf:Description rdf:about=\"\"/>\n",
             " </rdf:RDF>\n",
@@ -497,12 +499,12 @@ pub fn set_cull(existing: Option<&str>, bucket: &str, reason: &str) -> Option<St
     if !xmp.contains(XMP_NS) {
         set_top_attr(&mut xmp, "xmlns:xmp", XMP_NS)?;
     }
-    if !xmp.contains(TARSIER_NS) {
-        set_top_attr(&mut xmp, "xmlns:tarsier", TARSIER_NS)?;
+    if !xmp.contains(CALOTYPE_NS) {
+        set_top_attr(&mut xmp, "xmlns:calotype", CALOTYPE_NS)?;
     }
     set_top_attr(&mut xmp, "xmp:Label", cull_label(bucket))?;
-    set_top_attr(&mut xmp, "tarsier:Cull", bucket)?;
-    set_top_attr(&mut xmp, "tarsier:CullReason", reason)?;
+    set_top_attr(&mut xmp, "calotype:Cull", bucket)?;
+    set_top_attr(&mut xmp, "calotype:CullReason", reason)?;
     Some(xmp)
 }
 
@@ -537,11 +539,11 @@ mod tests {
         let mut s = Map::new();
         s.insert("Exposure2012".into(), json!(0.3));
         let up = update_sidecar(old, &s, "New").unwrap();
-        assert!(up.contains("tarsier:Profile=\"New\"") && !up.contains("lrff:Profile"));
-        assert!(up.contains(TARSIER_NS));
+        assert!(up.contains("calotype:Profile=\"New\"") && !up.contains("lrff:Profile"));
+        assert!(up.contains(CALOTYPE_NS));
         let culled = set_cull(Some(&up), "reject", "r").unwrap();
         assert_eq!(culled.matches("Cull=").count(), 1);
-        assert!(culled.contains("tarsier:Cull=\"reject\""));
+        assert!(culled.contains("calotype:Cull=\"reject\""));
     }
 
     #[test]
@@ -563,8 +565,8 @@ mod tests {
             0.4,
             "edit untouched"
         );
-        assert!(out.contains("tarsier:Cull=\"reject\""));
-        assert!(out.contains("tarsier:CullReason=\"eyes closed &amp; blurry\""));
+        assert!(out.contains("calotype:Cull=\"reject\""));
+        assert!(out.contains("calotype:CullReason=\"eyes closed &amp; blurry\""));
         // A second run replaces instead of adding.
         let again = set_cull(Some(&out), "keep", "best of its series").unwrap();
         assert_eq!(again.matches("xmp:Label=").count(), 1);
@@ -572,7 +574,7 @@ mod tests {
 
         let fresh = set_cull(None, "uncertain", "check").unwrap();
         assert_eq!(read_decisions(&fresh)["color_label"], "yellow");
-        assert!(fresh.contains(TARSIER_NS) && fresh.contains(XMP_NS));
+        assert!(fresh.contains(CALOTYPE_NS) && fresh.contains(XMP_NS));
     }
 
     const ADOBE: &str = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
@@ -622,7 +624,7 @@ mod tests {
         assert!(xmp.contains("crs:Contrast2012=\"-12\""));
         assert!(xmp.contains("crs:ProcessVersion=\"15.4\""));
         assert!(xmp.contains("crs:WhiteBalance=\"Custom\""));
-        assert!(xmp.contains("tarsier:Profile=\"Wedding &quot;Warm&quot;\""));
+        assert!(xmp.contains("calotype:Profile=\"Wedding &quot;Warm&quot;\""));
         let back = read_develop_settings(&xmp);
         assert_eq!(back["Exposure2012"], json!(0.35));
         assert_eq!(back["Temperature"], json!(5600));
@@ -642,11 +644,11 @@ mod tests {
             xmp.contains("crs:Highlights2012=\"-30\""),
             "missing key inserted"
         );
-        assert!(xmp.contains("tarsier:Profile=\"Test\""));
+        assert!(xmp.contains("calotype:Profile=\"Test\""));
         assert_eq!(xmp.matches("crs:ProcessVersion=").count(), 1);
         let again = update_sidecar(&xmp, &settings, "Test 2").unwrap();
-        assert_eq!(again.matches("tarsier:Profile=").count(), 1);
-        assert!(again.contains("tarsier:Profile=\"Test 2\""));
+        assert_eq!(again.matches("calotype:Profile=").count(), 1);
+        assert!(again.contains("calotype:Profile=\"Test 2\""));
         assert_eq!(read_develop_settings(&again)["Vibrance"], json!(21));
     }
 

@@ -25,7 +25,7 @@ from sklearn.preprocessing import StandardScaler
 sys.path.insert(0, str(Path(__file__).parent))
 from common import SLIDERS, read_xmp  # noqa: E402
 
-from tarsier_inference_pipeline import extract_features  # noqa: E402
+from calotype_inference_pipeline import extract_features  # noqa: E402
 
 TARGETS = ["Exposure2012", "Temperature", "Tint", "Contrast2012", "Highlights2012", "Shadows2012"]
 

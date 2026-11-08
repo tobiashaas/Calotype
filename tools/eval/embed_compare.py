@@ -102,7 +102,7 @@ def main() -> int:
     from sklearn.preprocessing import StandardScaler
 
     from cull_compare import load_or_analyze, ref_bucket, reference
-    from tarsier_culling.learned import feature_matrix
+    from calotype_culling.learned import feature_matrix
 
     z = np.load(work / "model_lab_features.npz")
     Xtr, Xte, Ytr, Yte = z["tr_hist+stats+face"], z["te_hist+stats+face"], z["Ytr"][:, :3], z["Yte"][:, :3]

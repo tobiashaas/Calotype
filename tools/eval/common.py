@@ -1,4 +1,4 @@
-"""Shared pieces of tarsier-eval: slider tolerances, top-level XMP reading, the score table."""
+"""Shared pieces of calotype-eval: slider tolerances, top-level XMP reading, the score table."""
 
 from __future__ import annotations
 

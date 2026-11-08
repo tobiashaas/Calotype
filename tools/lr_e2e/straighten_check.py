@@ -22,7 +22,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run import Bridge, Report, bridge_config  # noqa: E402
 
-from tarsier_inference_pipeline.straighten import crop_settings, estimate_tilt  # noqa: E402
+from calotype_inference_pipeline.straighten import crop_settings, estimate_tilt  # noqa: E402
 
 KEYS = ["CropAngle", "CropLeft", "CropTop", "CropRight", "CropBottom"]
 FULL = {"CropAngle": 0, "CropLeft": 0, "CropTop": 0, "CropRight": 1, "CropBottom": 1}

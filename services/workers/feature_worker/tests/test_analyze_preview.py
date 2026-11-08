@@ -6,7 +6,7 @@ import io
 
 from PIL import Image, ImageDraw
 
-from tarsier_feature_worker.cli import analyze_preview
+from calotype_feature_worker.cli import analyze_preview
 
 
 def _jpeg(tilt: float) -> bytes:

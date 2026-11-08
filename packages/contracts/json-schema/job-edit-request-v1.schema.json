@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.tarsier.photo/job-edit-request-v1.schema.json",
+  "$id": "https://schemas.calotype.xyz/job-edit-request-v1.schema.json",
   "title": "EditJobRequestV1",
   "type": "object",
   "additionalProperties": true,

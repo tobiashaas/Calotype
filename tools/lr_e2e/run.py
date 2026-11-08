@@ -3,7 +3,7 @@
     python tools/lr_e2e/run.py --profile "Benchmark R6 v2" [--photos 5] [--train 20]
 
 Requirements: Bridge running with "automation": true in bridge.json, Lightroom open with the
-Tarsier plugin loaded (after enabling, reload the plugin once). Use a test catalog.
+Calotype plugin loaded (after enabling, reload the plugin once). Use a test catalog.
 
 Scenario:
   1. ping            — plugin version, Lightroom version, UI language, photo count
@@ -33,7 +33,7 @@ CHECKED = ["Exposure2012", "Contrast2012", "Highlights2012", "Shadows2012", "Whi
 
 
 def bridge_config() -> dict:
-    base = os.environ.get("TARSIER_BRIDGE_DATA_DIR") or str(Path(os.environ.get("APPDATA", "~")) / "Tarsier")
+    base = os.environ.get("CALOTYPE_BRIDGE_DATA_DIR") or str(Path(os.environ.get("APPDATA", "~")) / "Calotype")
     return json.loads((Path(base) / "bridge.json").read_text(encoding="utf-8"))
 
 
@@ -45,7 +45,7 @@ class Bridge:
     def call(self, method: str, path: str, body: dict | None = None):
         req = urllib.request.Request(self.base + path, method=method,
                                      data=json.dumps(body).encode() if body is not None else None,
-                                     headers={"X-Tarsier-Token": self.token, "Content-Type": "application/json"})
+                                     headers={"X-Calotype-Token": self.token, "Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 raw = resp.read()
@@ -102,7 +102,7 @@ def main() -> int:
         return 2
     idle = status.get("plugin_idle_secs")
     if idle is None or idle > 15:
-        print("Lightroom does not poll — open Lightroom and reload the Tarsier plugin "
+        print("Lightroom does not poll — open Lightroom and reload the Calotype plugin "
               "(File > Plug-in Manager > Reload Plug-in)")
         return 2
 

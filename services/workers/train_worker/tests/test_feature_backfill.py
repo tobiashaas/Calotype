@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
-from tarsier_train_worker import cli
+from calotype_train_worker import cli
 
 
 class FakeS3:

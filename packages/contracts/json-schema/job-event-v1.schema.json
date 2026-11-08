@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.tarsier.photo/job-event-v1.schema.json",
+  "$id": "https://schemas.calotype.xyz/job-event-v1.schema.json",
   "title": "JobEventV1",
   "type": "object",
   "additionalProperties": false,

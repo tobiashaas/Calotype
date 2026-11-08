@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Tarsier Bridge",
+  "productName": "Calotype Bridge",
   "version": "0.1.0",
-  "identifier": "photo.tarsier.bridge",
+  "identifier": "xyz.calotype.bridge",
   "build": {
     "frontendDist": "../ui"
   },
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Tarsier Bridge",
+        "title": "Calotype Bridge",
         "width": 480,
         "height": 600,
         "minWidth": 380,

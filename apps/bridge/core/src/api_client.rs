@@ -87,7 +87,7 @@ impl ApiClient {
         let http = Client::builder()
             .timeout(Duration::from_secs(60))
             .connect_timeout(Duration::from_secs(5))
-            .user_agent(concat!("tarsier-bridge/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("calotype-bridge/", env!("CARGO_PKG_VERSION")))
             .build()
             .expect("static client config is valid");
         Self {
