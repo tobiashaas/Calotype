@@ -146,6 +146,7 @@ See `docs/adr/005-culling-architecture.md`.
 ### Backlog / Nice-to-have
 - [ ] **Bigger model:** CNN/embedding backbone on the image instead of hand features (tried DINOv2/SigLIP/PE: no gain yet, see Model v2); ONNX for optional local inference in the Bridge
 - [ ] More sliders: Texture, Clarity, Dehaze, tone curve, HSL (today only via the profile's fixed look)
+- [ ] Ruff upgrade: CI pins 0.8.1; 0.17 reports 49 findings (14 × B008 = FastAPI `Depends`, ignore via config; imports, blind excepts)
 - [ ] Other raw converters: RawTherapee / darktable sidecars, Capture One (needs an ADR)
 - [ ] Add a `GET /v1/jobs` list endpoint with pagination and status filter
 - [ ] Profile versioning: bump `version` on retrain instead of overwriting artifact

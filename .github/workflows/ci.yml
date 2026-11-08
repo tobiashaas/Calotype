@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install ruff
-        run: pip install ruff>=0.8
+        run: pip install "ruff==0.8.1"   # pinned: newer releases add rules (see TODO)
       - name: Lint
         run: |
           ruff check \
@@ -81,7 +81,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install
-        run: pip install -e "libs/culling[dev]"
+        run: pip install -e libs/inference-pipeline -e "libs/culling[dev]"
       - name: Test
         run: python -m pytest libs/culling/tests/ -v
 
@@ -147,7 +147,7 @@ jobs:
           pip install -e libs/queue
           pip install -e libs/observability
           pip install -e "libs/persistence" --no-deps
-          pip install sqlalchemy>=2.0 pydantic>=2.10
+          pip install "sqlalchemy>=2.0" "pydantic>=2.10"
           pip install -e "services/api[dev]"
       - name: Test
         run: python -m pytest services/api/tests/ -v
