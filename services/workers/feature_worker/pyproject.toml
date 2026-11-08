@@ -3,20 +3,20 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lr-frameflow-worker-feature"
+name = "tarsier-worker-feature"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "lr-frameflow-domain",
-    "lr-frameflow-persistence",
-    "lr-frameflow-queue",
-    "lr-frameflow-observability",
-    "lr-frameflow-inference-pipeline",
+    "tarsier-domain",
+    "tarsier-persistence",
+    "tarsier-queue",
+    "tarsier-observability",
+    "tarsier-inference-pipeline",
     "boto3>=1.35",
 ]
 
 [project.scripts]
-lr-ff-feature-worker = "lr_frameflow_feature_worker.cli:main"
+tarsier-feature-worker = "tarsier_feature_worker.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

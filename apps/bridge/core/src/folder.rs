@@ -118,7 +118,7 @@ pub fn write_result(
     } else {
         xmp::new_sidecar(settings, profile)
     };
-    let tmp = photo.sidecar.with_extension("xmp.lrff-tmp");
+    let tmp = photo.sidecar.with_extension("xmp.tarsier-tmp");
     std::fs::write(&tmp, text)?;
     std::fs::rename(&tmp, &photo.sidecar)
         .with_context(|| format!("cannot write {}", photo.sidecar.display()))?;
@@ -194,7 +194,7 @@ mod tests {
         let updated = std::fs::read_to_string(&photo.sidecar).unwrap();
         assert!(
             updated.contains("crs:Exposure2012=\"-0.10\"")
-                && updated.contains("lrff:Profile=\"P2\"")
+                && updated.contains("tarsier:Profile=\"P2\"")
         );
     }
 }

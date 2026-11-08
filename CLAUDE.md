@@ -1,11 +1,11 @@
-# CLAUDE.md — LRFrameFlow
+# CLAUDE.md — Tarsier
 
 > **Convention:** Keep this file up to date. After every session that changes architecture,
 > adds endpoints, or completes a phase — update the relevant sections here and in `TODO.md`.
 
 ## Project Overview
 
-LRFrameFlow is an AI-powered Lightroom Classic photo editing system. It uses an async job-orchestration architecture:
+Tarsier is an AI-powered Lightroom Classic photo editing system. It uses an async job-orchestration architecture:
 
 1. **LR Plugin** (Lua, `apps/lr-plugin/`) — Lightroom Classic SDK, triggers jobs
 2. **Bridge Desktop App** (Tauri/Rust, `apps/bridge/`) — local orchestration layer
@@ -35,7 +35,7 @@ See `TODO.md` for the detailed task breakdown.
 ```
 apps/
   bridge/              # Rust workspace: core/ (axum local API, SQLite outbox, previews) + src-tauri/ (desktop shell) + ui/
-  lr-plugin/           # LRFrameFlow.lrplugin (Lua 5.1): Train / Apply / Bridge status; tests/run.lua with faked SDK
+  lr-plugin/           # Tarsier.lrplugin (Lua 5.1): Train / Apply / Bridge status; tests/run.lua with faked SDK
 packages/
   contracts/           # OpenAPI spec + JSON Schemas (source of truth for contracts)
   domain-types/        # Optional shared DTOs (placeholder)
@@ -47,14 +47,14 @@ libs/
   inference-pipeline/  # Feature extraction (Pillow) + Ridge model (scikit-learn/joblib)
   edit-serializer/     # internal params ↔ Lightroom develop settings (names, ranges)
   culling/             # culling features (sharpness, faces, expressions, series) + explainable baseline scorer
-  lr-io/               # Shared path/I/O helpers (stub)
+  io/               # Shared path/I/O helpers (stub)
 services/
   api/                 # FastAPI: all routes (photos, profiles, jobs, results)
   workers/
-    feature_worker/    # lrff:jobs:feature → extract features → lrff:jobs:inference
-    train_worker/      # lrff:jobs:train → train Ridge model → Profile READY
-    inference_worker/  # lrff:jobs:inference → run inference → EditResult
-    cull_worker/       # lrff:jobs:cull → culling features (cached in photos.analysis) → CullResult
+    feature_worker/    # tarsier:jobs:feature → extract features → tarsier:jobs:inference
+    train_worker/      # tarsier:jobs:train → train Ridge model → Profile READY
+    inference_worker/  # tarsier:jobs:inference → run inference → EditResult
+    cull_worker/       # tarsier:jobs:cull → culling features (cached in photos.analysis) → CullResult
 infra/
   compose/             # docker-compose.yml: Postgres 16+pgvector, Redis 7, MinIO
   migrations/          # Alembic migrations (001–012)
@@ -81,7 +81,7 @@ TODO.md                # Completed + open work items — keep up to date
   - `edit-serializer` imports: stdlib only
   - `culling` imports: inference-pipeline (model registry), numpy, Pillow, opencv-python-headless, mediapipe, scikit-learn — no DB/Redis; models only via the registry (SHA-256, `THIRD_PARTY_MODELS.md`)
   - `services/workers/*` import: domain, persistence, queue, observability, inference-pipeline, edit-serializer; `cull_worker` also culling
-  - **Workers CANNOT import `lr_frameflow_api`**
+  - **Workers CANNOT import `tarsier_api`**
   - **API CANNOT import worker modules**
 - **Versioned contracts:** Every queue message and API schema has a `schema_version` field. Never break existing schema versions; add new ones.
 - **Tolerant reader:** request models ignore (and log) unknown *optional* fields instead of rejecting them — a newer Bridge must work with an older server. New *required* fields need a new schema version. (Found when an updated Bridge sent `lr_metadata` to a not-yet-restarted API: every upload failed with 422.)
@@ -94,44 +94,44 @@ TODO.md                # Completed + open work items — keep up to date
 
 | File | Purpose |
 |------|---------|
-| `libs/domain/src/lr_frameflow_domain/jobs.py` | `JobKind` & `JobStatus` enums |
-| `libs/domain/src/lr_frameflow_domain/profiles.py` | `ProfileStatus` enum |
-| `libs/persistence/src/lr_frameflow_persistence/models.py` | All SQLAlchemy models |
-| `libs/persistence/src/lr_frameflow_persistence/repositories/` | One repo file per model |
-| `libs/inference-pipeline/src/lr_frameflow_inference_pipeline/features.py` | `extract_features()` — 128-dim histogram |
-| `libs/inference-pipeline/src/lr_frameflow_inference_pipeline/model.py` | `train_model()` / `run_inference()` |
-| `libs/edit-serializer/src/lr_edit_serializer/sliders.py` | `from_lightroom()` / `to_lightroom()` — LR names, ranges, RAW vs JPEG white balance |
-| `libs/queue/src/lr_frameflow_queue/envelope.py` | `JobEnvelopeV1` — canonical queue message |
-| `libs/queue/src/lr_frameflow_queue/constants.py` | Queue keys: `lrff:jobs:train`, `lrff:jobs:feature`, `lrff:jobs:inference` |
-| `libs/queue/src/lr_frameflow_queue/publisher.py` | `enqueue()`, `forward_to_inference()` |
-| `libs/queue/src/lr_frameflow_queue/consumer.py` | `blpop_envelope()`, `push_dead_letter()` |
-| `services/api/src/lr_frameflow_api/main.py` | FastAPI app + all routes |
-| `services/api/src/lr_frameflow_api/schemas.py` | Pydantic request/response models |
-| `services/api/src/lr_frameflow_api/deps.py` | FastAPI dependencies (DB session, publisher, S3) |
-| `services/api/src/lr_frameflow_api/storage.py` | boto3 MinIO helper |
+| `libs/domain/src/tarsier_domain/jobs.py` | `JobKind` & `JobStatus` enums |
+| `libs/domain/src/tarsier_domain/profiles.py` | `ProfileStatus` enum |
+| `libs/persistence/src/tarsier_persistence/models.py` | All SQLAlchemy models |
+| `libs/persistence/src/tarsier_persistence/repositories/` | One repo file per model |
+| `libs/inference-pipeline/src/tarsier_inference_pipeline/features.py` | `extract_features()` — 128-dim histogram |
+| `libs/inference-pipeline/src/tarsier_inference_pipeline/model.py` | `train_model()` / `run_inference()` |
+| `libs/edit-serializer/src/tarsier_edit_serializer/sliders.py` | `from_lightroom()` / `to_lightroom()` — LR names, ranges, RAW vs JPEG white balance |
+| `libs/queue/src/tarsier_queue/envelope.py` | `JobEnvelopeV1` — canonical queue message |
+| `libs/queue/src/tarsier_queue/constants.py` | Queue keys: `tarsier:jobs:train`, `tarsier:jobs:feature`, `tarsier:jobs:inference` |
+| `libs/queue/src/tarsier_queue/publisher.py` | `enqueue()`, `forward_to_inference()` |
+| `libs/queue/src/tarsier_queue/consumer.py` | `blpop_envelope()`, `push_dead_letter()` |
+| `services/api/src/tarsier_api/main.py` | FastAPI app + all routes |
+| `services/api/src/tarsier_api/schemas.py` | Pydantic request/response models |
+| `services/api/src/tarsier_api/deps.py` | FastAPI dependencies (DB session, publisher, S3) |
+| `services/api/src/tarsier_api/storage.py` | boto3 MinIO helper |
 | `packages/contracts/openapi/bridge-api.yaml` | OpenAPI spec (Bridge ↔ API contract) |
-| `packages/contracts/openapi/plugin-bridge-api.yaml` | OpenAPI spec (LR plugin ↔ Bridge, local, `X-LRFF-Token`) |
+| `packages/contracts/openapi/plugin-bridge-api.yaml` | OpenAPI spec (LR plugin ↔ Bridge, local, `X-Tarsier-Token`) |
 | `apps/bridge/core/src/outbox.rs` | Background loop: preview → upload → submit job → poll → map results |
 | `apps/bridge/core/src/server.rs` | Local API for the plugin (127.0.0.1:47600) |
 | `apps/bridge/core/src/preview.rs` | Unedited preview: smallest embedded RAW JPEG ≥ 1200 px (else largest) / original JPEG/TIFF, orientation applied |
-| `apps/lr-plugin/LRFrameFlow.lrplugin/BridgeClient.lua` | Plugin → Bridge HTTP, reads `bridge.json` |
-| `apps/bridge/core/src/xmp.rs` | Read/write Adobe `crs:` XMP sidecars (ProcessVersion 15.4, `lrff:Profile`) |
-| `apps/bridge/core/src/bin/folder.rs` | `lrff-folder train/apply/cull/profiles` — folder mode without Lightroom |
-| `libs/culling/src/lr_frameflow_culling/scoring.py` | Series + explainable baseline (keep/uncertain/reject with reasons) |
-| `libs/culling/src/lr_frameflow_culling/identity.py` | SFace face embeddings + grouping photos by person |
-| `libs/inference-pipeline/src/lr_frameflow_inference_pipeline/straighten.py` | Tilt from the photo's own lines (keystone-aware) + Lightroom crop keys |
-| `libs/culling/src/lr_frameflow_culling/cull.py` | `cull()`: learned from decided photos (≥ 8 per class) else rules; `decision_from_metadata` |
-| `apps/lr-plugin/LRFrameFlow.lrplugin/CullPhotos.lua` | Menu: sort selected photos into collections (stars/flags untouched) |
-| `apps/lr-plugin/LRFrameFlow.lrplugin/Retouch.lua` | AI-mask retouch: find our presets by correction name, snapshot, apply, `updateAISettings`, remove empty masks |
+| `apps/lr-plugin/Tarsier.lrplugin/BridgeClient.lua` | Plugin → Bridge HTTP, reads `bridge.json` |
+| `apps/bridge/core/src/xmp.rs` | Read/write Adobe `crs:` XMP sidecars (ProcessVersion 15.4, `tarsier:Profile`) |
+| `apps/bridge/core/src/bin/folder.rs` | `tarsier-folder train/apply/cull/profiles` — folder mode without Lightroom |
+| `libs/culling/src/tarsier_culling/scoring.py` | Series + explainable baseline (keep/uncertain/reject with reasons) |
+| `libs/culling/src/tarsier_culling/identity.py` | SFace face embeddings + grouping photos by person |
+| `libs/inference-pipeline/src/tarsier_inference_pipeline/straighten.py` | Tilt from the photo's own lines (keystone-aware) + Lightroom crop keys |
+| `libs/culling/src/tarsier_culling/cull.py` | `cull()`: learned from decided photos (≥ 8 per class) else rules; `decision_from_metadata` |
+| `apps/lr-plugin/Tarsier.lrplugin/CullPhotos.lua` | Menu: sort selected photos into collections (stars/flags untouched) |
+| `apps/lr-plugin/Tarsier.lrplugin/Retouch.lua` | AI-mask retouch: find our presets by correction name, snapshot, apply, `updateAISettings`, remove empty masks |
 | `apps/bridge/core/src/presets.rs` | Embeds `presets/` and installs them into Camera Raw's settings folder on start |
 | `tools/presets/build.py` | Generates the looks and retouch presets (CC0) |
 | `tools/lr_e2e/retouch_check.py` | Retouch end-to-end in Lightroom (masks computed, own masks kept, no duplicates, restore) |
 | `tools/lr_e2e/cull_check.py` | Culling end-to-end in a real Lightroom (collections, nothing else touched, cleanup) |
 | `tools/lr_e2e/straighten_check.py` | Straighten end-to-end in a real Lightroom (angle + crop arrive, own crops stay, restore) |
-| `tools/lrff_eval/cull_report.py` | Culling prototype on a preview folder → local HTML contact sheet + timing |
+| `tools/eval/cull_report.py` | Culling prototype on a preview folder → local HTML contact sheet + timing |
 | `THIRD_PARTY_MODELS.md` | Every downloaded model with license and SHA-256 — permissive only |
-| `tools/lrff_eval/synthetic.py` | Synthetic-rule test: make rule XMPs, score predictions vs. rule and vs. guessing |
-| `apps/lr-plugin/LRFrameFlow.lrplugin/ApplyProfile.lua` | Edit flow in Lightroom, `applyDevelopSettings` in one transaction |
+| `tools/eval/synthetic.py` | Synthetic-rule test: make rule XMPs, score predictions vs. rule and vs. guessing |
+| `apps/lr-plugin/Tarsier.lrplugin/ApplyProfile.lua` | Edit flow in Lightroom, `applyDevelopSettings` in one transaction |
 | `packages/contracts/json-schema/job-envelope-v1.schema.json` | Queue envelope schema |
 | `packages/contracts/json-schema/photo-upload-v1.schema.json` | Photo upload metadata schema |
 | `infra/compose/docker-compose.yml` | Local infra (Postgres, Redis, MinIO) |
@@ -160,18 +160,18 @@ TODO.md                # Completed + open work items — keep up to date
 ## Job Pipeline
 
 ```
-Edit job:   API → lrff:jobs:feature → feature_worker → lrff:jobs:inference → inference_worker
-Train job:  API → lrff:jobs:train   → train_worker   → COMPLETED
-Cull job:   API → lrff:jobs:cull    → cull_worker    → CullResult → COMPLETED
+Edit job:   API → tarsier:jobs:feature → feature_worker → tarsier:jobs:inference → inference_worker
+Train job:  API → tarsier:jobs:train   → train_worker   → COMPLETED
+Cull job:   API → tarsier:jobs:cull    → cull_worker    → CullResult → COMPLETED
 ```
 
 Train flow detail:
-1. API creates Profile (DRAFT) + Job, enqueues to `lrff:jobs:train`
+1. API creates Profile (DRAFT) + Job, enqueues to `tarsier:jobs:train`
 2. `train_worker`: Profile → TRAINING; per photo: maps `lr_develop_settings` (LR names) to internal params via `from_lightroom`, computes the feature vector if missing (download preview from MinIO); photos without usable preview or settings are skipped; needs ≥ 3 usable photos; trains Ridge model, saves `.joblib` to MinIO, Profile → READY
 
 Edit flow detail:
-1. API validates Profile is READY + all photo_ids exist, enqueues to `lrff:jobs:feature`
-2. `feature_worker`: downloads JPEG from MinIO, extracts the feature vectors of every supported version, saves FeatureVector (skips photos whose preview is missing/undecodable — never stores zero vectors); measures the tilt once per photo (`photos.analysis.straighten`); forwards to `lrff:jobs:inference`
+1. API validates Profile is READY + all photo_ids exist, enqueues to `tarsier:jobs:feature`
+2. `feature_worker`: downloads JPEG from MinIO, extracts the feature vectors of every supported version, saves FeatureVector (skips photos whose preview is missing/undecodable — never stores zero vectors); measures the tilt once per photo (`photos.analysis.straighten`); forwards to `tarsier:jobs:inference`
 3. `inference_worker`: loads `.joblib` from MinIO (missing artifact → job FAILED), predicts 10 params per photo, converts to LR develop settings via `to_lightroom` (clamped, LR key names), adds the style layer and — if the request has `straighten: true` and the photo has clear reference lines — Lightroom crop keys; upserts EditResult (one per photo and job); photos without feature vector get no result
 4. Workers touch `jobs.last_progress_at` per photo; the reaper re-runs only jobs without progress for 10 min, each kind from its first queue (edit → feature, train → train)
 
@@ -187,10 +187,10 @@ On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
 - **Models** (artifact records `feature_version`; inference uses exactly that version, refuses wrong vector sizes):
   - v1: `MultiOutputRegressor(Ridge)` + `StandardScaler` (`ridge_v1`)
   - v2: `HistGradientBoostingRegressor` per slider (`gbr_v2`); < 30 photos → Ridge (`ridge_v2`)
-- **Benchmark** (1,837 edited Canon R6 photos from another tool, 367 held out, end-to-end through the pipeline): v1 → v2: exposure MAE 0.33 → 0.20 EV, temperature 258 → 163 K, all sliders within tolerance 14 % → 32 % (`tools/lrff_eval/holdout.py`, `model_lab.py`)
-- **More internal yardsticks** (2026-11-07, other tools' edits, never shipped): through real Lightroom (`tools/lr_e2e/train_eval.py`) R6 33 % all-within (exposure 54 %, temperature 58 %); wedding (Aftershoot look, 620/155) 54 %; kindergarten portraits vs. Neurapix (495/123, edits exported from the catalog, `lrff-folder train --sidecars`) 49 %, exposure 88 %
+- **Benchmark** (1,837 edited Canon R6 photos from another tool, 367 held out, end-to-end through the pipeline): v1 → v2: exposure MAE 0.33 → 0.20 EV, temperature 258 → 163 K, all sliders within tolerance 14 % → 32 % (`tools/eval/holdout.py`, `model_lab.py`)
+- **More internal yardsticks** (2026-11-07, other tools' edits, never shipped): through real Lightroom (`tools/lr_e2e/train_eval.py`) R6 33 % all-within (exposure 54 %, temperature 58 %); wedding (Aftershoot look, 620/155) 54 %; kindergarten portraits vs. Neurapix (495/123, edits exported from the catalog, `tarsier-folder train --sidecars`) 49 %, exposure 88 %
 - **Straighten** (`straighten.py`): only nearly plumb verticals and long horizons vote, keystone modelled (lean grows with distance from the centre, tilt = value at the centre); < 5 agreeing lines or no lines on both sides → no rotation. Crop = largest aspect-keeping rectangle, stored like Lightroom: corners of the rotated rectangle in the unrotated sensor frame (verified in Lightroom via `straighten_probe`). Rotates 3–6 % of event/wedding photos; there median 0.2–0.3° from another tool's angle (never rotating: 0.6–0.7°). Plugin keeps photos with an own crop.
-- **Style layer:** profile `base_preset` adds the look (curve, HSL, grading …) on top of each prediction (`lr_edit_serializer.style`)
+- **Style layer:** profile `base_preset` adds the look (curve, HSL, grading …) on top of each prediction (`tarsier_edit_serializer.style`)
 - **10 LR params predicted:** `exposure, temp, tint, contrast, highlights, shadows, whites, blacks, vibrance, saturation`
 - **Minimum:** train worker refuses < 3 usable photos (Profile FAILED); `run_inference` raises on unreadable artifacts instead of returning zeros (zeros would reset the user's photos)
 - **Output names:** model works with internal names (`exposure`, `temp` …); `libs/edit-serializer` maps to/from LR (`Exposure2012`, `Temperature`/`IncrementalTemperature` …)
@@ -222,7 +222,7 @@ On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
 # Start infrastructure
 cp infra/compose/env.example infra/compose/.env
 # Edit .env to set port overrides if needed (Postgres 5433, MinIO 9100/9101)
-cd infra/compose && docker compose -p lrframeflow up -d
+cd infra/compose && docker compose -p tarsier up -d
 
 # Install Python libs (order matters due to dependencies)
 pip install -e libs/domain
@@ -238,12 +238,12 @@ pip install -e services/workers/inference_worker
 
 # Run database migrations
 cd infra/migrations
-DATABASE_URL="postgresql+psycopg://lrframeflow:lrframeflow@127.0.0.1:5433/lrframeflow" alembic upgrade head
+DATABASE_URL="postgresql+psycopg://tarsier:tarsier@127.0.0.1:5433/tarsier" alembic upgrade head
 
 # Start API
 cd services/api
-DATABASE_URL="postgresql+psycopg://lrframeflow:lrframeflow@127.0.0.1:5433/lrframeflow" \
-  uvicorn lr_frameflow_api.main:app --reload
+DATABASE_URL="postgresql+psycopg://tarsier:tarsier@127.0.0.1:5433/tarsier" \
+  uvicorn tarsier_api.main:app --reload
 
 # Windows: always use 127.0.0.1, never "localhost" (IPv6 ::1 is tried first and Docker's
 # port forward hangs there → ~21 s per connection). Code defaults follow this.
@@ -253,10 +253,10 @@ python scripts/validate_contracts.py
 
 # Bridge (Rust; rustup in ~/.cargo/bin)
 cd apps/bridge
-cargo test -p lrff-bridge-core                               # fast, no Tauri
-cargo run -p lrff-bridge-core --bin lrff-bridge-headless     # bridge without window
+cargo test -p tarsier-bridge-core                               # fast, no Tauri
+cargo run -p tarsier-bridge-core --bin tarsier-bridge-headless     # bridge without window
 npm install && npm run dev                                   # desktop app
-cargo run --release -p lrff-bridge-core --example preview -- <out> <raw files>  # preview check on real RAWs
+cargo run --release -p tarsier-bridge-core --example preview -- <out> <raw files>  # preview check on real RAWs
 
 # Lightroom plugin tests (LuaJIT = Lua 5.1 like Lightroom; `scoop install luajit`)
 luajit apps/lr-plugin/tests/run.lua
@@ -273,7 +273,7 @@ Nine jobs on push/PR to `main`:
 4. **edit-serializer** — `pytest libs/edit-serializer/tests/`
 5. **api-tests** — `pytest services/api/tests/` (mock-based, no Postgres needed)
 6. **worker-tests** — `pytest services/workers/train_worker/tests/` (mock-based, no DB/S3)
-7. **bridge-core** — `cargo fmt --check`, `clippy -D warnings`, `cargo test -p lrff-bridge-core` (incl. end-to-end against a fake API)
+7. **bridge-core** — `cargo fmt --check`, `clippy -D warnings`, `cargo test -p tarsier-bridge-core` (incl. end-to-end against a fake API)
 8. **lr-plugin** — `luajit apps/lr-plugin/tests/run.lua` (Lightroom SDK faked)
 9. **culling** — `pytest libs/culling/tests/` (synthetic images, no models needed)
 
@@ -298,10 +298,10 @@ Key vars (see `infra/compose/env.example` for full list):
 
 | Variable | Default | Used by |
 |----------|---------|---------|
-| `DATABASE_URL` | `postgresql+psycopg://lrframeflow:lrframeflow@127.0.0.1:5433/lrframeflow` | API, workers, migrations |
+| `DATABASE_URL` | `postgresql+psycopg://tarsier:tarsier@127.0.0.1:5433/tarsier` | API, workers, migrations |
 | `REDIS_URL` | `redis://127.0.0.1:6379/0` | API, workers |
 | `S3_ENDPOINT` | `http://127.0.0.1:9100` | workers, API |
-| `S3_BUCKET` | `lrff-photos` | workers, API |
+| `S3_BUCKET` | `tarsier-photos` | workers, API |
 | `S3_ACCESS_KEY` | `minio` | workers, API |
 | `S3_SECRET_KEY` | `miniosecret_changeme` | workers, API |
 | `LOG_FORMAT` | `json` | all services — set to `text` for human-readable local output |

@@ -3,13 +3,13 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lr-frameflow-culling"
+name = "tarsier-culling"
 version = "0.1.0"
 description = "Culling features (technical, faces, expressions, series) and an explainable baseline scorer"
 requires-python = ">=3.11"
 readme = "README.md"
 dependencies = [
-    "lr-frameflow-inference-pipeline",  # model registry, shared YuNet
+    "tarsier-inference-pipeline",  # model registry, shared YuNet
     "numpy>=1.26",
     "Pillow>=10",
     "opencv-python-headless>=4.8",  # Apache-2.0; YuNet face detector built in

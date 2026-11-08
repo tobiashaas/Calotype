@@ -7,10 +7,10 @@ from datetime import datetime, timezone
 
 from sqlalchemy.dialects import postgresql
 
-from lr_frameflow_persistence import reaper
-from lr_frameflow_persistence.models import EditResult, Job
-from lr_frameflow_persistence.repositories.edit_results import EditResultRepository
-from lr_frameflow_persistence.repositories.jobs import JobRepository
+from tarsier_persistence import reaper
+from tarsier_persistence.models import EditResult, Job
+from tarsier_persistence.repositories.edit_results import EditResultRepository
+from tarsier_persistence.repositories.jobs import JobRepository
 
 
 class CaptureSession:

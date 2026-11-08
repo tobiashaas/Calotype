@@ -8,7 +8,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from lr_frameflow_persistence.models import Base
+from tarsier_persistence.models import Base
 
 config = context.config
 if config.config_file_name is not None:
@@ -20,7 +20,7 @@ target_metadata = Base.metadata
 def get_url() -> str:
     return os.environ.get(
         "DATABASE_URL",
-        "postgresql+psycopg://lrframeflow:lrframeflow@127.0.0.1:5432/lrframeflow",
+        "postgresql+psycopg://tarsier:tarsier@127.0.0.1:5432/tarsier",
     )
 
 

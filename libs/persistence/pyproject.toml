@@ -3,13 +3,13 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lr-frameflow-persistence"
+name = "tarsier-persistence"
 version = "0.1.0"
-description = "SQLAlchemy models and repositories for LR-FrameFlow"
+description = "SQLAlchemy models and repositories for Tarsier"
 requires-python = ">=3.11"
 readme = "README.md"
 dependencies = [
-  "lr-frameflow-domain",
+  "tarsier-domain",
   "sqlalchemy>=2.0.36",
   "psycopg[binary]>=3.2",
   "pgvector>=0.3",

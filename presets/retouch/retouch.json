@@ -11,7 +11,7 @@
    "LocalHighlights2012": -0.05,
    "LocalClarity2012": 0.04
   },
-  "group": "LR-FrameFlow Retouch"
+  "group": "Tarsier Retouch"
  },
  {
   "id": "background",
@@ -24,7 +24,7 @@
    "LocalSaturation": -0.08,
    "LocalClarity2012": -0.05
   },
-  "group": "LR-FrameFlow Retouch"
+  "group": "Tarsier Retouch"
  },
  {
   "id": "skin",
@@ -36,7 +36,7 @@
    "LocalTexture": -0.15,
    "LocalClarity2012": -0.05
   },
-  "group": "LR-FrameFlow Retouch"
+  "group": "Tarsier Retouch"
  },
  {
   "id": "eyes",
@@ -49,7 +49,7 @@
    "LocalClarity2012": 0.08,
    "LocalSaturation": 0.03
   },
-  "group": "LR-FrameFlow Retouch"
+  "group": "Tarsier Retouch"
  },
  {
   "id": "teeth",
@@ -61,7 +61,7 @@
    "LocalExposure2012": 0.06,
    "LocalSaturation": -0.25
   },
-  "group": "LR-FrameFlow Retouch"
+  "group": "Tarsier Retouch"
  },
  {
   "id": "sky",
@@ -75,6 +75,6 @@
    "LocalSaturation": 0.06,
    "LocalDehaze": 0.05
   },
-  "group": "LR-FrameFlow Retouch"
+  "group": "Tarsier Retouch"
  }
 ]

@@ -1,8 +1,8 @@
 {
-  "name": "lrff-bridge",
+  "name": "tarsier-bridge",
   "private": true,
   "version": "0.1.0",
-  "description": "LR-FrameFlow Bridge — Tauri CLI wrapper",
+  "description": "Tarsier Bridge — Tauri CLI wrapper",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",

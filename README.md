@@ -1,6 +1,6 @@
-# LR-FrameFlow
+# Tarsier
 
-Open-source, AI-assisted editing and culling for **Lightroom Classic**. LR-FrameFlow learns *your*
+Open-source, AI-assisted editing and culling for **Lightroom Classic**. Tarsier learns *your*
 style from photos you have already edited and *your* taste from photos you have already rated —
 and it runs on your own machine.
 
@@ -15,17 +15,17 @@ and it runs on your own machine.
 - **Culling:** sorts a shoot into *Keep / Check / Sort out* with a reason per photo ("best of its
   series", "eyes closed", …). It learns from the stars and flags you already gave; without them it
   uses explainable starter rules. Nothing you set is overwritten — results are collections.
-- **Folder mode:** the same without Lightroom, on RAW + XMP folders (`lrff-folder train / apply /
+- **Folder mode:** the same without Lightroom, on RAW + XMP folders (`tarsier-folder train / apply /
   cull`), optionally writing into a separate output folder.
 
-- **Upstream:** [github.com/tobiashaas/LR-FrameFlow](https://github.com/tobiashaas/LR-FrameFlow)
+- **Upstream:** [github.com/tobiashaas/tarsier](https://github.com/tobiashaas/tarsier)
 
 ## Architecture
 
 ```text
 Lightroom plugin (Lua) ─┐
                         ├→ Bridge (Rust, 127.0.0.1) → API (FastAPI, 202) → Redis queues → workers
-lrff-folder (CLI) ──────┘   previews from the RAW,                          feature · train ·
+tarsier-folder (CLI) ──────┘   previews from the RAW,                          feature · train ·
                             SQLite outbox, retries                           inference · cull
                                                        Postgres (+ pgvector) · S3-compatible storage
 ```
@@ -38,7 +38,7 @@ Decisions are recorded in [`docs/adr/`](docs/adr/) (queue, Bridge, culling).
 ```text
 apps/
   lr-plugin/        # Lightroom Classic plugin (Lua 5.1), German/English UI
-  bridge/           # Rust: core (local API, outbox, previews, XMP, lrff-folder) + Tauri shell
+  bridge/           # Rust: core (local API, outbox, previews, XMP, tarsier-folder) + Tauri shell
 packages/
   contracts/        # OpenAPI + JSON Schema — source of truth, validated in CI
 services/
@@ -53,7 +53,7 @@ infra/
   compose/          # Postgres + pgvector, Redis, RustFS (S3)
   migrations/       # Alembic migrations
 tools/
-  lrff_eval/        # offline benchmarks (hold-out, culling against real decisions, straighten)
+  eval/        # offline benchmarks (hold-out, culling against real decisions, straighten)
   lr_e2e/           # end-to-end tests in a real, running Lightroom (automation channel)
 ```
 
@@ -62,7 +62,7 @@ tools/
 ```bash
 # infrastructure
 cp infra/compose/env.example infra/compose/.env
-cd infra/compose && docker compose -p lrframeflow up -d && cd ../..
+cd infra/compose && docker compose -p tarsier up -d && cd ../..
 
 # Python (one venv for all components)
 python -m venv .venv && .venv\Scripts\activate          # Windows
@@ -73,14 +73,14 @@ pip install -e services/api -e services/workers/feature_worker -e services/worke
 cd infra/migrations && alembic upgrade head && cd ../..
 
 # API and workers (each in its own terminal)
-uvicorn lr_frameflow_api.main:app --host 127.0.0.1 --port 8080
-lr-ff-feature-worker; lr-ff-train-worker; lr-ff-inference-worker; lr-ff-cull-worker
+uvicorn tarsier_api.main:app --host 127.0.0.1 --port 8080
+tarsier-feature-worker; tarsier-train-worker; tarsier-inference-worker; tarsier-cull-worker
 
 # Bridge (Rust)
-cd apps/bridge && cargo run --release -p lrff-bridge-core --bin lrff-bridge-headless
+cd apps/bridge && cargo run --release -p tarsier-bridge-core --bin tarsier-bridge-headless
 ```
 
-Then add `apps/lr-plugin/LRFrameFlow.lrplugin` in Lightroom's Plug-in Manager. Details:
+Then add `apps/lr-plugin/Tarsier.lrplugin` in Lightroom's Plug-in Manager. Details:
 [`CLAUDE.md`](CLAUDE.md) (developer overview), [`apps/lr-plugin/README.md`](apps/lr-plugin/README.md),
 [`apps/bridge/README.md`](apps/bridge/README.md).
 
@@ -91,7 +91,7 @@ All of these run in CI (`.github/workflows/ci.yml`):
 ```bash
 python scripts/validate_contracts.py
 pytest libs services                                  # Python libs, API, workers
-cd apps/bridge && cargo test -p lrff-bridge-core      # Bridge, incl. end-to-end against a fake API
+cd apps/bridge && cargo test -p tarsier-bridge-core      # Bridge, incl. end-to-end against a fake API
 luajit apps/lr-plugin/tests/run.lua                   # plugin with a faked Lightroom SDK
 ```
 

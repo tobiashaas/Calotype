@@ -1,4 +1,4 @@
-# MVP Plan — LRFrameFlow
+# MVP Plan — Tarsier
 
 **As of:** 2026-05-15  
 **Goal:** A fully working system from the LR plugin to writing the develop settings back, with a real ML pipeline — built step by step, never blind.
@@ -73,8 +73,8 @@ Job (extension of existing)
                     │
          ┌──────────▼──────────────────────────────────────────────┐
          │                   Redis Queues                           │
-         │  lrff:jobs:feature  →  lrff:jobs:inference              │
-         │  lrff:jobs:train                                         │
+         │  tarsier:jobs:feature  →  tarsier:jobs:inference              │
+         │  tarsier:jobs:train                                         │
          └──────┬──────────────────────────┬────────────────────────┘
                 │                          │
      ┌──────────▼──────────┐   ┌───────────▼────────────────────────┐
@@ -174,18 +174,18 @@ Adjust `POST /v1/jobs/edit`:
 ### 2.1 Feature worker
 
 ```
-consume lrff:jobs:feature
+consume tarsier:jobs:feature
 → load preview from MinIO (s3_key from the Photo record)
 → compute stub features (e.g. 64-dimensional zero vector)
 → write FeatureVector to DB (pgvector)
 → update Photo.feature_vector_id
-→ forward envelope → lrff:jobs:inference
+→ forward envelope → tarsier:jobs:inference
 ```
 
 ### 2.2 Train worker
 
 ```
-consume lrff:jobs:train
+consume tarsier:jobs:train
 → load all photo_ids from the payload
 → load their FeatureVectors (if missing: job FAILED with a clear message)
 → stub: "train" a model (save an empty JSON file in MinIO)
@@ -196,7 +196,7 @@ consume lrff:jobs:train
 ### 2.3 Inference worker
 
 ```
-consume lrff:jobs:inference
+consume tarsier:jobs:inference
 → load profile_id from envelope.payload
 → load Profile (model_artifact_key)
 → load the photo's FeatureVector

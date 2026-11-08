@@ -5,7 +5,7 @@ Run from the repository root (Lua 5.1 / LuaJIT, like Lightroom):
     luajit apps/lr-plugin/tests/run.lua
 ]]
 
-local PLUGIN = "apps/lr-plugin/LRFrameFlow.lrplugin/"
+local PLUGIN = "apps/lr-plugin/Tarsier.lrplugin/"
 package.path = PLUGIN .. "?.lua;" .. package.path
 
 -- ------------------------------------------------------------ Lightroom fakes
@@ -79,7 +79,7 @@ local BridgeClient = require "BridgeClient"
 local PhotoData = require "PhotoData"
 local JobWait = require "JobWait"
 
-local CONFIG_PATH = "C:/Users/test/AppData/Roaming/LRFrameFlow/bridge.json"
+local CONFIG_PATH = "C:/Users/test/AppData/Roaming/Tarsier/bridge.json"
 
 local function respond(status, body)
   fake.responses[#fake.responses + 1] = function()
@@ -180,19 +180,19 @@ test("bridge client sends token and reads JSON", function()
   eq(err, nil, "error")
   eq(health.version, "0.1.0", "version")
   eq(fake.requests[1].url, "http://127.0.0.1:47600/health", "url")
-  eq(header(fake.requests[1], "X-LRFF-Token"), "secret", "token header")
+  eq(header(fake.requests[1], "X-Tarsier-Token"), "secret", "token header")
 end)
 
 test("bridge client explains missing config, bridge down, rejected token, errors", function()
   local _, err = BridgeClient.health()
-  assert(err:find("Start the LR%-FrameFlow Bridge app once"), err)
+  assert(err:find("Start the Tarsier Bridge app once"), err)
 
   fake.files[CONFIG_PATH] = Json.encode({ port = 47600, token = "secret" })
   unreachable()
   _, err = BridgeClient.health()
   assert(err:find("not running"), err)
 
-  respond(401, { error = "missing or wrong X-LRFF-Token" })
+  respond(401, { error = "missing or wrong X-Tarsier-Token" })
   _, err = BridgeClient.profiles()
   assert(err:find("token mismatch"), err)
 
@@ -363,10 +363,10 @@ test("every UI text has a German translation with the same placeholders", functi
   for _, file in ipairs({ "Info.lua", "BridgeClient.lua", "JobWait.lua", "Actions.lua", "TrainProfile.lua",
                           "ApplyProfile.lua", "BridgeStatus.lua", "AutomationCommands.lua", "CullPhotos.lua", "Retouch.lua" }) do
     local src = readFile(PLUGIN .. file)
-    for key, value in src:gmatch('"(%$%$%$/LRFrameFlow/[%w/]+)=(.-[^\\])"') do english[key] = value end
+    for key, value in src:gmatch('"(%$%$%$/Tarsier/[%w/]+)=(.-[^\\])"') do english[key] = value end
   end
   local german = {}
-  for key, value in readFile(PLUGIN .. "TranslatedStrings_de.txt"):gmatch('"(%$%$%$/LRFrameFlow/[%w/]+)=([^\n]-)"%s*\n') do
+  for key, value in readFile(PLUGIN .. "TranslatedStrings_de.txt"):gmatch('"(%$%$%$/Tarsier/[%w/]+)=([^\n]-)"%s*\n') do
     german[key] = value
   end
   local count = 0
@@ -377,7 +377,7 @@ test("every UI text has a German translation with the same placeholders", functi
   end
   for key in pairs(german) do assert(english[key], "German text without code: " .. key) end
   assert(count > 70, "found only " .. count .. " UI texts")
-  eq(german["$$$/LRFrameFlow/Language"], "de", "language marker")
+  eq(german["$$$/Tarsier/Language"], "de", "language marker")
 end)
 
 -- ------------------------------------------------------------ automation commands
@@ -522,8 +522,8 @@ test("cull: decisions become collections, nothing else is touched", function()
   eq(r.counts.keep, 1, "keep")
   eq(r.counts.reject, 1, "reject")
   eq(r.method, "learned", "method")
-  local set = catalog.sets["LR-FrameFlow/T"]
-  assert(set, "collection set LR-FrameFlow > T")
+  local set = catalog.sets["Tarsier/T"]
+  assert(set, "collection set Tarsier > T")
   eq(set.collections["1 Keep"].photos[1], photos[1], "keeper in Keep")
   eq(set.collections["3 Sort out"].photos[1], photos[2], "reject in Sort out")
   eq(photos[1].applied, nil, "develop settings untouched")
@@ -533,7 +533,7 @@ test("retouch: masks added, empty ones removed, snapshot kept, re-apply replaces
   local Retouch = require "Retouch"
   local function preset(id)
     return { getSetting = function() return { MaskGroupBasedCorrections = {
-      { CorrectionName = "LR-FrameFlow " .. id, CorrectionMasks = { { What = "Mask/Image" } } } } } end }
+      { CorrectionName = "Tarsier " .. id, CorrectionMasks = { { What = "Mask/Image" } } } } } end }
   end
   sdk.LrApplication.developPresetFolders = function()
     return { { getDevelopPresets = function() return { preset("subject"), preset("sky"), { getSetting = function() return {} end } } end } }
@@ -552,7 +552,7 @@ test("retouch: masks added, empty ones removed, snapshot kept, re-apply replaces
     updateAISettings = function()
       for _, g in ipairs(settings.MaskGroupBasedCorrections) do
         for _, m in ipairs(g.CorrectionMasks) do
-          if g.CorrectionName == "LR-FrameFlow sky" then m.ErrorReason = 1 elseif not m.MaskDigest then m.MaskDigest = "D" end
+          if g.CorrectionName == "Tarsier sky" then m.ErrorReason = 1 elseif not m.MaskDigest then m.MaskDigest = "D" end
         end
       end
     end,
@@ -572,7 +572,7 @@ test("retouch: masks added, empty ones removed, snapshot kept, re-apply replaces
   end
   local names = {}
   for _, g in ipairs(settings.MaskGroupBasedCorrections) do names[#names + 1] = g.CorrectionName end
-  eq(table.concat(names, ","), "My dodge,LR-FrameFlow subject", "own mask kept, ours not duplicated")
+  eq(table.concat(names, ","), "My dodge,Tarsier subject", "own mask kept, ours not duplicated")
   eq(#snapshots, 1, "one snapshot of the original")
 end)
 
@@ -605,7 +605,7 @@ test("menu scripts compile", function()
     assert(loadfile(PLUGIN .. file))
   end
   local info = assert(loadfile(PLUGIN .. "Info.lua"))()
-  eq(info.LrToolkitIdentifier, "io.github.lrframeflow", "toolkit id")
+  eq(info.LrToolkitIdentifier, "photo.tarsier.lightroom", "toolkit id")
   for _, item in ipairs(info.LrLibraryMenuItems) do
     assert(io.open(PLUGIN .. item.file), "menu file exists: " .. item.file)
   end

@@ -12,7 +12,7 @@ photo:applyDevelopSettings().
   3. train the profile from the rest, wait until it is ready
   4. per batch of held-out photos: back up ALL develop settings to --out, apply the profile,
      read the result, compare with the photo's own edit, restore every key that changed
-  5. print the score table (same tolerances as tools/lrff_eval)
+  5. print the score table (same tolerances as tools/eval)
 
 Your edits are restored after every batch; the backups in --out allow a manual restore.
 """
@@ -30,7 +30,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lrff_eval"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "eval"))
 from common import SLIDERS  # noqa: E402
 from run import CHECKED, Bridge, bridge_config  # noqa: E402
 

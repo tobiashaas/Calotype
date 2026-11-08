@@ -16,7 +16,7 @@ use serde_json::Value;
 
 use crate::db::now;
 
-/// Commands the plugin understands (see apps/lr-plugin/LRFrameFlow.lrplugin/Automation.lua).
+/// Commands the plugin understands (see apps/lr-plugin/Tarsier.lrplugin/Automation.lua).
 pub const COMMANDS: &[&str] = &[
     "ping",
     "list_photos",

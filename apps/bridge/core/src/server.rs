@@ -18,7 +18,9 @@ use serde_json::{json, Map, Value};
 
 use crate::AppState;
 
-pub const TOKEN_HEADER: &str = "x-lrff-token";
+pub const TOKEN_HEADER: &str = "x-tarsier-token";
+/// Header name before the rename (ADR 006), still accepted.
+pub const OLD_TOKEN_HEADER: &str = "x-lrff-token";
 
 type Shared = Arc<AppState>;
 
@@ -88,10 +90,11 @@ async fn require_token(State(state): State<Shared>, req: Request, next: Next) ->
     let ok = req
         .headers()
         .get(TOKEN_HEADER)
+        .or_else(|| req.headers().get(OLD_TOKEN_HEADER))
         .and_then(|v| v.to_str().ok())
         .is_some_and(|t| token_matches(t, &state.token()));
     if !ok {
-        return error(StatusCode::UNAUTHORIZED, "missing or wrong X-LRFF-Token");
+        return error(StatusCode::UNAUTHORIZED, "missing or wrong X-Tarsier-Token");
     }
     next.run(req).await
 }

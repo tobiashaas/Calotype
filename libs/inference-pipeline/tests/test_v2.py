@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from lr_frameflow_inference_pipeline import (
+from tarsier_inference_pipeline import (
     FEATURE_DIM_V2,
     FEATURE_MODEL_VERSION,
     FEATURE_VERSION_V2,
@@ -18,7 +18,7 @@ from lr_frameflow_inference_pipeline import (
     run_inference,
     train_for_version,
 )
-from lr_frameflow_inference_pipeline.features_v2 import face_stats
+from tarsier_inference_pipeline.features_v2 import face_stats
 
 
 def _jpeg(color=(120, 90, 60), size=(600, 400)) -> bytes:

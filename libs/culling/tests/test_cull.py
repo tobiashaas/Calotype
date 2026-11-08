@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 
-from lr_frameflow_culling.analyze import PhotoFeatures
-from lr_frameflow_culling.cull import cull, decision_from_metadata
-from lr_frameflow_culling.faces import Face
+from tarsier_culling.analyze import PhotoFeatures
+from tarsier_culling.cull import cull, decision_from_metadata
+from tarsier_culling.faces import Face
 
 
 def _photo(i: int, sharp: float, eyes_closed: float) -> PhotoFeatures:

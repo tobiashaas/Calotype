@@ -1,19 +1,19 @@
 [package]
-name = "lrff-bridge"
-description = "LR-FrameFlow Bridge desktop app (Tauri shell around lrff-bridge-core)"
+name = "tarsier-bridge"
+description = "Tarsier Bridge desktop app (Tauri shell around tarsier-bridge-core)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "lrff-bridge"
+name = "tarsier-bridge"
 path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-lrff-bridge-core = { path = "../core" }
+tarsier-bridge-core = { path = "../core" }
 tauri = { version = "2", features = [] }
 serde.workspace = true
 serde_json.workspace = true

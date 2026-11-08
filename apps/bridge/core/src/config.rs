@@ -48,13 +48,36 @@ fn new_token() -> String {
     )
 }
 
-/// `LRFF_BRIDGE_DATA_DIR`, else `%APPDATA%\LRFrameFlow` / `~/Library/Application Support/LRFrameFlow`.
+/// `TARSIER_BRIDGE_DATA_DIR`, else `%APPDATA%\Tarsier` / `~/Library/Application Support/Tarsier`.
+///
+/// Before the rename (ADR 006) this was `LRFrameFlow` / `LRFF_BRIDGE_DATA_DIR`: the old variable
+/// is still read, and an existing old folder is moved to the new place once (token, queue and
+/// settings stay).
 pub fn default_data_dir() -> Result<PathBuf> {
-    if let Some(dir) = std::env::var_os("LRFF_BRIDGE_DATA_DIR") {
-        return Ok(PathBuf::from(dir));
+    for var in ["TARSIER_BRIDGE_DATA_DIR", "LRFF_BRIDGE_DATA_DIR"] {
+        if let Some(dir) = std::env::var_os(var) {
+            return Ok(PathBuf::from(dir));
+        }
     }
     let base = dirs::data_dir().context("no per-user data directory on this system")?;
-    Ok(base.join("LRFrameFlow"))
+    Ok(migrate_old_dir(
+        &base.join("LRFrameFlow"),
+        base.join("Tarsier"),
+    ))
+}
+
+/// Move `old` to `new` when only the old folder exists; returns the folder to use.
+pub fn migrate_old_dir(old: &Path, new: PathBuf) -> PathBuf {
+    if !new.exists() && old.is_dir() {
+        match std::fs::rename(old, &new) {
+            Ok(()) => tracing::info!("moved {} to {}", old.display(), new.display()),
+            Err(e) => {
+                tracing::warn!("could not move {} to {}: {e}", old.display(), new.display());
+                return old.to_path_buf();
+            }
+        }
+    }
+    new
 }
 
 /// Load `bridge.json`, creating it with a fresh token on first start.
@@ -88,6 +111,18 @@ fn default_true() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn old_data_folder_moves_once_to_the_new_name() {
+        let base = tempfile::tempdir().unwrap();
+        let (old, new) = (base.path().join("LRFrameFlow"), base.path().join("Tarsier"));
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join(CONFIG_FILE), "{}").unwrap();
+        assert_eq!(migrate_old_dir(&old, new.clone()), new);
+        assert!(new.join(CONFIG_FILE).exists() && !old.exists());
+        // Both missing or already moved: the new folder is used as is.
+        assert_eq!(migrate_old_dir(&old, new.clone()), new);
+    }
 
     #[test]
     fn creates_config_once_and_reuses_token() {

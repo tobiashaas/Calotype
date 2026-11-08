@@ -1,4 +1,4 @@
-# LRFrameFlow — TODO
+# Tarsier — TODO
 
 This file tracks completed milestones and open work items.
 Update it whenever a phase is finished or new tasks are identified.
@@ -40,9 +40,9 @@ Update it whenever a phase is finished or new tasks are identified.
 
 ### Phase 4 — Production Hardening
 - [x] **Redis AOF persistence**: `appendonly yes --appendfsync everysec` in compose + `redis_data` volume
-- [x] **Stuck job recovery**: `libs/persistence/src/lr_frameflow_persistence/reaper.py` — resets `running` jobs after 10 min timeout, re-enqueues on the correct queue; runs at startup + every 60s in daemon thread in all 3 workers
+- [x] **Stuck job recovery**: `libs/persistence/src/tarsier_persistence/reaper.py` — resets `running` jobs after 10 min timeout, re-enqueues on the correct queue; runs at startup + every 60s in daemon thread in all 3 workers
 - [x] **At-least-once delivery**: `set_status(RUNNING)` now sets `started_at`; reaper uses `enqueue_to(queue_name)` to push back on the exact worker queue; feature_worker `forward_to_inference` is idempotent (FeatureVectors skipped if already exist)
-- [x] **Worker health checks**: `libs/observability/src/lr_frameflow_observability/heartbeat.py` — writes Unix timestamp file every 15s; all 3 workers start heartbeat thread; docker-compose has HEALTHCHECK comment template
+- [x] **Worker health checks**: `libs/observability/src/tarsier_observability/heartbeat.py` — writes Unix timestamp file every 15s; all 3 workers start heartbeat thread; docker-compose has HEALTHCHECK comment template
 - [x] **CI linting**: Ruff check step added to CI for all Python source dirs
 - [x] **CI tests**: API integration tests (14 tests, mock-based, no Postgres) in `services/api/tests/`; added `api-tests` job to CI
 - [x] **Contracts validation**: extended `validate_contracts.py` with edit-request + photo-upload schemas + examples; JSON parse check for all schema files
@@ -61,10 +61,10 @@ Prerequisites (done 2026-11-06):
 Open:
 - [x] Rust toolchain + Tauri 2 app in `apps/bridge` (workspace: `core/` + `src-tauri/` + `ui/`)
 - [x] Contract `packages/contracts/openapi/plugin-bridge-api.yaml` (plugin ↔ bridge, validated in CI)
-- [x] Bridge: axum server on 127.0.0.1:47600 + token in `bridge.json` (`X-LRFF-Token`)
+- [x] Bridge: axum server on 127.0.0.1:47600 + token in `bridge.json` (`X-Tarsier-Token`)
 - [x] Bridge: SQLite outbox with retry/backoff for photos + train/edit jobs; stable Idempotency-Key; status polling; edit results mapped back to catalog UUIDs
 - [x] Bridge: preview from original file (largest embedded RAW JPEG / JPEG/TIFF original, longest side ≤ 1200 px); unreachable file = retry, broken file = failed
-- [x] Bridge: status window (server reachable, queue counts, server address, "Retry now"); headless binary `lrff-bridge-headless`
+- [x] Bridge: status window (server reachable, queue counts, server address, "Retry now"); headless binary `tarsier-bridge-headless`
 - [x] CI job `bridge-core` (fmt, clippy, tests)
 - [ ] Bridge: tray mode (closing the window must not stop the bridge) + autostart
 - [x] Bridge: orientation from RAW container (TIFF IFD0 / CR3 `CMT1`) or JPEG EXIF; verified on 30 real Canon CR3 (portrait + landscape)
@@ -73,7 +73,7 @@ Open:
 - [x] Bridge: parallel uploads (8 at a time); Canon CR2 verified (179 files), DCT-scaled decoding for full-size-only JPEGs
 - [ ] Bridge: test corpus for NEF/ARW/RAF/DNG (Canon CR2/CR3 verified so far)
 - [ ] API: update `lr_develop_settings` when an already uploaded photo is registered again (retraining after edits)
-- [x] LR Plugin `apps/lr-plugin/LRFrameFlow.lrplugin`: menu items Train / Apply / Bridge status
+- [x] LR Plugin `apps/lr-plugin/Tarsier.lrplugin`: menu items Train / Apply / Bridge status
 - [x] LR Plugin: send file path + `getDevelopSettings()` + catalog UUID + EXIF to bridge
 - [x] LR Plugin: poll job status (progress + cancel) and apply `lr_settings` in one catalog transaction
 - [x] LR Plugin tests with faked SDK modules (`luajit apps/lr-plugin/tests/run.lua`, CI job `lr-plugin`)
@@ -84,10 +84,10 @@ Open:
 
 ### Phase 5b — Folder mode & first measurement (done 2026-11-06)
 - [x] `xmp.rs`: read `crs:` settings as training targets; write new sidecars / update existing ones (keeps ratings, keywords)
-- [x] `lrff-folder train/apply/profiles` (RAW + XMP, no Lightroom), content-based photo ids
-- [x] `tools/lrff_eval/synthetic.py`: known-rule test on 60 real CR3 (45 train / 15 test): exposure MAE 0.01 EV, temperature 25 K, 93 % of photos with every slider within tolerance
+- [x] `tarsier-folder train/apply/profiles` (RAW + XMP, no Lightroom), content-based photo ids
+- [x] `tools/eval/synthetic.py`: known-rule test on 60 real CR3 (45 train / 15 test): exposure MAE 0.01 EV, temperature 25 K, 93 % of photos with every slider within tolerance
 - [x] Fixed on the real stack: workers crashed on empty queues (redis-py 8 socket timeout ≤ BLPOP) and on any Redis hiccup; `localhost` cost 21 s per connection on Windows → 127.0.0.1 defaults; MinIO image gone → RustFS
-- [ ] `lrff-eval` on real edits: hold-out split of the user's own edited photos (needs ~30+ edited RAWs)
+- [ ] `tarsier-eval` on real edits: hold-out split of the user's own edited photos (needs ~30+ edited RAWs)
 
 ### Phase 6 — Culling (planned)
 See `docs/adr/005-culling-architecture.md`.
@@ -100,35 +100,35 @@ See `docs/adr/005-culling-architecture.md`.
 - [ ] Content/moment features: image embeddings (DINOv2/CLIP), interaction (hug, kiss, eye contact), candid vs. posed
 - [ ] Series via embeddings + capture time instead of dHash
 - [ ] Eyes "closed" vs. "looking down": separate via gaze/head pitch (blendshapes `eyeLookDown*`)
-- [x] Culling job type (2026-11-08): `cull_worker`, `POST /v1/jobs/cull`, Bridge `bridge-cull-v1`, plugin menu → collections LR-FrameFlow > Culling <date> > Keep / Check / Sort out (non-destructive); learns from the stars/flags among the selection; verified in Lightroom (`tools/lr_e2e/cull_check.py`)
+- [x] Culling job type (2026-11-08): `cull_worker`, `POST /v1/jobs/cull`, Bridge `bridge-cull-v1`, plugin menu → collections Tarsier > Culling <date> > Keep / Check / Sort out (non-destructive); learns from the stars/flags among the selection; verified in Lightroom (`tools/lr_e2e/cull_check.py`)
 - [x] Plugin read stars, flags and EXIF inside a plain `pcall` — it cannot yield in Lightroom, so they always arrived empty; fixed with `LrTasks.pcall` + regression test
 - [ ] **Culling profiles from earlier shoots** (next step): learning only from ratings inside the culled selection helps little (kindergarten exports, ROC-AUC: rules 0.53, 10+10 rated 0.56, 40+40 0.60), learning from other shoots' decisions gives 0.65. Plan: cull request gets optional `reference_photo_ids` (or a trained culling profile like edit profiles); plugin option "also learn from my earlier ratings". Decide the UX with the user (which photos, how many, upload time)
-- [x] Folder mode `lrff-folder cull <dir> [--out]`: color label green / yellow / red + `lrff:Cull`/`lrff:CullReason` in the sidecar, stars and edits untouched; sidecars with stars/labels teach the scorer (2026-11-08, 155 wedding RAWs learned, 150 without sidecars by rules)
+- [x] Folder mode `tarsier-folder cull <dir> [--out]`: color label green / yellow / red + `tarsier:Cull`/`tarsier:CullReason` in the sidecar, stars and edits untouched; sidecars with stars/labels teach the scorer (2026-11-08, 155 wedding RAWs learned, 150 without sidecars by rules)
 - [ ] Culling: show the reason per photo in Lightroom (plugin metadata field) and a "why" view
 - [ ] Scorer trained on the user's own decisions; explanations per photo; "uncertain" bucket
-- [ ] Labeling UI + `lrff-eval cull` (agreement, rescued technically-weak keepers)
+- [ ] Labeling UI + `tarsier-eval cull` (agreement, rescued technically-weak keepers)
 
 ### Model v2 (done 2026-11-07)
 - [x] Benchmark on 1,837 real edited RAWs (another tool's output, internal measurement only): v1 Ridge 14 % all-sliders-within-tolerance
 - [x] Model lab (offline): boosting + tone/color stats + face brightness → 34 %
 - [x] Pipeline: versioned features (`histogram-v1`, `histstats-face-v2`), migration 009, `gbr_v2` artifacts with feature version, inference uses the artifact's version → end-to-end 32 %, exposure MAE 0.33 → 0.20 EV
-- [x] Style layer: `base_preset` look on top of predictions; `lrff-folder train --style preset.xmp`; XMP tone curves
+- [x] Style layer: `base_preset` look on top of predictions; `tarsier-folder train --style preset.xmp`; XMP tone curves
 - [x] Learned culling scorer: ROC-AUC 0.42 (hand weights) → 0.74 vs. another tool's cull
-- [x] Tried: DINOv2-small embeddings (PCA 16–64) on top of v2 → all-3 34 % → 37 %, temperature 166 → 150 K, exposure unchanged; not worth torch (~1 GB) + 170 ms/photo yet (`tools/lrff_eval/embed_lab.py`)
-- [x] Tried: retrieval (sliders of the most similar edited photos, RefRetouch/Adaptive-Color-Grading idea): alone 14–22 % vs. 34 % for v2, blending/stacking no gain on this (very consistent, tool-generated) benchmark → repeat on a real photographer's edits (`tools/lrff_eval/retrieval_lab.py`)
+- [x] Tried: DINOv2-small embeddings (PCA 16–64) on top of v2 → all-3 34 % → 37 %, temperature 166 → 150 K, exposure unchanged; not worth torch (~1 GB) + 170 ms/photo yet (`tools/eval/embed_lab.py`)
+- [x] Tried: retrieval (sliders of the most similar edited photos, RefRetouch/Adaptive-Color-Grading idea): alone 14–22 % vs. 34 % for v2, blending/stacking no gain on this (very consistent, tool-generated) benchmark → repeat on a real photographer's edits (`tools/eval/retrieval_lab.py`)
 - [x] Model research 2026-11 (licenses checked at the source): keep YuNet + MediaPipe; DINOv3 has a custom Meta license (plug-in only); avoid pyiqa (PolyForm Noncommercial) and its weights (CC BY-NC-SA), Q-Align, QualiCLIP (non-commercial), LAION Aesthetic V2.5 (AGPL), MobileCLIP weights (research-only)
-- [x] Benchmarked embeddings (all Apache-2.0): DINOv2-S, Perception Encoder S16/B16, SigLIP 2 B16 → editing 33–37 % vs. 34 % without, culling AUC 0.72–0.73 vs. 0.74 without, +230–380 ms/photo on CPU → none integrated for now (`tools/lrff_eval/embed_compare.py`)
+- [x] Benchmarked embeddings (all Apache-2.0): DINOv2-S, Perception Encoder S16/B16, SigLIP 2 B16 → editing 33–37 % vs. 34 % without, culling AUC 0.72–0.73 vs. 0.74 without, +230–380 ms/photo on CPU → none integrated for now (`tools/eval/embed_compare.py`)
 - [ ] Zero-shot text prompts on SigLIP 2 / Perception Encoder ("blurry photo", "people hugging", "candid moment") as culling features — untested
 - [ ] Next model step for exposure: EXIF context (ISO, shutter, aperture → scene EV; folder mode must send EXIF) and consistency within a series/shoot (relative to neighbours)
 - [ ] Predict RAW white balance relative to as-shot (needs EXIF as-shot from the RAW). Why it matters (2026-11-08): a profile trained on one shoot/camera (R6) applied to another (5D, same look) gets exposure MAE 0.28 EV (guessing 0.64) but temperature only 21–26 % within ±150 K — absolute Kelvin carries the camera. Not possible via the SDK: `applyDevelopSettings{WhiteBalance="As Shot"}` keeps the old Temperature value (Lightroom recomputes only when rendering). Needs as-shot multipliers from the RAW + a per-camera mapping to Lightroom's Kelvin (LibRaw is LGPL — prefer an own parser in the Bridge)
 - [ ] Benchmarks: report contiguous-block / other-shoot splits, not only random splits — random splits put near-identical neighbours into training (R6: all-6 within 34 % random vs. 9 % by blocks). Stronger regularization (shallow boosting, Ridge α 10–100) does not help across shoots (exposure ~30 % either way) — the gap is in the data, not the model
 
 ### Straighten & people (done 2026-11-08)
-- [x] Straighten from the photo's own lines (keystone-aware), Lightroom crop keys verified in Lightroom, option in edit requests / plugin (DE/EN) / `lrff-folder apply --straighten`; own crops stay
+- [x] Straighten from the photo's own lines (keystone-aware), Lightroom crop keys verified in Lightroom, option in edit requests / plugin (DE/EN) / `tarsier-folder apply --straighten`; own crops stay
 - [x] Server under load: long jobs were re-run by the reaper and returned results 2–3×; progress heartbeat, one reaper per job kind, upserted edit results (migration 010)
-- [x] Culling measured against the photographer's real choice (exports in the catalog), leave-one-group-out (`tools/lrff_eval/cull_groups.py`)
+- [x] Culling measured against the photographer's real choice (exports in the catalog), leave-one-group-out (`tools/eval/cull_groups.py`)
 - [x] Group photos by person (SFace, Apache-2.0); ranking within each person gave no gain on kindergarten shoots
-- [x] Retouch with Lightroom AI masks (2026-11-08): own presets (subject, background, skin, eyes, teeth, sky) installed by the Bridge, applied with `applyDevelopPreset`, detected with `photo:updateAISettings`, empty masks removed, own masks kept, snapshot "LR-FrameFlow: before"; verified in Lightroom (`retouch_check.py`). Approach from Retoucan (MIT). Removing and adding masks must not share one transaction
+- [x] Retouch with Lightroom AI masks (2026-11-08): own presets (subject, background, skin, eyes, teeth, sky) installed by the Bridge, applied with `applyDevelopPreset`, detected with `photo:updateAISettings`, empty masks removed, own masks kept, snapshot "Tarsier: before"; verified in Lightroom (`retouch_check.py`). Approach from Retoucan (MIT). Removing and adding masks must not share one transaction
 - [ ] Retouch: learn the local mask values from the photographer's own masks in the training photos (per profile); strength per photo
 - [ ] (old note) Subject mask ("person pops") in the style layer: write only the mask definition, Lightroom computes the mask itself (`.acr` sidecars; another tool writes the same `MaskDigest` into every photo, so the digest is not checked). Found 2026-11-08: `photo:applyDevelopSettings` with `MaskGroupBasedCorrections` never returns (plugin task hangs, nothing written) → test (a) XMP sidecar + "Read metadata from file" and (b) a plugin develop preset with the mask, together with the user
 - [ ] Straighten: let the user judge the contact sheets; learn from the user's own corrections once there are some

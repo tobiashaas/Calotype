@@ -1,8 +1,8 @@
-//! LR-FrameFlow Bridge core (ADR 004).
+//! Tarsier Bridge core (ADR 004).
 //!
 //! Runs a local HTTP API for the Lightroom plugin on `127.0.0.1`, keeps every request
 //! in a SQLite outbox and forwards it to the server API in the background. Usable
-//! headless (`lrff-bridge-headless`) or embedded in the Tauri app.
+//! headless (`tarsier-bridge-headless`) or embedded in the Tauri app.
 
 pub mod api_client;
 pub mod automation;
@@ -128,7 +128,7 @@ pub async fn start(data_dir: PathBuf) -> Result<Bridge> {
         match presets::camera_raw_settings_dir().map(|dir| presets::install(&dir)) {
             Some(Ok(0)) => {}
             Some(Ok(n)) => {
-                tracing::info!("installed {n} LR-FrameFlow presets — restart Lightroom to see them")
+                tracing::info!("installed {n} Tarsier presets — restart Lightroom to see them")
             }
             Some(Err(e)) => tracing::warn!("presets not installed: {e:#}"),
             None => tracing::warn!("presets not installed: no Camera Raw settings folder"),

@@ -1,4 +1,4 @@
-from lr_edit_serializer import apply_style, style_settings
+from tarsier_edit_serializer import apply_style, style_settings
 
 PRESET = {
     # look

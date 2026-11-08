@@ -1,6 +1,6 @@
 //! The project's own looks and retouch presets (`presets/`, CC0), installed for Lightroom
 //! Classic / Camera Raw so nobody has to copy files: the Bridge writes them on start into
-//! `<Camera Raw settings>/LR-FrameFlow/`, only when they changed. Lightroom picks them up at its
+//! `<Camera Raw settings>/Tarsier/`, only when they changed. Lightroom picks them up at its
 //! next start; the plugin finds the retouch presets there by group and name.
 
 use std::path::{Path, PathBuf};
@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 /// Folder name inside Camera Raw's settings folder.
-pub const FOLDER: &str = "LR-FrameFlow";
+pub const FOLDER: &str = "Tarsier";
 
 /// (path below `presets/`, content). `presets_on_disk_are_all_embedded` keeps this in sync.
 pub const PRESETS: &[(&str, &str)] = &[
@@ -81,8 +81,18 @@ pub fn camera_raw_settings_dir() -> Option<PathBuf> {
     )
 }
 
-/// Write every preset below `settings_dir/LR-FrameFlow`; returns how many files changed.
+/// Folder name before the rename (ADR 006); the files we put there are removed.
+pub const OLD_FOLDER: &str = "LR-FrameFlow";
+
+/// Write every preset below `settings_dir/Tarsier`; returns how many files changed. Files this
+/// Bridge once installed under the old folder name are removed (nothing else there is touched).
 pub fn install(settings_dir: &Path) -> Result<usize> {
+    let old = settings_dir.join(OLD_FOLDER);
+    for (rel, _) in PRESETS {
+        let _ = std::fs::remove_file(old.join(rel));
+    }
+    let _ = std::fs::remove_dir(old.join("retouch"));
+    let _ = std::fs::remove_dir(&old);
     let mut changed = 0;
     for (rel, content) in PRESETS {
         let target = settings_dir.join(FOLDER).join(rel);
@@ -110,6 +120,14 @@ mod tests {
         std::fs::write(&one, "edited").unwrap();
         assert_eq!(install(dir.path()).unwrap(), 1);
         assert!(dir.path().join(FOLDER).join("retouch/subject.xmp").exists());
+
+        // Our files under the old folder name go away, a file of the user's stays.
+        let old = dir.path().join(OLD_FOLDER);
+        std::fs::create_dir_all(old.join("retouch")).unwrap();
+        std::fs::write(old.join(PRESETS[0].0), "x").unwrap();
+        std::fs::write(old.join("my-own.xmp"), "mine").unwrap();
+        install(dir.path()).unwrap();
+        assert!(!old.join(PRESETS[0].0).exists() && old.join("my-own.xmp").exists());
     }
 
     #[test]

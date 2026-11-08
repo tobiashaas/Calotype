@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from lr_frameflow_culling.identity import group_people
+from tarsier_culling.identity import group_people
 
 
 def _person(rng: np.random.Generator, center: np.ndarray, n: int) -> list[np.ndarray]:

@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: LR-FrameFlow Bridge ↔ API
+  title: Tarsier Bridge ↔ API
   version: "0.1.0"
   description: |
     Thin Gateway: Jobs werden asynchron eingereiht (`202 Accepted`).

@@ -1,6 +1,6 @@
 //! Build Bridge previews for real files, to check extraction on a RAW corpus:
 //!
-//!     cargo run -p lrff-bridge-core --example preview -- <out-dir> <file>...
+//!     cargo run -p tarsier-bridge-core --example preview -- <out-dir> <file>...
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -12,7 +12,7 @@ fn main() {
     let mut failed = 0;
     for file in args.map(PathBuf::from) {
         let started = Instant::now();
-        match lrff_bridge_core::preview::build_preview(&file) {
+        match tarsier_bridge_core::preview::build_preview(&file) {
             Ok(jpeg) => {
                 let img = image::load_from_memory(&jpeg).expect("own output decodes");
                 let out = out_dir.join(stem(&file)).with_extension("jpg");

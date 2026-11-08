@@ -8,7 +8,7 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from lr_edit_serializer.style import PHOTO_DEPENDENT, is_style_key
+from tarsier_edit_serializer.style import PHOTO_DEPENDENT, is_style_key
 
 ROOT = Path(__file__).resolve().parents[3]
 PRESETS = ROOT / "presets"
@@ -53,7 +53,7 @@ def test_retouch_presets_carry_one_named_ai_mask_correction_each():
         desc = ET.parse(path).getroot().find(f"{RDF}RDF/{RDF}Description")
         groups = list(desc.find(f"{CRS}MaskGroupBasedCorrections").iter(f"{RDF}Description"))
         assert len(groups) == 1, path.name
-        assert groups[0].get(f"{CRS}CorrectionName") == f"LR-FrameFlow {path.stem}"
+        assert groups[0].get(f"{CRS}CorrectionName") == f"Tarsier {path.stem}"
         masks = list(groups[0].find(f"{CRS}CorrectionMasks").iter(f"{RDF}li"))
         assert masks and all(m.get(f"{CRS}What") == "Mask/Image" for m in masks), path.name
         assert all(-1 <= float(v) <= 1 for k, v in groups[0].attrib.items() if k.startswith(f"{CRS}Local"))

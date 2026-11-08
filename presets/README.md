@@ -29,7 +29,7 @@ aufhellen, Himmel vertiefen*). They store only the mask *definition*; Lightroom 
 sky … on each photo. The plugin applies them together with a profile (apply dialog), lets
 Lightroom detect the masks (`photo:updateAISettings`, Lightroom 13.3+), removes masks that found
 nothing, keeps the photographer's own masks and saves the original as the snapshot
-*LR-FrameFlow: before*. The approach (mask presets + `updateAISettings`) follows
+*Tarsier: before*. The approach (mask presets + `updateAISettings`) follows
 [Retoucan](https://github.com/joemalott/retoucan) (MIT) — thanks!
 
 ## Use
@@ -39,7 +39,7 @@ nothing, keeps the photographer's own masks and saves the original as the snapsh
 - **Lightroom Classic / Camera Raw by hand:** Develop → Presets → `+` → *Import Presets…* and pick the
   `.xmp` files (or copy them to `%APPDATA%\Adobe\CameraRaw\Settings` on Windows,
   `~/Library/Application Support/Adobe/CameraRaw/Settings` on macOS, then restart Lightroom).
-  They appear in the group *LR-FrameFlow*, with German names when Lightroom runs in German.
+  They appear in the group *Tarsier*, with German names when Lightroom runs in German.
 - **As a profile's style layer (folder mode):**
-  `lrff-folder train <dir> --name "Weddings" --style presets/film-color.xmp`
+  `tarsier-folder train <dir> --name "Weddings" --style presets/film-color.xmp`
 - `looks.json` holds the same settings for programs and other converters.

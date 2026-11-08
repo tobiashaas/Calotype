@@ -5,14 +5,14 @@ services:
     ports:
       - "${LR_FF_POSTGRES_PORT:-5432}:5432"
     environment:
-      POSTGRES_DB: ${LR_FF_POSTGRES_DB:-lrframeflow}
-      POSTGRES_USER: ${LR_FF_POSTGRES_USER:-lrframeflow}
-      POSTGRES_PASSWORD: ${LR_FF_POSTGRES_PASSWORD:-lrframeflow}
+      POSTGRES_DB: ${LR_FF_POSTGRES_DB:-tarsier}
+      POSTGRES_USER: ${LR_FF_POSTGRES_USER:-tarsier}
+      POSTGRES_PASSWORD: ${LR_FF_POSTGRES_PASSWORD:-tarsier}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-lrframeflow}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-tarsier}"]
       interval: 10s
       timeout: 5s
       retries: 5

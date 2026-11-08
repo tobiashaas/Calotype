@@ -9,18 +9,18 @@ async fn main() -> Result<()> {
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();
 
-    let data_dir = lrff_bridge_core::config::default_data_dir()?;
-    let bridge = lrff_bridge_core::start(data_dir.clone()).await?;
+    let data_dir = tarsier_bridge_core::config::default_data_dir()?;
+    let bridge = tarsier_bridge_core::start(data_dir.clone()).await?;
     let cfg = bridge.state.config();
     println!(
-        "LR-FrameFlow Bridge {} on http://{}",
+        "Tarsier Bridge {} on http://{}",
         env!("CARGO_PKG_VERSION"),
         bridge.addr
     );
     println!(
         "config: {}",
         data_dir
-            .join(lrff_bridge_core::config::CONFIG_FILE)
+            .join(tarsier_bridge_core::config::CONFIG_FILE)
             .display()
     );
     println!("server API: {}", cfg.api_base_url);

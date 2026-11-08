@@ -1,3 +1,3 @@
-# lr-frameflow-domain
+# tarsier-domain
 
 Pure domain types (job kinds, statuses), without SQLAlchemy or FastAPI.

@@ -1,9 +1,9 @@
-//! LR-FrameFlow Bridge desktop app: starts the Bridge core and shows its status.
+//! Tarsier Bridge desktop app: starts the Bridge core and shows its status.
 
 // No console window in release builds on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use lrff_bridge_core::{Bridge, StatusSnapshot};
+use tarsier_bridge_core::{Bridge, StatusSnapshot};
 use tauri::{Manager, State};
 
 struct BridgeHandle(Bridge);
@@ -41,8 +41,8 @@ fn main() {
 
     tauri::Builder::default()
         .setup(|app| {
-            let data_dir = lrff_bridge_core::config::default_data_dir()?;
-            let bridge = tauri::async_runtime::block_on(lrff_bridge_core::start(data_dir))?;
+            let data_dir = tarsier_bridge_core::config::default_data_dir()?;
+            let bridge = tauri::async_runtime::block_on(tarsier_bridge_core::start(data_dir))?;
             app.manage(BridgeHandle(bridge));
             Ok(())
         })
@@ -52,5 +52,5 @@ fn main() {
             retry_now
         ])
         .run(tauri::generate_context!())
-        .expect("error while running the LR-FrameFlow Bridge");
+        .expect("error while running the Tarsier Bridge");
 }

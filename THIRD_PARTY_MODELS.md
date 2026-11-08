@@ -1,14 +1,14 @@
 # Third-party models
 
-Every machine-learning model LR-FrameFlow downloads or ships is listed here. A model is only
+Every machine-learning model Tarsier downloads or ships is listed here. A model is only
 added when **both code and weights** are under a permissive license (MIT, Apache-2.0, BSD)
 — so the project stays open source and every user, including professional photographers,
 may use it commercially ([ADR 005](docs/adr/005-culling-architecture.md)).
 
 Models are **not stored in the repository**. They are downloaded on first use, checked
-against the SHA-256 below and cached in `%LOCALAPPDATA%\LRFrameFlow\models`
-(`~/.cache/LRFrameFlow/models` elsewhere; override with `LRFF_MODEL_DIR`). The registry in
-code: `libs/culling/src/lr_frameflow_culling/models.py`.
+against the SHA-256 below and cached in `%LOCALAPPDATA%\Tarsier\models`
+(`~/.cache/Tarsier/models` elsewhere; override with `TARSIER_MODEL_DIR`). The registry in
+code: `libs/culling/src/tarsier_culling/models.py`.
 
 | Name | Used for | License (code / weights) | Source | SHA-256 |
 |---|---|---|---|---|
@@ -24,4 +24,4 @@ Libraries with built-in models: OpenCV (Apache-2.0), MediaPipe (Apache-2.0).
   differ. Non-commercial (e.g. CC BY-NC, many InsightFace models) and copyleft (e.g. AGPL)
   models are not shipped. Users may plug such models in locally at their own responsibility.
 - Models or parameters extracted from other products are never used.
-- Compare a candidate on your own photos with `tools/lrff_eval` before it becomes a default.
+- Compare a candidate on your own photos with `tools/eval` before it becomes a default.

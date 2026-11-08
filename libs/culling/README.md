@@ -23,13 +23,13 @@ Rules of the starter scorer (the weights are later learned from your stars/flags
 
 ```bash
 pip install -e libs/culling
-python tools/lrff_eval/cull_report.py <preview-folder>   # contact sheet (HTML, local) + timings
+python tools/eval/cull_report.py <preview-folder>   # contact sheet (HTML, local) + timings
 pytest libs/culling/tests
 ```
 
 Benchmark against another tool's cull (1,837 photos, 367 held out for testing): starter weights
 ROC-AUC 0.42 (worse than chance for this shoot), learned weights 0.74, agreement
-46 % → 71 % (`tools/lrff_eval/cull_learn.py`). Taste cannot be prescribed — it is learned.
+46 % → 71 % (`tools/eval/cull_learn.py`). Taste cannot be prescribed — it is learned.
 
 Measured on 60 Canon CR3 previews (business shoot): ~130 ms per photo on CPU,
 models load in ~2 s.

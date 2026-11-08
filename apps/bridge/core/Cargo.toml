@@ -1,19 +1,19 @@
 [package]
-name = "lrff-bridge-core"
-description = "LR-FrameFlow Bridge core: local API for the Lightroom plugin, SQLite outbox, previews"
+name = "tarsier-bridge-core"
+description = "Tarsier Bridge core: local API for the Lightroom plugin, SQLite outbox, previews"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [lib]
-name = "lrff_bridge_core"
+name = "tarsier_bridge_core"
 
 [[bin]]
-name = "lrff-bridge-headless"
+name = "tarsier-bridge-headless"
 path = "src/bin/headless.rs"
 
 [[bin]]
-name = "lrff-folder"
+name = "tarsier-folder"
 path = "src/bin/folder.rs"
 
 [dependencies]

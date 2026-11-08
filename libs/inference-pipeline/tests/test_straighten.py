@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image, ImageDraw
 
-from lr_frameflow_inference_pipeline.straighten import crop_settings, estimate_tilt, tilt_from_segments
+from tarsier_inference_pipeline.straighten import crop_settings, estimate_tilt, tilt_from_segments
 
 
 def _building(tilt: float) -> Image.Image:
