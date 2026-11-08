@@ -55,6 +55,8 @@ class EditJobRequestV1(TolerantRequest):
     profile_id: UUID
     collection_name: str | None = None
     photo_ids: Annotated[list[UUID], Field(min_length=1)]
+    # Optional: level photos that have clear reference lines (crop keys in the result).
+    straighten: bool = False
 
 
 class PhotoMetadataV1(TolerantRequest):

@@ -36,6 +36,11 @@ class Photo(Base):
     lr_metadata: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=func.cast("{}", JSONB)
     )
+    # Migration 011: image analysis of the preview (e.g. {"straighten": {...}}), filled by the
+    # feature worker once and reused by every edit job.
+    analysis: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=func.cast("{}", JSONB)
+    )
 
     # Populated by feature worker in Phase 2; plain UUID column (no FK) to avoid circularity.
     feature_vector_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)

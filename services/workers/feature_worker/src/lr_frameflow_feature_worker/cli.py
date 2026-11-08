@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import io
 import os
 import sys
 import time
 from uuid import UUID, uuid4
 
 import boto3
+from PIL import Image
 from redis import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
@@ -15,6 +17,7 @@ from sqlalchemy.orm import sessionmaker
 
 from lr_frameflow_domain.jobs import JobStatus
 from lr_frameflow_inference_pipeline import SUPPORTED_FEATURE_VERSIONS, compute_features
+from lr_frameflow_inference_pipeline.straighten import estimate_tilt
 from lr_frameflow_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
 from lr_frameflow_persistence.reaper import reap_stuck_jobs, start_reaper_thread
 from lr_frameflow_persistence.repositories.feature_vectors import FeatureVectorRepository
@@ -36,6 +39,21 @@ def _s3_client():
         aws_secret_access_key=os.environ.get("S3_SECRET_KEY", "miniosecret_changeme"),
         region_name="us-east-1",
     )
+
+
+def analyze_preview(image_bytes: bytes) -> dict:
+    """Image analysis kept with the photo; computed once, used by every later edit job."""
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        img.load()
+        tilt = estimate_tilt(img)
+    except Exception as e:  # analysis is optional — never block feature extraction
+        log.warning("preview analysis failed: %s", e)
+        return {}
+    return {
+        "preview_size": list(img.size),
+        "straighten": {"crop_angle": tilt.crop_angle, "lines": tilt.lines, "spread": tilt.spread},
+    }
 
 
 def process_one(redis: Redis, publisher: RedisQueuePublisher, factory: sessionmaker) -> bool:
@@ -76,7 +94,8 @@ def process_one(redis: Redis, publisher: RedisQueuePublisher, factory: sessionma
                     v for v in SUPPORTED_FEATURE_VERSIONS
                     if FeatureVectorRepository.get_by_photo_id(session, photo_id, v) is None
                 ]
-                if not missing:
+                needs_analysis = "straighten" not in (photo.analysis or {})
+                if not missing and not needs_analysis:
                     log.info("feature vectors already exist, reusing photo_id=%s", photo_id)
                     continue
 
@@ -88,6 +107,11 @@ def process_one(redis: Redis, publisher: RedisQueuePublisher, factory: sessionma
                 except Exception as e:
                     log.warning("could not download preview, skipping photo_id=%s: %s", photo_id, e)
                     continue
+
+                if needs_analysis:
+                    analysis = analyze_preview(image_bytes)
+                    if analysis:
+                        PhotoRepository.merge_analysis(session, photo_id, analysis)
 
                 for version in missing:
                     try:

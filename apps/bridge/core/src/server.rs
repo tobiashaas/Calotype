@@ -173,6 +173,8 @@ struct EditReq {
     profile_id: uuid::Uuid,
     #[serde(default)]
     collection_name: Option<String>,
+    #[serde(default)]
+    straighten: bool,
     lr_catalog_uuids: Vec<String>,
 }
 
@@ -265,6 +267,7 @@ async fn queue_edit(State(state): State<Shared>, Json(body): Json<Value>) -> Res
         "correlation_id": req.correlation_id,
         "profile_id": req.profile_id.to_string(),
         "collection_name": req.collection_name,
+        "straighten": req.straighten,
     });
     accept_job(&state, "edit", request, &uuids)
 }

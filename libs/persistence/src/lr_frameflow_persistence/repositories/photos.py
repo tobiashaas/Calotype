@@ -29,6 +29,14 @@ class PhotoRepository:
             session.flush()
 
     @staticmethod
+    def merge_analysis(session: Session, photo_id: uuid.UUID, analysis: dict) -> None:
+        """Add keys to the photo's analysis (existing keys are replaced)."""
+        photo = session.get(Photo, photo_id)
+        if photo is not None:
+            photo.analysis = {**(photo.analysis or {}), **analysis}
+            session.flush()
+
+    @staticmethod
     def create(
         session: Session,
         *,

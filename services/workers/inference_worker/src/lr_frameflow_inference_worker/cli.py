@@ -16,10 +16,12 @@ from sqlalchemy.orm import sessionmaker
 from lr_edit_serializer import apply_style, serialize_for_lightroom
 from lr_frameflow_domain.jobs import JobStatus
 from lr_frameflow_inference_pipeline import artifact_feature_version, run_inference
+from lr_frameflow_inference_pipeline.straighten import MIN_LINES, crop_settings
 from lr_frameflow_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
 from lr_frameflow_persistence.repositories.edit_results import EditResultRepository
 from lr_frameflow_persistence.repositories.feature_vectors import FeatureVectorRepository
 from lr_frameflow_persistence.repositories.jobs import JobRepository
+from lr_frameflow_persistence.repositories.photos import PhotoRepository
 from lr_frameflow_persistence.repositories.profiles import ProfileRepository
 from lr_frameflow_persistence.session import get_session_factory, session_scope
 from lr_frameflow_queue import consumer
@@ -40,6 +42,18 @@ def _s3_client():
 
 
 
+def straighten_settings(analysis: dict | None) -> dict:
+    """Lightroom crop keys that level the photo — only with clear reference lines, else none."""
+    tilt = (analysis or {}).get("straighten") or {}
+    size = (analysis or {}).get("preview_size") or []
+    angle = float(tilt.get("crop_angle") or 0.0)
+    if not angle or int(tilt.get("lines") or 0) < MIN_LINES or len(size) != 2:
+        return {}
+    # Lightroom's crop corners refer to the sensor image; sensors are landscape, the preview
+    # may be upright portrait — only the aspect ratio matters.
+    return crop_settings(angle, max(size), min(size))
+
+
 def process_one(redis: Redis, factory: sessionmaker) -> bool:
     envelope, raw = consumer.blpop_envelope(redis, QUEUE_INFERENCE, timeout_seconds=5)
     if envelope is None and raw is None:
@@ -55,6 +69,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
     job_uuid = UUID(envelope.job_id)
     profile_id_str = envelope.payload.get("profile_id")
     photo_ids = [UUID(pid) for pid in envelope.payload.get("photo_ids", [])]
+    straighten = bool(envelope.payload.get("straighten"))
     set_request_id(envelope.trace_context.get("request_id", ""))
 
     try:
@@ -96,6 +111,9 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
 
                 prediction = run_inference(model_bytes, list(fv.vector))
                 lr_settings = apply_style(serialize_for_lightroom(prediction, format_type), base_preset)
+                if straighten:
+                    photo = PhotoRepository.get_by_id(session, photo_id)
+                    lr_settings.update(straighten_settings(photo.analysis if photo else None))
 
                 EditResultRepository.upsert(
                     session,

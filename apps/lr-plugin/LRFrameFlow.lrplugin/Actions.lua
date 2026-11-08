@@ -91,7 +91,21 @@ function Actions.train(photos, choice, progress)
 end
 
 --- Apply `profile` (a ready profile from Actions.readyProfiles) to `photos`.
-function Actions.apply(catalog, photos, profile, progress)
+-- Crop keys a straighten result may carry. A photo the photographer has already cropped or
+-- straightened keeps its own crop.
+local CROP_KEYS = { "CropAngle", "CropLeft", "CropTop", "CropRight", "CropBottom", "HasCrop" }
+
+local function hasOwnCrop(photo)
+  local s = photo:getDevelopSettings() or {}
+  local angle = tonumber(s.CropAngle) or 0
+  local full = (tonumber(s.CropLeft) or 0) == 0 and (tonumber(s.CropTop) or 0) == 0
+    and (tonumber(s.CropRight) or 1) == 1 and (tonumber(s.CropBottom) or 1) == 1
+  return angle ~= 0 or not full
+end
+
+--- Apply `profile` to `photos`. options.straighten: also level photos with clear lines.
+function Actions.apply(catalog, photos, profile, progress, options)
+  options = options or {}
   -- Only photos of the profile's file type: RAW white balance (Kelvin) and JPEG
   -- white balance (relative) are different sliders.
   local matching, wrongType = {}, 0
@@ -118,6 +132,7 @@ function Actions.apply(catalog, photos, profile, progress)
     schema_version = "bridge-edit-v1",
     profile_id = profile.profile_id,
     lr_catalog_uuids = reg.uuids,
+    straighten = options.straighten or nil,   -- only sent when asked (older Bridges)
   }
   if not job then return result(false, "LR-FrameFlow", jobErr) end
   Log.info("edit job %s queued with %d photos", job.job_id, #reg.uuids)
@@ -137,12 +152,21 @@ function Actions.apply(catalog, photos, profile, progress)
   end
 
   progress:setCaption(LOC "$$$/LRFrameFlow/Apply/Writing=Writing develop settings")
-  local applied, appliedUuids = 0, {}
+  local applied, appliedUuids, straightened, keptCrop = 0, {}, 0, 0
   catalog:withWriteAccessDo(LOC("$$$/LRFrameFlow/Apply/Undo=LR-FrameFlow: ^1", profile.name), function()
     for _, r in ipairs(final.results or {}) do
       local photo = reg.photosByUuid[r.lr_catalog_uuid]
       if photo and type(r.lr_settings) == "table" then
-        photo:applyDevelopSettings(PhotoData.prepareSettings(r.lr_settings))
+        local settings = r.lr_settings
+        if settings.CropAngle ~= nil then
+          if hasOwnCrop(photo) then
+            for _, k in ipairs(CROP_KEYS) do settings[k] = nil end
+            keptCrop = keptCrop + 1
+          else
+            straightened = straightened + 1
+          end
+        end
+        photo:applyDevelopSettings(PhotoData.prepareSettings(settings))
         applied = applied + 1
         appliedUuids[#appliedUuids + 1] = r.lr_catalog_uuid
       end
@@ -154,13 +178,20 @@ function Actions.apply(catalog, photos, profile, progress)
   if applied < #reg.uuids then
     notes[#notes + 1] = LOC("$$$/LRFrameFlow/Apply/NoResult=^1 photos got no result (no usable preview).", #reg.uuids - applied)
   end
+  if straightened > 0 then
+    notes[#notes + 1] = LOC("$$$/LRFrameFlow/Apply/Straightened=^1 photos were straightened.", straightened)
+  end
+  if keptCrop > 0 then
+    notes[#notes + 1] = LOC("$$$/LRFrameFlow/Apply/KeptCrop=^1 photos kept their own crop.", keptCrop)
+  end
   if wrongType > 0 then
     notes[#notes + 1] = LOC("$$$/LRFrameFlow/Apply/WrongType=^1 photos were skipped because they are not ^2.",
       wrongType, formatText(profile.format_type))
   end
   return result(true, LOC("$$$/LRFrameFlow/Apply/DoneTitle=\"^1\" applied to ^2 photos", profile.name, applied),
     #notes > 0 and table.concat(notes, "\n") or LOC "$$$/LRFrameFlow/Apply/UndoHint=Use Edit > Undo to revert.", "info",
-    { job_id = job.job_id, applied = applied, applied_uuids = appliedUuids, skipped_type = wrongType })
+    { job_id = job.job_id, applied = applied, applied_uuids = appliedUuids, skipped_type = wrongType,
+      straightened = straightened, kept_crop = keptCrop })
 end
 
 return Actions

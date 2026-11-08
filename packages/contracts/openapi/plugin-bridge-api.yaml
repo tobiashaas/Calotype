@@ -199,6 +199,7 @@ components:
         correlation_id: { type: string, nullable: true }
         profile_id: { type: string, format: uuid }
         collection_name: { type: string, nullable: true }
+        straighten: { type: boolean, default: false, description: Level photos with clear reference lines. }
         lr_catalog_uuids: { type: array, minItems: 1, items: { type: string } }
     JobState:
       type: object

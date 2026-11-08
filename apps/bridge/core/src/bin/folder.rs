@@ -11,6 +11,7 @@
 //! --files-from <list>: only these files (one name or path per line), e.g. a train/test split.
 //! train --sidecars <dir>: read the XMPs from another folder (e.g. edits exported from a
 //!              catalog) — the RAW folder stays untouched.
+//! apply --straighten: also level photos with clear reference lines (own crops stay).
 //! --out <dir>: write sidecars there instead of next to the RAWs (read-only cards,
 //!              evaluation against existing edits). The source folder is never touched.
 
@@ -73,6 +74,9 @@ enum Command {
         /// Write the sidecars into this folder instead of next to the RAWs.
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Also level photos with clear reference lines (sidecars with an own crop keep it).
+        #[arg(long)]
+        straighten: bool,
     },
     /// List profiles on the server.
     Profiles,
@@ -216,6 +220,34 @@ impl Bridge {
     }
 }
 
+/// Crop keys a straighten result may carry.
+const CROP_KEYS: &[&str] = &[
+    "CropAngle",
+    "CropLeft",
+    "CropTop",
+    "CropRight",
+    "CropBottom",
+    "HasCrop",
+];
+
+/// The sidecar already holds a crop or straighten of its own: keep it.
+fn has_own_crop(settings: &Map<String, Value>) -> bool {
+    let num = |k: &str, default: f64| {
+        settings
+            .get(k)
+            .and_then(|v| {
+                v.as_f64()
+                    .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+            })
+            .unwrap_or(default)
+    };
+    num("CropAngle", 0.0) != 0.0
+        || num("CropLeft", 0.0) != 0.0
+        || num("CropTop", 0.0) != 0.0
+        || num("CropRight", 1.0) != 1.0
+        || num("CropBottom", 1.0) != 1.0
+}
+
 /// Scan the folder, optionally keeping only the files named in a list.
 /// Which photos of a folder to use, and where their sidecars live.
 #[derive(Clone, Copy, Default)]
@@ -342,6 +374,7 @@ async fn apply(
     force: bool,
     files_from: Option<&Path>,
     out: Option<&Path>,
+    straighten: bool,
 ) -> Result<()> {
     let profile = find_profile(bridge, wanted).await?;
     if profile["format_type"] != "raw" {
@@ -377,6 +410,7 @@ async fn apply(
                 "schema_version": "bridge-edit-v1",
                 "profile_id": profile["profile_id"],
                 "lr_catalog_uuids": by_id.keys().collect::<Vec<_>>(),
+                "straighten": straighten,
             }),
         )
         .await?;
@@ -392,6 +426,13 @@ async fn apply(
             continue;
         };
         if let Some(photo) = by_id.get(id) {
+            let mut settings = settings.clone();
+            if has_own_crop(&photo.settings) {
+                for key in CROP_KEYS {
+                    settings.remove(*key);
+                }
+            }
+            let settings = &settings;
             match out {
                 Some(out) => {
                     let mut target = photo.clone();
@@ -458,6 +499,7 @@ async fn main() -> Result<()> {
             force,
             files_from,
             out,
+            straighten,
         } => {
             apply(
                 &bridge,
@@ -466,9 +508,26 @@ async fn main() -> Result<()> {
                 force,
                 files_from.as_deref(),
                 out.as_deref(),
+                straighten,
             )
             .await
         }
         Command::Profiles => profiles(&bridge).await,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn own_crop_is_detected_in_numbers_and_strings() {
+        let map = |v: Value| v.as_object().unwrap().clone();
+        assert!(!has_own_crop(&map(json!({"Exposure2012": 0.3}))));
+        assert!(!has_own_crop(&map(
+            json!({"CropAngle": "0", "CropLeft": 0, "CropRight": "1"})
+        )));
+        assert!(has_own_crop(&map(json!({"CropAngle": "1.2"}))));
+        assert!(has_own_crop(&map(json!({"CropRight": 0.97}))));
     }
 }

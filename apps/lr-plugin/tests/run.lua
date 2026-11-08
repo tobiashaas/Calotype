@@ -43,6 +43,7 @@ local sdk = {
   LrTasks = { sleep = function() end, pcall = pcall },
   LrApplication = { versionString = function() return "15.0 (test)" end },
   LrApplicationView = { switchToModule = function() end },
+  LrPrefs = { prefsForPlugin = function() return {} end },
   LrDevelopController = { setValue = function() end, getValue = function() end, selectTool = function() end },
   LrProgressScope = function()
     return { setCaption = function() end, setPortionComplete = function() end,
@@ -422,6 +423,35 @@ test("automation: apply runs the same flow as the menu and writes the results", 
   eq(photos[1].applied.Temperature, 5600, "settings written")
   eq(photos[1].applied.WhiteBalance, "Custom", "white balance custom")
   eq(Json.decode(fake.requests[4].body).profile_id, "p1", "edit job for the chosen profile")
+end)
+
+test("apply with straighten: crop for uncropped photos, own crops stay", function()
+  local Commands = require "AutomationCommands"
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  local own = { Exposure2012 = 0.1, CropAngle = 1.2, CropLeft = 0.02, CropTop = 0, CropRight = 0.98, CropBottom = 1 }
+  local photos = { fakePhoto("a", "RAW"), fakePhoto("b", "RAW", own) }
+  local catalog = fakeCatalog(photos)
+  local function crop()
+    return { Exposure2012 = 0.3, CropAngle = 2, CropLeft = 0.036, CropTop = 0, CropRight = 0.964,
+             CropBottom = 1, HasCrop = true }
+  end
+  respond(200, { { profile_id = "p1", name = "Test", genre = "event", format_type = "raw", status = "ready", version = 1 } })
+  respond(202, { status = "pending" })
+  respond(202, { status = "pending" })
+  respond(202, { job_id = "j2", status = "waiting_for_photos" })
+  respond(200, { job_id = "j2", status = "completed", results = {
+    { lr_catalog_uuid = "a", lr_settings = crop() },
+    { lr_catalog_uuid = "b", lr_settings = crop() },
+  } })
+  local ok, r = Commands.run(catalog, { command = "apply",
+    args = { profile = "Test", uuids = { "a", "b" }, straighten = true } })
+  eq(ok, true, "apply ok: " .. tostring(r.error))
+  eq(Json.decode(fake.requests[#fake.requests - 1].body).straighten, true, "straighten requested")
+  eq(photos[1].applied.CropAngle, 2, "uncropped photo straightened")
+  eq(photos[2].applied.CropAngle, nil, "own crop untouched")
+  eq(photos[2].applied.Exposure2012, 0.3, "but still edited")
+  eq(r.straightened, 1, "count straightened")
+  eq(r.kept_crop, 1, "count kept")
 end)
 
 -- ------------------------------------------------------------ syntax of UI scripts

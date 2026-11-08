@@ -74,3 +74,6 @@
 "$$$/LRFrameFlow/Status/Profiles=Profile: ^1 fertig, ^2 insgesamt."
 "$$$/LRFrameFlow/Status/ServerDown=Server nicht erreichbar – Aufträge warten in der Warteschlange der Bridge. (^1)"
 "$$$/LRFrameFlow/Status/Automation=Automatik-Kanal ist AN (Testmodus)."
+"$$$/LRFrameFlow/Apply/Straighten=Fotos mit klaren Linien gerade ausrichten (eigene Zuschnitte bleiben)"
+"$$$/LRFrameFlow/Apply/Straightened=^1 Fotos wurden gerade ausgerichtet."
+"$$$/LRFrameFlow/Apply/KeptCrop=^1 Fotos haben ihren eigenen Zuschnitt behalten."

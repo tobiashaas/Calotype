@@ -23,6 +23,11 @@
     "collection_name": {
       "type": "string"
     },
+    "straighten": {
+      "type": "boolean",
+      "default": false,
+      "description": "Level photos with clear reference lines; the result then carries Lightroom crop keys."
+    },
     "photo_ids": {
       "type": "array",
       "minItems": 1,

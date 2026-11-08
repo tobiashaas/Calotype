@@ -41,7 +41,8 @@ local function plain(r)
   return Json.object({
     ok = r.ok, title = r.title, text = r.text, canceled = r.canceled, job_id = r.job_id,
     profile_id = r.profile_id, applied = r.applied, applied_uuids = r.applied_uuids,
-    skipped_type = r.skipped_type, photos = r.photos,
+    skipped_type = r.skipped_type, photos = r.photos, straightened = r.straightened,
+    kept_crop = r.kept_crop,
   })
 end
 
@@ -167,7 +168,7 @@ function Commands.apply(catalog, args)
   if not profile then error("no ready profile " .. tostring(args.profile)) end
   local photos, missing = photosByUuid(catalog, args.uuids)
   local progress = progressScope(profile.name)
-  local ok, r = pcall(Actions.apply, catalog, photos, profile, progress)
+  local ok, r = pcall(Actions.apply, catalog, photos, profile, progress, { straighten = args.straighten == true })
   progress:done()
   if not ok then error(r) end
   local out = plain(r)
