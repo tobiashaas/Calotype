@@ -116,7 +116,7 @@ TODO.md                # Completed + open work items — keep up to date
 | `apps/bridge/core/src/preview.rs` | Unedited preview: smallest embedded RAW JPEG ≥ 1200 px (else largest) / original JPEG/TIFF, orientation applied |
 | `apps/lr-plugin/LRFrameFlow.lrplugin/BridgeClient.lua` | Plugin → Bridge HTTP, reads `bridge.json` |
 | `apps/bridge/core/src/xmp.rs` | Read/write Adobe `crs:` XMP sidecars (ProcessVersion 15.4, `lrff:Profile`) |
-| `apps/bridge/core/src/bin/folder.rs` | `lrff-folder train/apply/profiles` — folder mode without Lightroom |
+| `apps/bridge/core/src/bin/folder.rs` | `lrff-folder train/apply/cull/profiles` — folder mode without Lightroom |
 | `libs/culling/src/lr_frameflow_culling/scoring.py` | Series + explainable baseline (keep/uncertain/reject with reasons) |
 | `libs/culling/src/lr_frameflow_culling/identity.py` | SFace face embeddings + grouping photos by person |
 | `libs/inference-pipeline/src/lr_frameflow_inference_pipeline/straighten.py` | Tilt from the photo's own lines (keystone-aware) + Lightroom crop keys |

@@ -12,6 +12,8 @@
 //! train --sidecars <dir>: read the XMPs from another folder (e.g. edits exported from a
 //!              catalog) — the RAW folder stays untouched.
 //! apply --straighten: also level photos with clear reference lines (own crops stay).
+//! cull: keep / check / sort out as color label (green / yellow / red) + reason in the sidecar;
+//!       sidecars with stars or a red/purple label teach the scorer.
 //! --out <dir>: write sidecars there instead of next to the RAWs (read-only cards,
 //!              evaluation against existing edits). The source folder is never touched.
 
@@ -77,6 +79,18 @@ enum Command {
         /// Also level photos with clear reference lines (sidecars with an own crop keep it).
         #[arg(long)]
         straighten: bool,
+    },
+    /// Sort RAWs into keep / check / sort out: color label (green / yellow / red) and the
+    /// reason in the sidecar. Stars and edits stay; sidecars with stars or a red/purple label
+    /// teach the scorer the photographer's taste.
+    Cull {
+        dir: PathBuf,
+        /// Only use the files listed here (one file name or path per line).
+        #[arg(long)]
+        files_from: Option<PathBuf>,
+        /// Write the sidecars into this folder instead of next to the RAWs.
+        #[arg(long)]
+        out: Option<PathBuf>,
     },
     /// List profiles on the server.
     Profiles,
@@ -218,6 +232,82 @@ impl Bridge {
             }
         }
     }
+}
+
+async fn cull(
+    bridge: &Bridge,
+    dir: &Path,
+    files_from: Option<&Path>,
+    out: Option<&Path>,
+) -> Result<()> {
+    let photos = scan_selected(
+        dir,
+        Selection {
+            files_from,
+            sidecars: None,
+        },
+    )?;
+    if photos.len() < 2 {
+        bail!("need at least two RAWs to cull");
+    }
+    if let Some(out) = out {
+        std::fs::create_dir_all(out)?;
+    }
+    // Shooting order (file names), so series of near-identical shots are found.
+    let order: Vec<String> = photos
+        .iter()
+        .map(|p| folder::file_id(&p.path))
+        .collect::<Result<_>>()?;
+    let decided = photos.iter().filter(|p| !p.decisions.is_empty()).count();
+    println!("{} RAWs, {decided} with stars or a label", photos.len());
+    let by_id = bridge.register(photos, false).await?;
+    let job = bridge
+        .post(
+            "/v1/jobs/cull",
+            &json!({"schema_version": "bridge-cull-v1", "lr_catalog_uuids": order}),
+        )
+        .await?;
+    let done = bridge
+        .wait(job["job_id"].as_str().unwrap_or_default())
+        .await?;
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    let mut method = String::from("?");
+    for r in done["results"].as_array().into_iter().flatten() {
+        let (Some(id), Some(bucket)) = (r["lr_catalog_uuid"].as_str(), r["bucket"].as_str()) else {
+            continue;
+        };
+        let Some(photo) = by_id.get(id) else { continue };
+        let target = match out {
+            Some(out) => out.join(photo.sidecar.file_name().unwrap_or_default()),
+            None => photo.sidecar.clone(),
+        };
+        let existing = std::fs::read_to_string(&photo.sidecar).ok();
+        let text = xmp::set_cull(
+            existing.as_deref(),
+            bucket,
+            r["reason"].as_str().unwrap_or(""),
+        )
+        .with_context(|| format!("cannot update {}", photo.sidecar.display()))?;
+        let tmp = target.with_extension("xmp.lrff-tmp");
+        std::fs::write(&tmp, text)?;
+        std::fs::rename(&tmp, &target)
+            .with_context(|| format!("cannot write {}", target.display()))?;
+        *counts.entry(bucket.to_string()).or_default() += 1;
+        method = r["method"].as_str().unwrap_or("?").to_string();
+    }
+    let n = |k: &str| counts.get(k).copied().unwrap_or(0);
+    println!(
+        "keep {} (green), check {} (yellow), sort out {} (red) — {}",
+        n("keep"),
+        n("uncertain"),
+        n("reject"),
+        if method == "learned" {
+            "learned from the rated photos"
+        } else {
+            "starter rules (rate ~10 keepers and ~10 rejects to teach it your taste)"
+        }
+    );
+    Ok(())
 }
 
 /// Crop keys a straighten result may carry.
@@ -512,6 +602,11 @@ async fn main() -> Result<()> {
             )
             .await
         }
+        Command::Cull {
+            dir,
+            files_from,
+            out,
+        } => cull(&bridge, &dir, files_from.as_deref(), out.as_deref()).await,
         Command::Profiles => profiles(&bridge).await,
     }
 }

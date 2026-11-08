@@ -437,10 +437,100 @@ pub fn update_sidecar(
     Some(xmp)
 }
 
+const XMP_NS: &str = "http://ns.adobe.com/xap/1.0/";
+
+/// Color label for a culling bucket (Lightroom's default label set).
+pub fn cull_label(bucket: &str) -> &'static str {
+    match bucket {
+        "keep" => "Green",
+        "reject" => "Red",
+        _ => "Yellow",
+    }
+}
+
+/// Set (or replace) one attribute on the top-level `rdf:Description`.
+fn set_top_attr(xmp: &mut String, name: &str, value: &str) -> Option<()> {
+    let top = top_description(xmp)?;
+    let needle = format!(" {name}=\"");
+    let alt = format!("\n{name}=\"");
+    let found = xmp[top.clone()]
+        .find(&needle)
+        .or_else(|| xmp[top.clone()].find(&alt))
+        .map(|rel| top.start + rel + 1);
+    match found {
+        Some(pos) => {
+            let value_start = pos + name.len() + 2;
+            let value_end = value_start + xmp[value_start..].find('"')?;
+            xmp.replace_range(value_start..value_end, &escape(value));
+        }
+        None => xmp.insert_str(top.start, &format!("\n    {name}=\"{}\"", escape(value))),
+    }
+    Some(())
+}
+
+/// Write a culling decision: color label + `lrff:Cull` / `lrff:CullReason`. Stars, develop
+/// settings and everything else in an existing sidecar stay as they are.
+pub fn set_cull(existing: Option<&str>, bucket: &str, reason: &str) -> Option<String> {
+    let mut xmp = match existing {
+        Some(text) if top_description(text).is_some() => text.to_string(),
+        _ => concat!(
+            "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n",
+            "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"LR-FrameFlow\">\n",
+            " <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n",
+            "  <rdf:Description rdf:about=\"\"/>\n",
+            " </rdf:RDF>\n",
+            "</x:xmpmeta>\n",
+            "<?xpacket end=\"w\"?>\n"
+        )
+        .to_string(),
+    };
+    if !xmp.contains(XMP_NS) {
+        set_top_attr(&mut xmp, "xmlns:xmp", XMP_NS)?;
+    }
+    if !xmp.contains(LRFF_NS) {
+        set_top_attr(&mut xmp, "xmlns:lrff", LRFF_NS)?;
+    }
+    set_top_attr(&mut xmp, "xmp:Label", cull_label(bucket))?;
+    set_top_attr(&mut xmp, "lrff:Cull", bucket)?;
+    set_top_attr(&mut xmp, "lrff:CullReason", reason)?;
+    Some(xmp)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn cull_decision_sets_label_and_keeps_the_rest() {
+        let existing = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    xmp:Rating="3"
+    xmp:Label="Blue"
+    crs:Exposure2012="+0.40"/>
+</rdf:RDF></x:xmpmeta>"#;
+        let out = set_cull(Some(existing), "reject", "eyes closed & blurry").unwrap();
+        let d = read_decisions(&out);
+        assert_eq!(d["color_label"], "red");
+        assert_eq!(d["rating"], 3, "stars untouched");
+        assert_eq!(
+            read_develop_settings(&out)["Exposure2012"],
+            0.4,
+            "edit untouched"
+        );
+        assert!(out.contains("lrff:Cull=\"reject\""));
+        assert!(out.contains("lrff:CullReason=\"eyes closed &amp; blurry\""));
+        // A second run replaces instead of adding.
+        let again = set_cull(Some(&out), "keep", "best of its series").unwrap();
+        assert_eq!(again.matches("xmp:Label=").count(), 1);
+        assert_eq!(read_decisions(&again)["color_label"], "green");
+
+        let fresh = set_cull(None, "uncertain", "check").unwrap();
+        assert_eq!(read_decisions(&fresh)["color_label"], "yellow");
+        assert!(fresh.contains(LRFF_NS) && fresh.contains(XMP_NS));
+    }
 
     const ADOBE: &str = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">

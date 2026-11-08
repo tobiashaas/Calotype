@@ -102,7 +102,8 @@ See `docs/adr/005-culling-architecture.md`.
 - [x] Culling job type (2026-11-08): `cull_worker`, `POST /v1/jobs/cull`, Bridge `bridge-cull-v1`, plugin menu → collections LR-FrameFlow > Culling <date> > Keep / Check / Sort out (non-destructive); learns from the stars/flags among the selection; verified in Lightroom (`tools/lr_e2e/cull_check.py`)
 - [x] Plugin read stars, flags and EXIF inside a plain `pcall` — it cannot yield in Lightroom, so they always arrived empty; fixed with `LrTasks.pcall` + regression test
 - [ ] **Culling profiles from earlier shoots** (next step): learning only from ratings inside the culled selection helps little (kindergarten exports, ROC-AUC: rules 0.53, 10+10 rated 0.56, 40+40 0.60), learning from other shoots' decisions gives 0.65. Plan: cull request gets optional `reference_photo_ids` (or a trained culling profile like edit profiles); plugin option "also learn from my earlier ratings". Decide the UX with the user (which photos, how many, upload time)
-- [ ] Culling: show the reason per photo in Lightroom (plugin metadata field) and a "why" view; folder mode `lrff-folder cull` writing `xmp:Rating`/`xmp:Label` to `--out`
+- [x] Folder mode `lrff-folder cull <dir> [--out]`: color label green / yellow / red + `lrff:Cull`/`lrff:CullReason` in the sidecar, stars and edits untouched; sidecars with stars/labels teach the scorer (2026-11-08, 155 wedding RAWs learned, 150 without sidecars by rules)
+- [ ] Culling: show the reason per photo in Lightroom (plugin metadata field) and a "why" view
 - [ ] Scorer trained on the user's own decisions; explanations per photo; "uncertain" bucket
 - [ ] Labeling UI + `lrff-eval cull` (agreement, rescued technically-weak keepers)
 
