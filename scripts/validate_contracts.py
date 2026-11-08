@@ -17,10 +17,9 @@ def run(cmd: list[str]) -> None:
 
 def main() -> None:
     contracts = ROOT / "packages" / "contracts"
-    openapi_file = contracts / "openapi" / "bridge-api.yaml"
-
-    # 1. OpenAPI spec validation
-    run([sys.executable, "-m", "openapi_spec_validator", str(openapi_file)])
+    # 1. OpenAPI spec validation (Bridge ↔ API and Plugin ↔ Bridge)
+    for openapi_file in sorted((contracts / "openapi").glob("*.yaml")):
+        run([sys.executable, "-m", "openapi_spec_validator", str(openapi_file)])
 
     # 2. JSON Schema + example pairs
     #    Each tuple: (schema path relative to contracts/, example path relative to contracts/)
@@ -36,6 +35,10 @@ def main() -> None:
         (
             "json-schema/job-edit-request-v1.schema.json",
             "examples/job-edit-request.example.json",
+        ),
+        (
+            "json-schema/job-cull-request-v1.schema.json",
+            "examples/job-cull-request.example.json",
         ),
         (
             "json-schema/photo-upload-v1.schema.json",

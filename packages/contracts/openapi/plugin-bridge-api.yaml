@@ -1,0 +1,261 @@
+openapi: 3.0.3
+info:
+  title: Calotype Plugin ↔ Bridge (local)
+  version: "0.1.0"
+  description: |
+    Local API of the Bridge, used by the Lightroom plugin (see ADR 004).
+
+    - Binds to `127.0.0.1` only. Port and token are in `bridge.json` in the Bridge data
+      directory (`%APPDATA%\Calotype` on Windows,
+      `~/Library/Application Support/Calotype` on macOS).
+    - Every `/v1` call needs the header `X-Calotype-Token`.
+    - The plugin works with Lightroom catalog UUIDs only. The Bridge builds previews,
+      uploads, submits jobs and polls the server API in the background (SQLite outbox
+      with retries), so every write returns `202` immediately.
+servers:
+  - url: http://127.0.0.1:47600
+paths:
+  /health:
+    get:
+      operationId: bridgeHealth
+      summary: Liveness (no token needed)
+      responses:
+        "200":
+          description: Bridge is running
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, version]
+                properties:
+                  status: { type: string, example: ok }
+                  version: { type: string, example: 0.1.0 }
+  /v1/photos:
+    post:
+      operationId: registerPhoto
+      summary: Register a photo for upload (idempotent by lr_catalog_uuid)
+      description: |
+        The Bridge builds the preview itself from `file_path` (embedded JPEG for RAW files,
+        the file itself for JPEG/TIFF) and uploads it. Registering the same UUID again
+        replaces path, settings and decisions; an already uploaded photo is sent again only
+        if settings, EXIF or decisions changed.
+      security: [{ token: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BridgePhotoV1" }
+      responses:
+        "202":
+          description: Accepted into the outbox
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PhotoState" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/Invalid" }
+  /v1/photos/{lr_catalog_uuid}:
+    get:
+      operationId: getPhotoState
+      security: [{ token: [] }]
+      parameters:
+        - { name: lr_catalog_uuid, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Upload state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PhotoState" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { description: Unknown photo }
+  /v1/jobs/train:
+    post:
+      operationId: queueTrainJob
+      security: [{ token: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BridgeTrainV1" }
+      responses:
+        "202":
+          description: Job accepted into the outbox
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobState" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/Invalid" }
+  /v1/jobs/edit:
+    post:
+      operationId: queueEditJob
+      security: [{ token: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BridgeEditV1" }
+      responses:
+        "202":
+          description: Job accepted into the outbox
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobState" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/Invalid" }
+  /v1/jobs/cull:
+    post:
+      operationId: queueCullJob
+      summary: Sort photos into keep / uncertain / reject; photos with stars or flags teach the scorer
+      security: [{ token: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BridgeCullV1" }
+      responses:
+        "202":
+          description: Job accepted into the outbox
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobState" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/Invalid" }
+  /v1/jobs/{job_id}:
+    get:
+      operationId: getJobState
+      summary: Local job state, including results once completed
+      security: [{ token: [] }]
+      parameters:
+        - { name: job_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Job state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobState" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { description: Unknown job }
+  /v1/profiles:
+    get:
+      operationId: listProfilesViaBridge
+      summary: Profiles from the server API (live, not cached)
+      security: [{ token: [] }]
+      responses:
+        "200":
+          description: Same payload as the server's `GET /v1/profiles`
+          content:
+            application/json:
+              schema: { type: array, items: { type: object, additionalProperties: true } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "502": { description: Server API not reachable }
+components:
+  securitySchemes:
+    token:
+      type: apiKey
+      in: header
+      name: X-Calotype-Token
+  responses:
+    Unauthorized:
+      description: Missing or wrong X-Calotype-Token
+    Invalid:
+      description: Request body invalid
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+  schemas:
+    BridgePhotoV1:
+      type: object
+      additionalProperties: false
+      required: [schema_version, lr_catalog_uuid, file_path]
+      properties:
+        schema_version: { type: string, enum: [bridge-photo-v1] }
+        lr_catalog_uuid: { type: string }
+        file_path:
+          type: string
+          description: Absolute path of the original file (`photo:getRawMetadata('path')`)
+        exif_snapshot: { type: object, additionalProperties: true }
+        lr_develop_settings:
+          type: object
+          additionalProperties: true
+          description: "`photo:getDevelopSettings()` — training target"
+        lr_metadata:
+          type: object
+          additionalProperties: true
+          description: |
+            The photographer's decisions, used as culling labels:
+            `rating` (0–5), `pick_status` (1 picked, 0 none, −1 rejected), `color_label`.
+    PhotoState:
+      type: object
+      required: [lr_catalog_uuid, status, attempts]
+      properties:
+        lr_catalog_uuid: { type: string }
+        status: { type: string, enum: [pending, uploaded, failed] }
+        remote_photo_id: { type: string, format: uuid, nullable: true }
+        attempts: { type: integer }
+        last_error: { type: string, nullable: true }
+    BridgeTrainV1:
+      type: object
+      additionalProperties: false
+      required: [schema_version, profile_name, genre, format_type, color_type, lr_catalog_uuids]
+      properties:
+        schema_version: { type: string, enum: [bridge-train-v1] }
+        correlation_id: { type: string, nullable: true }
+        profile_name: { type: string }
+        genre: { type: string }
+        format_type: { type: string, enum: [raw, jpeg_tiff] }
+        color_type: { type: string, enum: [color, bw] }
+        lr_catalog_uuids: { type: array, minItems: 1, items: { type: string } }
+        base_preset: { type: object, additionalProperties: true, nullable: true }
+    BridgeEditV1:
+      type: object
+      additionalProperties: false
+      required: [schema_version, profile_id, lr_catalog_uuids]
+      properties:
+        schema_version: { type: string, enum: [bridge-edit-v1] }
+        correlation_id: { type: string, nullable: true }
+        profile_id: { type: string, format: uuid }
+        collection_name: { type: string, nullable: true }
+        straighten: { type: boolean, default: false, description: Level photos with clear reference lines. }
+        lr_catalog_uuids: { type: array, minItems: 1, items: { type: string } }
+    BridgeCullV1:
+      type: object
+      required: [schema_version, lr_catalog_uuids]
+      properties:
+        schema_version: { type: string, enum: [bridge-cull-v1] }
+        correlation_id: { type: string, nullable: true }
+        lr_catalog_uuids: { type: array, minItems: 1, items: { type: string } }
+    JobState:
+      type: object
+      required: [job_id, kind, status, attempts]
+      properties:
+        job_id: { type: string, format: uuid, description: Local Bridge job id }
+        kind: { type: string, enum: [train, edit, cull] }
+        status:
+          type: string
+          enum: [waiting_for_photos, queued, running, completed, failed]
+          description: |
+            `waiting_for_photos` until all photos are uploaded and the job is accepted by the
+            server; then mirrors the server job status.
+        remote_job_id: { type: string, format: uuid, nullable: true }
+        profile_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Train — the profile being trained; edit — the profile applied
+        attempts: { type: integer }
+        last_error: { type: string, nullable: true }
+        results:
+          type: array
+          nullable: true
+          description: Edit jobs only, set once completed
+          items:
+            type: object
+            required: [lr_catalog_uuid, lr_settings]
+            properties:
+              lr_catalog_uuid: { type: string }
+              lr_settings:
+                type: object
+                additionalProperties: true
+                description: Ready for `photo:applyDevelopSettings()`

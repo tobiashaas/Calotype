@@ -1,24 +1,24 @@
-# ADR 002 — Bridge-Implementierung auf Tauri (Rust Kern)
+# ADR 002 — Bridge implementation on Tauri (Rust core)
 
-- **Status:** Akzeptiert
-- **Datum:** 2026-05-01
-- **Entscheider:** Maintainer
+- **Status:** Accepted
+- **Date:** 2026-05-01
+- **Deciders:** Maintainer
 
-## Kontext
+## Context
 
-Die Bridge übernimmt Dateisystem-, Netzwerk- und lokale Zuverlässigkeitsaufgaben zwischen Lightroom-Plugin und Backend. Sowohl **Electron** als auch **Tauri** waren Optionen aus dem Ursprungsdokument.
+The Bridge handles file system, network and local reliability tasks between the Lightroom plugin and the backend. Both **Electron** and **Tauri** were options in the original document.
 
-## Entscheidung
+## Decision
 
-Primär **Tauri** mit Rust-Kern verwenden für:
+Use **Tauri** with a Rust core as the primary choice for:
 
-- kleinere Artefakte und geringere Laufzeit-Grundlast,
-- strukturierten Zugriff auf native Dialoge/OS-Integration,
-- Sichereres Sandboxing-Konzept im Vergleich zu einem immer bundelnden Chromium-Shell-Prozess.
+- smaller artifacts and lower baseline runtime load,
+- structured access to native dialogs/OS integration,
+- a safer sandboxing concept compared with an always-bundled Chromium shell process.
 
-Ein **Electron**-Pivot bleibt bewusst möglich, falls das Team stark in TypeScript-heavy Integrationsarbeit steckt; alle Netzwerkverträge sitzen bereits in [`packages/contracts`](../../packages/contracts), sodass nur die lokale Implementierung austauscht.
+An **Electron** pivot deliberately remains possible if the team is deep in TypeScript-heavy integration work; all network contracts already live in [`packages/contracts`](../../packages/contracts), so only the local implementation would be swapped.
 
-## Folgen / Trade-offs
+## Consequences / trade-offs
 
-- **Positiv:** Passend zu schlankem Plugin + Cloud-Heavy ML-Stack ohne zweiten „schweren“ Runtime-Footprint.
-- **Negativ:** Web-Teams brauchen Rust/TS-Brücke beim UI; höhere Einarbeitung gegenüber klassischem Electron.
+- **Positive:** Fits a lean plugin + cloud-heavy ML stack without a second "heavy" runtime footprint.
+- **Negative:** Web teams need a Rust/TS bridge for the UI; steeper learning curve than classic Electron.

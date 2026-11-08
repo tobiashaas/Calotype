@@ -56,6 +56,44 @@ def test_upload_photo_idempotent(client):
     assert r2.json()["already_existed"] is True
 
 
+def test_reupload_refreshes_settings_and_decisions(client, mock_storage):
+    """Re-edited or re-rated photo: same record, current values, preview not stored again."""
+    first = client.post(
+        "/v1/photos",
+        files={"file": ("test.jpg", _jpeg_bytes(), "image/jpeg")},
+        data={"metadata": _META},
+    ).json()
+    updated = json.dumps({
+        "schema_version": "photo-upload-v1",
+        "lr_catalog_uuid": "test-lr-uuid-001",
+        "lr_develop_settings": {"Exposure2012": 0.8},
+        "lr_metadata": {"rating": 5, "pick_status": 1},
+    })
+    second = client.post(
+        "/v1/photos",
+        files={"file": ("test.jpg", _jpeg_bytes(), "image/jpeg")},
+        data={"metadata": updated},
+    ).json()
+    assert second["photo_id"] == first["photo_id"]
+    assert second["already_existed"] is True
+    assert mock_storage.put_object.call_count == 1
+
+
+def test_upload_from_newer_client_with_unknown_field_is_accepted(client):
+    """Tolerant reader: a newer Bridge may send fields this server does not know yet."""
+    meta = json.dumps({
+        "schema_version": "photo-upload-v1",
+        "lr_catalog_uuid": "test-lr-uuid-new-client",
+        "field_from_the_future": {"x": 1},
+    })
+    resp = client.post(
+        "/v1/photos",
+        files={"file": ("test.jpg", _jpeg_bytes(), "image/jpeg")},
+        data={"metadata": meta},
+    )
+    assert resp.status_code == 200
+
+
 def test_upload_photo_invalid_metadata(client):
     resp = client.post(
         "/v1/photos",

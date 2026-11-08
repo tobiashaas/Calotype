@@ -1,0 +1,41 @@
+[package]
+name = "calotype-bridge-core"
+description = "Calotype Bridge core: local API for the Lightroom plugin, SQLite outbox, previews"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "calotype_bridge_core"
+
+[[bin]]
+name = "calotype-bridge-headless"
+path = "src/bin/headless.rs"
+
+[[bin]]
+name = "calotype-folder"
+path = "src/bin/folder.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+axum = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "tiff", "png"] }
+dirs = "5"
+thiserror = "2"
+jpeg-decoder = { version = "0.3", default-features = false }
+sha2 = "0.10"
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+axum = { version = "0.8", features = ["multipart"] }
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

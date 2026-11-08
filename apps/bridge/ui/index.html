@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Calotype Bridge</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Calotype Bridge</h1>
+        <p class="sub">Keeps Lightroom and the server in sync, even when you are offline.</p>
+      </header>
+
+      <section class="card">
+        <div class="row">
+          <span class="label">Bridge</span>
+          <span id="bridge" class="value">starting …</span>
+        </div>
+        <div class="row">
+          <span class="label">Server</span>
+          <span class="value"><span id="api-dot" class="dot"></span><span id="api-state">checking …</span></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <label for="api-url" class="label">Server address</label>
+        <form id="api-form" class="inline">
+          <input id="api-url" type="url" placeholder="http://localhost:8080" required />
+          <button type="submit">Save</button>
+        </form>
+        <p id="api-msg" class="msg" role="status"></p>
+      </section>
+
+      <section class="card">
+        <div class="head">
+          <h2>Queue</h2>
+          <button id="retry" class="secondary" type="button">Retry now</button>
+        </div>
+        <div class="grid">
+          <div>
+            <h3>Photos</h3>
+            <ul id="photos" class="counts"></ul>
+          </div>
+          <div>
+            <h3>Jobs</h3>
+            <ul id="jobs" class="counts"></ul>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        <span id="version"></span>
+        <span id="data-dir" title="Data folder (bridge.json, queue database)"></span>
+      </footer>
+    </main>
+    <script src="main.js"></script>
+  </body>
+</html>

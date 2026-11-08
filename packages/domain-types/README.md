@@ -1,3 +1,3 @@
 # Opt-in shared DTO modules
 
-Codegen aus `packages/contracts` oder handgepflegte Typen können hier liegen — aktuell leer/absichtlicher Platzhalter.
+Codegen from `packages/contracts` or hand-maintained types can live here — currently empty, an intentional placeholder.

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "calotype-culling"
+version = "0.1.0"
+description = "Culling features (technical, faces, expressions, series) and an explainable baseline scorer"
+requires-python = ">=3.11"
+readme = "README.md"
+dependencies = [
+    "calotype-inference-pipeline",  # model registry, shared YuNet
+    "numpy>=1.26",
+    "Pillow>=10",
+    "opencv-python-headless>=4.8",  # Apache-2.0; YuNet face detector built in
+    "mediapipe>=0.10",              # Apache-2.0; face landmarker + blendshapes
+    "scikit-learn>=1.4",            # BSD-3; learned scorer
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"

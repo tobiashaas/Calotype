@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from lr_frameflow_inference_pipeline import (
+from calotype_inference_pipeline import (
     FEATURE_DIM,
     LR_PARAMS,
     extract_features,
@@ -88,10 +88,10 @@ def test_zero_model_fallback_below_min_samples():
     assert all(v == 0.0 for v in result.values())
 
 
-def test_run_inference_invalid_bytes_returns_zeros():
-    result = run_inference(b"garbage", [0.0] * FEATURE_DIM)
-    assert set(result.keys()) == set(LR_PARAMS)
-    assert all(v == 0.0 for v in result.values())
+def test_run_inference_invalid_bytes_raises():
+    # Zeros would silently reset the user's photos — a broken artifact must fail loudly.
+    with pytest.raises(ValueError):
+        run_inference(b"garbage", [0.0] * FEATURE_DIM)
 
 
 def test_train_inference_roundtrip_not_all_zero():

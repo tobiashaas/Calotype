@@ -1,17 +1,20 @@
-# CLAUDE.md — LRFrameFlow
+# CLAUDE.md — Calotype
 
 > **Convention:** Keep this file up to date. After every session that changes architecture,
 > adds endpoints, or completes a phase — update the relevant sections here and in `TODO.md`.
 
 ## Project Overview
 
-LRFrameFlow is an AI-powered Lightroom Classic photo editing system. It uses an async job-orchestration architecture:
+Calotype — *an open darkroom that learns your style* — is an open-source system for AI-assisted
+editing, culling, retouch and straightening, inside Lightroom Classic and on plain RAW + XMP
+folders (renamed from LR-FrameFlow, see ADR 006; website `calotype.xyz`, repo
+`github.com/tobiashaas/Calotype`). It uses an async job-orchestration architecture:
 
-1. **LR Plugin** (Lua, `apps/lr-plugin/`) — Lightroom Classic SDK, triggers jobs
-2. **Bridge Desktop App** (Tauri/Rust, `apps/bridge/`) — local orchestration layer
+1. **LR Plugin** (Lua, `apps/lr-plugin/Calotype.lrplugin`) — Lightroom Classic SDK, only UI; DE/EN
+2. **Bridge** (Rust, `apps/bridge/`) — local service on 127.0.0.1 (previews, outbox, XMP, presets, `calotype-folder`) + Tauri desktop shell
 3. **API** (FastAPI, `services/api/`) — thin HTTP gateway, returns 202 immediately, no blocking
-4. **Workers** (`services/workers/`) — three independent workers: feature, train, inference
-5. **Shared Libs** (`libs/`) — domain, persistence, queue, observability, inference-pipeline, edit-serializer, lr-io
+4. **Workers** (`services/workers/`) — four independent workers: feature, train, inference, cull
+5. **Shared Libs** (`libs/`) — domain, persistence, queue, observability, inference-pipeline, edit-serializer, culling, io
 
 ---
 
@@ -23,7 +26,11 @@ LRFrameFlow is an AI-powered Lightroom Classic photo editing system. It uses an 
 | Phase 2 — Real Data Flow | ✅ Done | Workers download/upload MinIO, feature extraction, model artifact lifecycle |
 | Phase 3 — Real ML Pipeline | ✅ Done | Pillow histogram features (128-dim), Ridge regression, joblib serialization |
 | Phase 4 — Production Hardening | ✅ Done | Redis AOF, stuck-job reaper, at-least-once, heartbeat, CI lint+tests, contracts, JSON logs, rate limiting |
-| Phase 5 — Bridge & Plugin | 🔲 Open | Tauri HTTP client, LR Plugin integration, end-to-end flow |
+| Phase 5 — Bridge & Plugin | ✅ Done | Bridge, LR plugin, folder mode (RAW+XMP); automated end-to-end tests in real Lightroom 15.6 (`tools/lr_e2e/`: apply, train, straighten, culling, retouch); open: tray mode, JPEG/TIFF smoke test, more RAW formats |
+| Phase 6 — Culling | ✅ First version | Cull job end to end (plugin menu → Bridge → API → `cull_worker` → collections Keep / Check / Sort out in Lightroom): learns from the stars/flags among the selected photos, else starter rules; verified in Lightroom 15.6 (80 photos in 14 s, 85 % agreement with existing stars). Measured against a photographer's real exports: ROC-AUC 0.654 — see ADR 005 |
+
+| Phase 7 — Retouch, looks, straighten | ✅ Done | AI-mask retouch via presets + `updateAISettings`; eight own looks (CC0) installed by the Bridge; straighten with Lightroom-exact crop — all verified in Lightroom |
+| Next | 🔜 | Culling profiles from earlier shoots, retouch strength learned per profile, white balance relative to as-shot, other raw converters, training on the maintainer's own wedding archive |
 
 See `TODO.md` for the detailed task breakdown.
 
@@ -33,28 +40,35 @@ See `TODO.md` for the detailed task breakdown.
 
 ```
 apps/
-  bridge/              # Tauri desktop app (Rust + JS)
-  lr-plugin/           # Lightroom SDK plugin (Lua)
+  bridge/              # Rust workspace: core/ (axum local API, SQLite outbox, previews, XMP, presets, calotype-folder) + src-tauri/ (desktop shell) + ui/
+  lr-plugin/           # Calotype.lrplugin (Lua 5.1): Train / Apply (+ straighten, retouch) / Cull / Bridge status; tests/run.lua with faked SDK
 packages/
   contracts/           # OpenAPI spec + JSON Schemas (source of truth for contracts)
   domain-types/        # Optional shared DTOs (placeholder)
 libs/
   domain/              # JobKind, JobStatus, ProfileStatus enums — no infra deps
-  persistence/         # SQLAlchemy ORM: Job, Photo, Profile, FeatureVector, EditResult
+  persistence/         # SQLAlchemy ORM: Job, Photo, Profile, FeatureVector, EditResult, CullResult
   queue/               # Redis Lists publisher/consumer + DLQ
   observability/       # get_logger() — stdlib logging wrapper
-  inference-pipeline/  # Feature extraction (Pillow) + Ridge model (scikit-learn/joblib)
-  edit-serializer/     # Lightroom-compatible edit serialization (stub)
-  lr-io/               # Shared path/I/O helpers (stub)
+  inference-pipeline/  # versioned features, models (boosting/Ridge), model registry, straighten
+  edit-serializer/     # internal params ↔ Lightroom develop settings (names, ranges), style layer
+  culling/             # culling features (sharpness, faces, expressions, series, people) + rules + learned scorer
+  io/                  # Shared path/I/O helpers (stub)
 services/
   api/                 # FastAPI: all routes (photos, profiles, jobs, results)
   workers/
-    feature_worker/    # lrff:jobs:feature → extract features → lrff:jobs:inference
-    train_worker/      # lrff:jobs:train → train Ridge model → Profile READY
-    inference_worker/  # lrff:jobs:inference → run inference → EditResult
+    feature_worker/    # calotype:jobs:feature → extract features → calotype:jobs:inference
+    train_worker/      # calotype:jobs:train → train model (boosting; < 30 photos Ridge) → Profile READY
+    inference_worker/  # calotype:jobs:inference → run inference → EditResult
+    cull_worker/       # calotype:jobs:cull → culling features (cached in photos.analysis) → CullResult
 infra/
-  compose/             # docker-compose.yml: Postgres 16+pgvector, Redis 7, MinIO
-  migrations/          # Alembic migrations (001–007)
+  compose/             # docker-compose.yml: Postgres 16+pgvector, Redis 7, RustFS (S3)
+  migrations/          # Alembic migrations (001–012)
+presets/               # own looks + retouch presets (generated by tools/presets/build.py, CC0)
+tools/
+  eval/                # offline benchmarks (hold-out, model lab, culling vs. real decisions, straighten)
+  lr_e2e/              # end-to-end tests in a real Lightroom through the opt-in automation channel
+  presets/             # preset generator
 docs/
   adr/                 # Architecture Decision Records
   plan/                # mvp.md — phased plan
@@ -73,12 +87,15 @@ TODO.md                # Completed + open work items — keep up to date
   - `queue` imports: domain, pydantic, redis
   - `persistence` imports: domain, sqlalchemy, psycopg
   - `observability` imports: stdlib only
-  - `inference-pipeline` imports: Pillow, numpy, scikit-learn, joblib — no DB/Redis
+  - `inference-pipeline` imports: Pillow, numpy, scikit-learn, joblib, opencv-python-headless (YuNet face box) — no DB/Redis; owns the model registry (`models.py`)
   - `services/api` imports: domain, persistence, queue — NOT workers, NOT torch
-  - `services/workers/*` import: domain, persistence, queue, observability, inference-pipeline
-  - **Workers CANNOT import `lr_frameflow_api`**
+  - `edit-serializer` imports: stdlib only
+  - `culling` imports: inference-pipeline (model registry), numpy, Pillow, opencv-python-headless, mediapipe, scikit-learn — no DB/Redis; models only via the registry (SHA-256, `THIRD_PARTY_MODELS.md`)
+  - `services/workers/*` import: domain, persistence, queue, observability, inference-pipeline, edit-serializer; `cull_worker` also culling
+  - **Workers CANNOT import `calotype_api`**
   - **API CANNOT import worker modules**
 - **Versioned contracts:** Every queue message and API schema has a `schema_version` field. Never break existing schema versions; add new ones.
+- **Tolerant reader:** request models ignore (and log) unknown *optional* fields instead of rejecting them — a newer Bridge must work with an older server. New *required* fields need a new schema version. (Found when an updated Bridge sent `lr_metadata` to a not-yet-restarted API: every upload failed with 422.)
 - **Idempotency:** Use the `idempotency_key` DB column (unique partial index) for safe retries.
 - **Photo upload is idempotent:** Uploading the same `lr_catalog_uuid` twice returns the existing record.
 
@@ -88,26 +105,52 @@ TODO.md                # Completed + open work items — keep up to date
 
 | File | Purpose |
 |------|---------|
-| `libs/domain/src/lr_frameflow_domain/jobs.py` | `JobKind` & `JobStatus` enums |
-| `libs/domain/src/lr_frameflow_domain/profiles.py` | `ProfileStatus` enum |
-| `libs/persistence/src/lr_frameflow_persistence/models.py` | All SQLAlchemy models |
-| `libs/persistence/src/lr_frameflow_persistence/repositories/` | One repo file per model |
-| `libs/inference-pipeline/src/lr_frameflow_inference_pipeline/features.py` | `extract_features()` — 128-dim histogram |
-| `libs/inference-pipeline/src/lr_frameflow_inference_pipeline/model.py` | `train_model()` / `run_inference()` |
-| `libs/queue/src/lr_frameflow_queue/envelope.py` | `JobEnvelopeV1` — canonical queue message |
-| `libs/queue/src/lr_frameflow_queue/constants.py` | Queue keys: `lrff:jobs:train`, `lrff:jobs:feature`, `lrff:jobs:inference` |
-| `libs/queue/src/lr_frameflow_queue/publisher.py` | `enqueue()`, `forward_to_inference()` |
-| `libs/queue/src/lr_frameflow_queue/consumer.py` | `blpop_envelope()`, `push_dead_letter()` |
-| `services/api/src/lr_frameflow_api/main.py` | FastAPI app + all routes |
-| `services/api/src/lr_frameflow_api/schemas.py` | Pydantic request/response models |
-| `services/api/src/lr_frameflow_api/deps.py` | FastAPI dependencies (DB session, publisher, S3) |
-| `services/api/src/lr_frameflow_api/storage.py` | boto3 MinIO helper |
+| `libs/domain/src/calotype_domain/jobs.py` | `JobKind` & `JobStatus` enums |
+| `libs/domain/src/calotype_domain/profiles.py` | `ProfileStatus` enum |
+| `libs/persistence/src/calotype_persistence/models.py` | All SQLAlchemy models |
+| `libs/persistence/src/calotype_persistence/repositories/` | One repo file per model |
+| `libs/inference-pipeline/src/calotype_inference_pipeline/features.py` | `extract_features()` — 128-dim histogram |
+| `libs/inference-pipeline/src/calotype_inference_pipeline/model.py` | `train_model()` / `run_inference()` |
+| `libs/edit-serializer/src/calotype_edit_serializer/sliders.py` | `from_lightroom()` / `to_lightroom()` — LR names, ranges, RAW vs JPEG white balance |
+| `libs/queue/src/calotype_queue/envelope.py` | `JobEnvelopeV1` — canonical queue message |
+| `libs/queue/src/calotype_queue/constants.py` | Queue keys: `calotype:jobs:train`, `:feature`, `:inference`, `:cull` |
+| `libs/queue/src/calotype_queue/publisher.py` | `enqueue()`, `forward_to_inference()` |
+| `libs/queue/src/calotype_queue/consumer.py` | `blpop_envelope()`, `push_dead_letter()` |
+| `services/api/src/calotype_api/main.py` | FastAPI app + all routes |
+| `services/api/src/calotype_api/schemas.py` | Pydantic request/response models |
+| `services/api/src/calotype_api/deps.py` | FastAPI dependencies (DB session, publisher, S3) |
+| `services/api/src/calotype_api/storage.py` | boto3 S3 helper |
 | `packages/contracts/openapi/bridge-api.yaml` | OpenAPI spec (Bridge ↔ API contract) |
+| `packages/contracts/openapi/plugin-bridge-api.yaml` | OpenAPI spec (LR plugin ↔ Bridge, local, `X-Calotype-Token`) |
+| `apps/bridge/core/src/outbox.rs` | Background loop: preview → upload → submit job → poll → map results |
+| `apps/bridge/core/src/server.rs` | Local API for the plugin (127.0.0.1:47600) |
+| `apps/bridge/core/src/preview.rs` | Unedited preview: smallest embedded RAW JPEG ≥ 1200 px (else largest) / original JPEG/TIFF, orientation applied; reads only the first 4 MB when the preview is there (CR3: 2.7x faster from USB, ~85 % less data over a NAS) |
+| `apps/lr-plugin/Calotype.lrplugin/BridgeClient.lua` | Plugin → Bridge HTTP, reads `bridge.json` |
+| `apps/bridge/core/src/xmp.rs` | Read/write Adobe `crs:` XMP sidecars (ProcessVersion 15.4, `calotype:Profile`) |
+| `apps/bridge/core/src/bin/folder.rs` | `calotype-folder train/apply/cull/profiles` — folder mode without Lightroom |
+| `libs/culling/src/calotype_culling/scoring.py` | Series + explainable baseline (keep/uncertain/reject with reasons) |
+| `libs/culling/src/calotype_culling/identity.py` | SFace face embeddings + grouping photos by person |
+| `libs/inference-pipeline/src/calotype_inference_pipeline/straighten.py` | Tilt from the photo's own lines (keystone-aware) + Lightroom crop keys |
+| `libs/culling/src/calotype_culling/cull.py` | `cull()`: learned from decided photos (≥ 8 per class) else rules; `decision_from_metadata` |
+| `apps/lr-plugin/Calotype.lrplugin/CullPhotos.lua` | Menu: sort selected photos into collections (stars/flags untouched) |
+| `apps/lr-plugin/Calotype.lrplugin/Retouch.lua` | AI-mask retouch: find our presets by correction name, snapshot, apply, `updateAISettings`, remove empty masks |
+| `apps/bridge/core/src/presets.rs` | Embeds `presets/` and installs them into Camera Raw's settings folder on start |
+| `tools/presets/build.py` | Generates the looks and retouch presets (CC0) |
+| `tools/lr_e2e/retouch_check.py` | Retouch end-to-end in Lightroom (masks computed, own masks kept, no duplicates, restore) |
+| `tools/lr_e2e/cull_check.py` | Culling end-to-end in a real Lightroom (collections, nothing else touched, cleanup) |
+| `tools/lr_e2e/straighten_check.py` | Straighten end-to-end in a real Lightroom (angle + crop arrive, own crops stay, restore) |
+| `tools/eval/cull_report.py` | Culling prototype on a preview folder → local HTML contact sheet + timing |
+| `THIRD_PARTY_MODELS.md` | Every downloaded model with license and SHA-256 — permissive only |
+| `tools/eval/synthetic.py` | Synthetic-rule test: make rule XMPs, score predictions vs. rule and vs. guessing |
+| `apps/lr-plugin/Calotype.lrplugin/ApplyProfile.lua` | Apply dialog (profile, straighten, retouch); the flow itself is `Actions.apply` |
+| `apps/lr-plugin/Calotype.lrplugin/Actions.lua` | Train / apply / cull without dialogs — shared by menu items and the automation channel |
+| `apps/lr-plugin/Calotype.lrplugin/AutomationCommands.lua` | Whitelisted commands for the end-to-end tests (`"automation": true` in `bridge.json`) |
+| `docs/adr/006-rename-to-calotype.md` | Every name and how old installations migrate |
 | `packages/contracts/json-schema/job-envelope-v1.schema.json` | Queue envelope schema |
 | `packages/contracts/json-schema/photo-upload-v1.schema.json` | Photo upload metadata schema |
-| `infra/compose/docker-compose.yml` | Local infra (Postgres, Redis, MinIO) |
-| `infra/compose/.env` | Local port overrides (Postgres 5433, MinIO 9100) |
-| `infra/migrations/versions/` | Migrations 001–007 |
+| `infra/compose/docker-compose.yml` | Local infra (Postgres, Redis, RustFS) |
+| `infra/compose/.env` | Local port overrides (Postgres 5433, S3 9100) |
+| `infra/migrations/versions/` | Migrations 001–012 (010 job progress + unique edit results, 011 `photos.analysis`, 012 `cull_results`) |
 
 ---
 
@@ -119,28 +162,34 @@ TODO.md                # Completed + open work items — keep up to date
 | POST | `/v1/photos` | Upload JPEG preview + metadata (idempotent by `lr_catalog_uuid`) |
 | GET | `/v1/profiles` | List all profiles |
 | GET | `/v1/profiles/{id}` | Get single profile with status |
-| POST | `/v1/jobs/train` | Enqueue train job (creates Profile in DRAFT) |
+| POST | `/v1/jobs/train` | Enqueue train job (creates Profile in DRAFT, returns `profile_id`) |
 | POST | `/v1/jobs/edit` | Enqueue edit job (profile must be READY, photo_ids must exist) |
-| GET | `/v1/jobs/{id}` | Get job status snapshot |
+| GET | `/v1/jobs/{id}` | Get job status snapshot (incl. `profile_id`, short `failure_reason`) |
 | GET | `/v1/jobs/{id}/result` | Get edit results (only when job is COMPLETED) |
+| POST | `/v1/jobs/cull` | Enqueue cull job (`cull-request-v1`: photo_ids; photos with stars/flags teach the scorer) |
+| GET | `/v1/jobs/{id}/cull-result` | Culling decisions (bucket keep/uncertain/reject, score, reason, method) |
 
 ---
 
 ## Job Pipeline
 
 ```
-Edit job:   API → lrff:jobs:feature → feature_worker → lrff:jobs:inference → inference_worker
-Train job:  API → lrff:jobs:train   → train_worker   → COMPLETED
+Edit job:   API → calotype:jobs:feature → feature_worker → calotype:jobs:inference → inference_worker
+Train job:  API → calotype:jobs:train   → train_worker   → COMPLETED
+Cull job:   API → calotype:jobs:cull    → cull_worker    → CullResult → COMPLETED
 ```
 
 Train flow detail:
-1. API creates Profile (DRAFT) + Job, enqueues to `lrff:jobs:train`
-2. `train_worker`: Profile → TRAINING, loads feature vectors + `lr_develop_settings` from DB, trains Ridge model, saves `.joblib` to MinIO, Profile → READY
+1. API creates Profile (DRAFT) + Job, enqueues to `calotype:jobs:train`
+2. `train_worker`: Profile → TRAINING; per photo: maps `lr_develop_settings` (LR names) to internal params via `from_lightroom`, computes the feature vector if missing (download preview from S3); photos without usable preview or settings are skipped; needs ≥ 3 usable photos; trains the current model (boosting, < 30 photos Ridge), saves `.joblib` to S3, Profile → READY
 
 Edit flow detail:
-1. API validates Profile is READY + all photo_ids exist, enqueues to `lrff:jobs:feature`
-2. `feature_worker`: downloads JPEG from MinIO, extracts 128-dim histogram vector, saves FeatureVector, forwards to `lrff:jobs:inference`
-3. `inference_worker`: loads `.joblib` from MinIO, predicts 10 LR params per photo, saves EditResult
+1. API validates Profile is READY + all photo_ids exist, enqueues to `calotype:jobs:feature`
+2. `feature_worker`: downloads JPEG from S3, extracts the feature vectors of every supported version, saves FeatureVector (skips photos whose preview is missing/undecodable — never stores zero vectors); measures the tilt once per photo (`photos.analysis.straighten`); forwards to `calotype:jobs:inference`
+3. `inference_worker`: loads `.joblib` from S3 (missing artifact → job FAILED), predicts 10 params per photo, converts to LR develop settings via `to_lightroom` (clamped, LR key names), adds the style layer and — if the request has `straighten: true` and the photo has clear reference lines — Lightroom crop keys; upserts EditResult (one per photo and job); photos without feature vector get no result
+4. Workers touch `jobs.last_progress_at` per photo; the reaper re-runs only jobs without progress for 10 min, each kind from its first queue (edit → feature, train → train, cull → cull)
+
+Cull flow detail: `cull_worker` computes the culling features once per photo (cached in `photos.analysis.cull`), takes the decisions from `lr_metadata` (pick flag, else 4–5 ★ keep / 1–3 ★ not), learns with ≥ 8 per class else uses the rules, upserts one CullResult per photo (bucket, score, reason, method). The plugin turns them into collections *Calotype > Culling <date> > Keep / Check / Sort out*; `calotype-folder cull` writes a color label + `calotype:Cull` into the sidecar.
 
 On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
 
@@ -148,11 +197,23 @@ On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
 
 ## ML Pipeline
 
-- **Feature vector:** 128 floats — R/G/B/Brightness histograms, 32 bins each, normalized
-- **Model:** `MultiOutputRegressor(Ridge(alpha=1.0))` with `StandardScaler`, serialized with joblib
+- **Feature versions** (one vector per photo *and* version, migration 009; `compute_features(bytes, version)`):
+  - `histogram-v1`: 128 floats — R/G/B/Brightness histograms, 32 bins each (old profiles)
+  - `histstats-face-v2` (**current**): v1 + 20 tone/color stats + 5 face values (YuNet largest face: brightness, color) = 153 floats
+- **Models** (artifact records `feature_version`; inference uses exactly that version, refuses wrong vector sizes):
+  - v1: `MultiOutputRegressor(Ridge)` + `StandardScaler` (`ridge_v1`)
+  - v2: `HistGradientBoostingRegressor` per slider (`gbr_v2`); < 30 photos → Ridge (`ridge_v2`)
+- **Benchmark** (1,837 edited Canon R6 photos from another tool, 367 held out, end-to-end through the pipeline): v1 → v2: exposure MAE 0.33 → 0.20 EV, temperature 258 → 163 K, all sliders within tolerance 14 % → 32 % (`tools/eval/holdout.py`, `model_lab.py`)
+- **More internal yardsticks** (2026-11-07, other tools' edits, never shipped): through real Lightroom (`tools/lr_e2e/train_eval.py`) R6 33 % all-within (exposure 54 %, temperature 58 %); wedding (Aftershoot look, 620/155) 54 %; kindergarten portraits vs. Neurapix (495/123, edits exported from the catalog, `calotype-folder train --sidecars`) 49 %, exposure 88 %
+- **Straighten** (`straighten.py`): only nearly plumb verticals and long horizons vote, keystone modelled (lean grows with distance from the centre, tilt = value at the centre); < 5 agreeing lines or no lines on both sides → no rotation. Crop = largest aspect-keeping rectangle, stored like Lightroom: corners of the rotated rectangle in the unrotated sensor frame (verified in Lightroom via `straighten_probe`). Rotates 3–6 % of event/wedding photos; there median 0.2–0.3° from another tool's angle (never rotating: 0.6–0.7°). Plugin keeps photos with an own crop.
+- **Honest benchmark note:** random splits put near-identical neighbours into training. By contiguous blocks R6 drops to 9 % all-within, across shoots (R6 → 5D) exposure keeps half of the gain over guessing, absolute white balance does not transfer (→ as-shot-relative target, TODO). A pooled base model from other shoots helps new users with few edits on white balance (R6: 14 → 32 % with 20 own photos)
+- **Culling** (`libs/culling`): ROC-AUC against a photographer's real exports (leave-one-group-out) rules 0.53 → learned 0.654 (series-relative expression features); learning from other shoots beats a few in-shoot ratings (10+10: 0.56)
+- **Retouch:** presets `presets/retouch` add one AI-mask correction named `Calotype <id>`; plugin applies them with `applyDevelopPreset`, runs `photo:updateAISettings()`, removes masks with `ErrorReason`, keeps the user's masks, snapshot "Calotype: before". `applyDevelopSettings` with new masks hangs — never create masks that way; removing and adding masks must be separate transactions
+- **Style layer:** profile `base_preset` adds the look (curve, HSL, grading …) on top of each prediction (`calotype_edit_serializer.style`)
 - **10 LR params predicted:** `exposure, temp, tint, contrast, highlights, shadows, whites, blacks, vibrance, saturation`
-- **Fallback:** < 3 training samples → zero-model (returns all zeros)
-- **Artifact path:** `models/{profile_id}/model-ridge-v1.joblib` in MinIO bucket
+- **Minimum:** train worker refuses < 3 usable photos (Profile FAILED); `run_inference` raises on unreadable artifacts instead of returning zeros (zeros would reset the user's photos)
+- **Output names:** model works with internal names (`exposure`, `temp` …); `libs/edit-serializer` maps to/from LR (`Exposure2012`, `Temperature`/`IncrementalTemperature` …)
+- **Artifact path:** `models/{profile_id}/model-{feature_version}.joblib` in the S3 bucket
 
 ---
 
@@ -163,10 +224,10 @@ On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
 | API | FastAPI 0.115+, Pydantic 2.10+, Uvicorn 0.32+ |
 | Database | PostgreSQL 16 + pgvector, SQLAlchemy 2.0+, Alembic 1.14+ |
 | Queue | Redis 7, redis-py 5.2+ |
-| Object Storage | MinIO (S3-compatible), boto3 1.35+ |
+| Object Storage | S3-compatible: RustFS 1.0 (Apache-2.0) in compose (MinIO publishes no community images anymore), boto3 1.35+ |
 | Workers | Python 3.11+, blocking BLPOP loop |
 | ML | scikit-learn 1.4+, Pillow 10+, numpy 1.26+, joblib 1.3+ |
-| Desktop Bridge | Tauri (Rust + JS) |
+| Desktop Bridge | Rust (axum 0.8, rusqlite, reqwest, image) + Tauri 2, static HTML/JS UI |
 | LR Plugin | Lightroom Classic SDK (Lua) |
 | Linting | Ruff 0.8+ |
 | Testing | pytest 8+ |
@@ -179,42 +240,62 @@ On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
 ```bash
 # Start infrastructure
 cp infra/compose/env.example infra/compose/.env
-# Edit .env to set port overrides if needed (Postgres 5433, MinIO 9100/9101)
-cd infra/compose && docker compose up -d
+# Edit .env to set port overrides if needed (Postgres 5433, S3 9100/9101)
+cd infra/compose && docker compose -p calotype up -d
 
 # Install Python libs (order matters due to dependencies)
-pip install -e libs/domain
-pip install -e libs/queue
-pip install -e libs/persistence
-pip install -e libs/observability
-pip install -e libs/inference-pipeline
-pip install -e services/api
-pip install -e services/workers/feature_worker
-pip install -e services/workers/train_worker
-pip install -e services/workers/inference_worker
+pip install -e libs/domain -e libs/queue -e libs/persistence -e libs/observability
+pip install -e libs/inference-pipeline -e libs/edit-serializer -e libs/culling -e libs/io
+pip install -e services/api -e services/workers/feature_worker -e services/workers/train_worker \
+            -e services/workers/inference_worker -e services/workers/cull_worker
+# Workers: calotype-feature-worker, calotype-train-worker, calotype-inference-worker, calotype-cull-worker
+# A database / bucket created before the rename keeps its name: point DATABASE_URL / S3_BUCKET at it
 
 # Run database migrations
 cd infra/migrations
-DATABASE_URL="postgresql+psycopg://lrframeflow:lrframeflow@127.0.0.1:5433/lrframeflow" alembic upgrade head
+DATABASE_URL="postgresql+psycopg://calotype:calotype@127.0.0.1:5433/calotype" alembic upgrade head
 
 # Start API
 cd services/api
-DATABASE_URL="postgresql+psycopg://lrframeflow:lrframeflow@127.0.0.1:5433/lrframeflow" \
-  uvicorn lr_frameflow_api.main:app --reload
+DATABASE_URL="postgresql+psycopg://calotype:calotype@127.0.0.1:5433/calotype" \
+  uvicorn calotype_api.main:app --reload
+
+# Windows: always use 127.0.0.1, never "localhost" (IPv6 ::1 is tried first and Docker's
+# port forward hangs there → ~21 s per connection). Code defaults follow this.
 
 # Validate contracts (also runs in CI)
 python scripts/validate_contracts.py
+
+# Bridge (Rust; rustup in ~/.cargo/bin)
+cd apps/bridge
+cargo test -p calotype-bridge-core                            # fast, no Tauri
+cargo run -p calotype-bridge-core --bin calotype-bridge-headless  # bridge without window (installs presets)
+cargo run --release -p calotype-bridge-core --bin calotype-folder -- cull <dir> --out <dir>  # folder mode
+npm install && npm run dev                                        # desktop app
+cargo run --release -p calotype-bridge-core --example preview -- <out> <raw files>  # preview check on real RAWs
+
+# Lightroom plugin tests (LuaJIT = Lua 5.1 like Lightroom; `scoop install luajit`)
+luajit apps/lr-plugin/tests/run.lua
+
+# Real Lightroom: "automation": true in %APPDATA%\Calotype\bridge.json, plugin added once
+python tools/lr_e2e/run.py --profile "<ready profile>" --photos 5 [--train 20]
+python tools/lr_e2e/straighten_check.py | cull_check.py | retouch_check.py   (see --help)
 ```
 
 ---
 
 ## CI
 
-Four jobs on push/PR to `main`:
+Nine jobs on push/PR to `main` (the branch itself does not trigger CI — run the commands locally):
 1. **contracts** — validates OpenAPI spec + all JSON schemas + examples
 2. **lint** — Ruff check across all Python source dirs
-3. **inference-pipeline** — `pytest libs/inference-pipeline/tests/` (9 tests)
-4. **api-tests** — `pytest services/api/tests/` (14 tests, mock-based, no Postgres needed)
+3. **inference-pipeline** — `pytest libs/inference-pipeline/tests/` (incl. straighten)
+4. **edit-serializer** — `pytest libs/edit-serializer/tests/` (incl. presets in sync with the generator)
+5. **api-tests** — `pytest services/api/tests/` (mock-based, no Postgres needed)
+6. **worker-tests** — `pytest` for train / feature / inference workers + `libs/persistence/tests` (mock-based, no DB/S3)
+7. **bridge-core** — `cargo fmt --check`, `clippy -D warnings`, `cargo test -p calotype-bridge-core` (incl. end-to-end against a fake API)
+8. **lr-plugin** — `luajit apps/lr-plugin/tests/run.lua` (Lightroom SDK faked)
+9. **culling** — `pytest libs/culling/tests/` (synthetic images, no models needed)
 
 ---
 
@@ -225,6 +306,9 @@ Four jobs on push/PR to `main`:
 | 001 | Redis Lists for async queuing; API returns 202 immediately |
 | 002 | Tauri (Rust) for Bridge instead of Electron |
 | 003 | Redis DLQ per primary queue; strict module import matrix |
+| 004 | Bridge = local Rust/axum service on 127.0.0.1 with SQLite outbox; LR plugin = UI, talks only to Bridge; model input = unedited image (embedded RAW JPEG / original) |
+| 005 | Culling: many explainable features, weights learned from the photographer's decisions, three buckets with reasons |
+| 006 | The project is called Calotype (formerly LR-FrameFlow, briefly Tarsier); every name and the migration of old installations |
 
 Full docs in `docs/adr/`.
 
@@ -236,13 +320,15 @@ Key vars (see `infra/compose/env.example` for full list):
 
 | Variable | Default | Used by |
 |----------|---------|---------|
-| `DATABASE_URL` | `postgresql+psycopg://lrframeflow:lrframeflow@127.0.0.1:5433/lrframeflow` | API, workers, migrations |
-| `REDIS_URL` | `redis://localhost:6379/0` | API, workers |
-| `S3_ENDPOINT` | `http://localhost:9100` | workers, API |
-| `S3_BUCKET` | `lrff-photos` | workers, API |
+| `DATABASE_URL` | `postgresql+psycopg://calotype:calotype@127.0.0.1:5433/calotype` | API, workers, migrations |
+| `REDIS_URL` | `redis://127.0.0.1:6379/0` | API, workers |
+| `S3_ENDPOINT` | `http://127.0.0.1:9100` | workers, API |
+| `S3_BUCKET` | `calotype-photos` | workers, API |
 | `S3_ACCESS_KEY` | `minio` | workers, API |
 | `S3_SECRET_KEY` | `miniosecret_changeme` | workers, API |
 | `LOG_FORMAT` | `json` | all services — set to `text` for human-readable local output |
 | `RATE_LIMIT_REQUESTS` | `60` | API — max requests per window per IP on job endpoints |
 | `RATE_LIMIT_WINDOW_SECONDS` | `60` | API — sliding window length in seconds |
 | `MAX_QUEUE_DEPTH` | `500` | API — max queue length before 429 backpressure |
+| `CALOTYPE_BRIDGE_DATA_DIR` | `%APPDATA%\Calotype` / `~/Library/Application Support/Calotype` | Bridge, plugin, `tools/lr_e2e` |
+| `CALOTYPE_MODEL_DIR` | `%LOCALAPPDATA%\Calotype\models` / `~/.cache/Calotype/models` | inference-pipeline, culling (model downloads) |

@@ -1,0 +1,85 @@
+<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Calotype">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    crs:PresetType="Normal"
+    crs:Cluster=""
+    crs:UUID="9F2EA2366FDB55348E02601F4A278729"
+    crs:SupportsAmount="False"
+    crs:SupportsColor="True"
+    crs:SupportsMonochrome="True"
+    crs:SupportsHighDynamicRange="True"
+    crs:SupportsNormalDynamicRange="True"
+    crs:SupportsSceneReferred="True"
+    crs:SupportsOutputReferred="True"
+    crs:CameraModelRestriction=""
+    crs:Copyright="CC0 — Calotype contributors"
+    crs:ContactInfo=""
+    crs:Version="15.4"
+    crs:ProcessVersion="15.4"
+    crs:HasSettings="True">
+   <crs:Name>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default">Deepen sky</rdf:li>
+     <rdf:li xml:lang="de-DE">Himmel vertiefen</rdf:li>
+    </rdf:Alt>
+   </crs:Name>
+   <crs:ShortName>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default"></rdf:li>
+    </rdf:Alt>
+   </crs:ShortName>
+   <crs:SortName>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default"></rdf:li>
+    </rdf:Alt>
+   </crs:SortName>
+   <crs:Group>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default">Calotype Retouch</rdf:li>
+    </rdf:Alt>
+   </crs:Group>
+   <crs:Description>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default">Holds back bright skies and gives them a little more color.</rdf:li>
+     <rdf:li xml:lang="de-DE">Hält helle Himmel zurück und gibt ihnen etwas mehr Farbe.</rdf:li>
+    </rdf:Alt>
+   </crs:Description>
+   <crs:MaskGroupBasedCorrections>
+    <rdf:Seq>
+     <rdf:li>
+      <rdf:Description
+       crs:What="Correction"
+       crs:CorrectionAmount="1"
+       crs:CorrectionActive="true"
+       crs:CorrectionName="Calotype sky"
+       crs:CorrectionSyncID="FDDF9F698D1B53D8AE6B5868C5CE621B"
+       crs:LocalExposure2012="-0.06"
+       crs:LocalHighlights2012="-0.15"
+       crs:LocalSaturation="0.06"
+       crs:LocalDehaze="0.05">
+      <crs:CorrectionMasks>
+       <rdf:Seq>
+        <rdf:li
+         crs:What="Mask/Image"
+         crs:MaskActive="true"
+         crs:MaskName="Sky"
+         crs:MaskBlendMode="0"
+         crs:MaskInverted="false"
+         crs:MaskSyncID="8C47E93BD55A5BEBA59FE42AE31B061C"
+         crs:MaskValue="1"
+         crs:MaskVersion="1"
+         crs:MaskSubType="2"
+         crs:ReferencePoint="0.500000 0.500000"
+         crs:ErrorReason="0"/>
+       </rdf:Seq>
+      </crs:CorrectionMasks>
+      </rdf:Description>
+     </rdf:li>
+    </rdf:Seq>
+   </crs:MaskGroupBasedCorrections>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>

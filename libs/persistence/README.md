@@ -1,3 +1,3 @@
-# lr-frameflow-persistence
+# calotype-persistence
 
-ORM-Modelle, Repositories, Session-Factory. Alembic-Revisionen liegen unter [`infra/migrations/versions/`](../infra/migrations/versions/).
+ORM models, repositories, session factory. Alembic revisions live under [`infra/migrations/versions/`](../../infra/migrations/versions/).

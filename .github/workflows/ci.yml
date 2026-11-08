@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install ruff
-        run: pip install ruff>=0.8
+        run: pip install "ruff==0.8.1"   # pinned: newer releases add rules (see TODO)
       - name: Lint
         run: |
           ruff check \
@@ -37,10 +37,14 @@ jobs:
             libs/queue/src \
             libs/observability/src \
             libs/inference-pipeline/src \
+            libs/edit-serializer/src \
+            libs/culling/src \
             services/api/src \
             services/workers/feature_worker/src \
             services/workers/train_worker/src \
-            services/workers/inference_worker/src
+            services/workers/inference_worker/src \
+            services/workers/cull_worker/src \
+            tools
 
   inference-pipeline:
     name: Inference pipeline tests
@@ -54,6 +58,80 @@ jobs:
         run: pip install -e "libs/inference-pipeline[dev]"
       - name: Test
         run: python -m pytest libs/inference-pipeline/tests/ -v
+
+  edit-serializer:
+    name: Edit serializer tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e "libs/edit-serializer[dev]"
+      - name: Test
+        run: python -m pytest libs/edit-serializer/tests/ -v
+
+  culling:
+    name: Culling library tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e libs/inference-pipeline -e "libs/culling[dev]"
+      - name: Test
+        run: python -m pytest libs/culling/tests/ -v
+
+  worker-tests:
+    name: Worker tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install -e libs/domain -e libs/queue -e libs/observability -e libs/persistence
+          pip install -e libs/inference-pipeline -e libs/edit-serializer
+          pip install -e services/workers/train_worker -e services/workers/feature_worker -e services/workers/inference_worker pytest
+      - name: Test
+        run: python -m pytest services/workers/train_worker/tests/ services/workers/feature_worker/tests/ services/workers/inference_worker/tests/ libs/persistence/tests/ -v
+
+  bridge-core:
+    name: Bridge core (Rust)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/bridge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/bridge
+      # The Tauri crate needs WebKitGTK on Linux; the core is tested on its own.
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy -p calotype-bridge-core --all-targets -- -D warnings
+      - name: Test
+        run: cargo test -p calotype-bridge-core
+
+  lr-plugin:
+    name: Lightroom plugin (Lua)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LuaJIT (Lua 5.1, like Lightroom)
+        run: sudo apt-get update && sudo apt-get install -y luajit
+      - name: Test
+        run: luajit apps/lr-plugin/tests/run.lua
 
   api-tests:
     name: API integration tests
@@ -69,7 +147,7 @@ jobs:
           pip install -e libs/queue
           pip install -e libs/observability
           pip install -e "libs/persistence" --no-deps
-          pip install sqlalchemy>=2.0 pydantic>=2.10
+          pip install "sqlalchemy>=2.0" "pydantic>=2.10"
           pip install -e "services/api[dev]"
       - name: Test
         run: python -m pytest services/api/tests/ -v

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.lr-frameflow/job-envelope-v1.schema.json",
+  "$id": "https://schemas.calotype.xyz/job-envelope-v1.schema.json",
   "title": "JobEnvelopeV1",
   "type": "object",
   "additionalProperties": false,
@@ -15,7 +15,7 @@
     },
     "job_kind": {
       "type": "string",
-      "enum": ["train", "edit"]
+      "enum": ["train", "edit", "cull"]
     },
     "attempt": {
       "type": "integer",

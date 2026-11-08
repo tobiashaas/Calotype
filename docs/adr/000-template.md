@@ -1,18 +1,18 @@
-# ADR Vorlage
+# ADR template
 
-- **Status:** Vorschlag | Akzeptiert | Verworfen
-- **Datum:** YYYY-MM-DD
-- **Entscheider:** Rollen oder Namen
+- **Status:** Proposed | Accepted | Rejected
+- **Date:** YYYY-MM-DD
+- **Deciders:** roles or names
 
-## Kontext
+## Context
 
-Was lösen wir?
+What problem are we solving?
 
-## Entscheidung
+## Decision
 
-Was konkret entschieden wurde.
+What exactly was decided.
 
-## Folgen / Trade-offs
+## Consequences / trade-offs
 
-- Positiv: …
-- Negativ / Risiken: …
+- Positive: …
+- Negative / risks: …

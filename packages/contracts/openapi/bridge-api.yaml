@@ -1,12 +1,12 @@
 openapi: 3.0.3
 info:
-  title: LR-FrameFlow Bridge ↔ API
+  title: Calotype Bridge ↔ API
   version: "0.1.0"
   description: |
     Thin Gateway: Jobs werden asynchron eingereiht (`202 Accepted`).
     Zusätzliche kanonische JSON Schemas unter `json-schema/` (gleiche Felder abstimmen).
 servers:
-  - url: http://localhost:8080
+  - url: http://127.0.0.1:8080
     description: Local API (compose default host port)
 paths:
   /health:
@@ -121,6 +121,51 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/JobAcceptedResponse"
+  /v1/jobs/cull:
+    post:
+      operationId: createCullJob
+      summary: Enqueue a culling job (keep / uncertain / reject with a reason per photo)
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CullJobRequestV1"
+      responses:
+        "202":
+          description: Job queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobAcceptedResponse"
+        "422":
+          description: Unknown photo ids
+  /v1/jobs/{job_id}/cull-result:
+    get:
+      operationId: getCullResult
+      summary: Culling decisions of a completed cull job
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: One decision per photo with a usable preview
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CullResultResponse"
+        "404":
+          description: Job not found
+        "409":
+          description: Not a cull job, or not completed yet
   /v1/jobs/{job_id}:
     get:
       operationId: getJob
@@ -203,7 +248,12 @@ components:
           enum: [queued]
         kind:
           type: string
-          enum: [train, edit]
+          enum: [train, edit, cull]
+        profile_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Train jobs — the profile created in `draft` status
     TrainJobRequestV1:
       type: object
       required:
@@ -256,6 +306,10 @@ components:
           format: uuid
         collection_name:
           type: string
+        straighten:
+          type: boolean
+          default: false
+          description: Level photos with clear reference lines (result carries Lightroom crop keys).
         photo_ids:
           type: array
           minItems: 1
@@ -277,6 +331,15 @@ components:
             - failed
         payload_schema_version:
           type: string
+        profile_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Profile the job trains (train) or applies (edit)
+        failure_reason:
+          type: string
+          nullable: true
+          description: Short, user-facing reason when status is `failed`
         correlation_id:
           type: string
     PhotoCreatedResponse:
@@ -318,6 +381,43 @@ components:
         failure_reason:
           type: string
           nullable: true
+    CullJobRequestV1:
+      type: object
+      required: [schema_version, photo_ids]
+      properties:
+        schema_version:
+          type: string
+          enum: [cull-request-v1]
+        correlation_id:
+          type: string
+        photo_ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+          description: Photos that already carry a decision (stars, pick/reject) teach the scorer.
+    CullResultResponse:
+      type: object
+      required: [job_id, photo_id, bucket, score, reason, method]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        photo_id:
+          type: string
+          format: uuid
+        bucket:
+          type: string
+          enum: [keep, uncertain, reject]
+        score:
+          type: number
+          description: learned = keep probability 0..1; rules = summed evidence
+        reason:
+          type: string
+        method:
+          type: string
+          enum: [learned, rules]
     EditResultResponse:
       type: object
       required: [job_id, photo_id, lr_settings]
@@ -331,7 +431,18 @@ components:
         lr_settings:
           type: object
           additionalProperties: true
-          description: Lightroom Develop settings to apply (exposure, contrast, highlights, etc.)
+          description: |
+            Lightroom Classic develop settings, ready for `photo:applyDevelopSettings()`.
+            Keys use Lightroom names (`Exposure2012`, `Contrast2012`, `Highlights2012`, …);
+            white balance is `Temperature`/`Tint` for RAW profiles and
+            `IncrementalTemperature`/`IncrementalTint` for JPEG/TIFF profiles.
+            Values are clamped to the slider ranges.
+          example:
+            Exposure2012: 0.35
+            Temperature: 5600
+            Tint: 8
+            Contrast2012: -12
+            Highlights2012: -40
         s3_key:
           type: string
           nullable: true

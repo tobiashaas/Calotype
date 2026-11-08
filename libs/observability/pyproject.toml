@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lr-frameflow-observability"
+name = "calotype-observability"
 version = "0.1.0"
 description = "Structured logging helpers (OTel-ready later)"
 requires-python = ">=3.11"

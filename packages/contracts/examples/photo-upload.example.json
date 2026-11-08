@@ -9,9 +9,15 @@
     "focal_length_mm": 85
   },
   "lr_develop_settings": {
-    "exposure": 0.3,
-    "contrast": 10,
-    "highlights": -20,
-    "shadows": 15
+    "Exposure2012": 0.3,
+    "Contrast2012": 10,
+    "Highlights2012": -20,
+    "Shadows2012": 15,
+    "Temperature": 5600
+  },
+  "lr_metadata": {
+    "rating": 4,
+    "pick_status": 1,
+    "color_label": "green"
   }
 }
