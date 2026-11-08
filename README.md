@@ -1,89 +1,107 @@
 # LR-FrameFlow
 
-Modular system for **AI-assisted Lightroom Classic editing**: a Lightroom plugin for workflow and review, a **Bridge desktop app** for local orchestration, a **thin API** (FastAPI) and **workers** for features, training and inference, with a clearly versioned **contract** between all parts.
+Open-source, AI-assisted editing and culling for **Lightroom Classic**. LR-FrameFlow learns *your*
+style from photos you have already edited and *your* taste from photos you have already rated —
+and it runs on your own machine.
+
+- **Edit profiles:** train a profile from finished edits, apply it to new photos (exposure, white
+  balance, tone, presence per photo; a fixed look — curve, HSL, color grading — on top).
+- **Straighten:** levels photos that have clear reference lines (walls, door frames, horizon) with
+  the largest crop, like Lightroom does; photos you cropped yourself keep their crop.
+- **Culling:** sorts a shoot into *Keep / Check / Sort out* with a reason per photo ("best of its
+  series", "eyes closed", …). It learns from the stars and flags you already gave; without them it
+  uses explainable starter rules. Nothing you set is overwritten — results are collections.
+- **Folder mode:** the same without Lightroom, on RAW + XMP folders (`lrff-folder train / apply /
+  cull`), optionally writing into a separate output folder.
 
 - **Upstream:** [github.com/tobiashaas/LR-FrameFlow](https://github.com/tobiashaas/LR-FrameFlow)
 
-## Architecture (short)
+## Architecture
 
 ```text
-Lightroom Plugin (Lua) → Bridge (Desktop) → API → Job Queue → Worker (Feature / Train / Inference)
-                                                                    ↓
-                                              Postgres (+ pgvector), object storage
+Lightroom plugin (Lua) ─┐
+                        ├→ Bridge (Rust, 127.0.0.1) → API (FastAPI, 202) → Redis queues → workers
+lrff-folder (CLI) ──────┘   previews from the RAW,                          feature · train ·
+                            SQLite outbox, retries                           inference · cull
+                                                       Postgres (+ pgvector) · S3-compatible storage
 ```
 
-See package boundaries and decisions in [`docs/adr/`](docs/adr/) (including queue, Tauri, Redis/DLQ).
+The plugin is only UI; the Bridge builds previews from the original files and talks to the server.
+Decisions are recorded in [`docs/adr/`](docs/adr/) (queue, Bridge, culling).
 
 ## Repository layout
 
 ```text
 apps/
-  lr-plugin/           # Lightroom Classic SDK plugin (Lua)
-  bridge/               # Local Bridge app (Tauri – see ADR)
-
+  lr-plugin/        # Lightroom Classic plugin (Lua 5.1), German/English UI
+  bridge/           # Rust: core (local API, outbox, previews, XMP, lrff-folder) + Tauri shell
 packages/
-  contracts/           # JSON Schema + OpenAPI (Bridge ↔ API); CI should run contract tests
-
+  contracts/        # OpenAPI + JSON Schema — source of truth, validated in CI
 services/
-  api/                  # FastAPI gateway (jobs, no heavy inference in the request path)
-  workers/             # Feature, train, inference workers (scalable)
-
+  api/              # FastAPI gateway: photos, profiles, train / edit / cull jobs
+  workers/          # feature_worker, train_worker, inference_worker, cull_worker
 libs/
-  domain/               # JobKind/JobStatus (no infra imports)
-  persistence/          # SQLAlchemy, repositories (loads domain)
-  queue/                # Redis, JobEnvelopeV1, DLQ helpers
-  observability/        # structured logs
-  inference-pipeline/   # pure inference steps (stub)
-  edit-serializer/      # Lightroom-compatible writeback
-  lr-io/                # Shared I/O and path helpers
-
+  domain/ persistence/ queue/ observability/
+  inference-pipeline/  # features, models, straighten
+  edit-serializer/     # internal parameters ↔ Lightroom develop settings, style layer
+  culling/             # sharpness, faces, expressions, series, people, learned scorer
 infra/
-  compose/             # local Postgres (pgvector), Redis, MinIO
-  migrations/           # Database migrations
-
-docs/
-  adr/                  # Architecture Decision Records
+  compose/          # Postgres + pgvector, Redis, RustFS (S3)
+  migrations/       # Alembic migrations
+tools/
+  lrff_eval/        # offline benchmarks (hold-out, culling against real decisions, straighten)
+  lr_e2e/           # end-to-end tests in a real, running Lightroom (automation channel)
 ```
 
-## Contracts & CI
-
-- Source of the API and data formats: [`packages/contracts/`](packages/contracts/) (OpenAPI + JSON Schema).
-- **Recommendation:** add a CI step that validates the schemas (`openapi-spec-validator`, `check-jsonschema`) and runs **contract tests** between Bridge client stubs and types generated from the spec — not automated yet, but documented in the spec folder.
-
-## Start local infra
-
-Prerequisite: [Docker Compose](https://docs.docker.com/compose/).
+## Getting started
 
 ```bash
-cd infra/compose
-docker compose up -d
+# infrastructure
+cp infra/compose/env.example infra/compose/.env
+cd infra/compose && docker compose -p lrframeflow up -d && cd ../..
+
+# Python (one venv for all components)
+python -m venv .venv && .venv\Scripts\activate          # Windows
+pip install -e libs/domain -e libs/queue -e libs/persistence -e libs/observability
+pip install -e libs/inference-pipeline -e libs/edit-serializer -e libs/culling
+pip install -e services/api -e services/workers/feature_worker -e services/workers/train_worker \
+            -e services/workers/inference_worker -e services/workers/cull_worker
+cd infra/migrations && alembic upgrade head && cd ../..
+
+# API and workers (each in its own terminal)
+uvicorn lr_frameflow_api.main:app --host 127.0.0.1 --port 8080
+lr-ff-feature-worker; lr-ff-train-worker; lr-ff-inference-worker; lr-ff-cull-worker
+
+# Bridge (Rust)
+cd apps/bridge && cargo run --release -p lrff-bridge-core --bin lrff-bridge-headless
 ```
 
-Environment variables: see the comments in [`infra/compose/docker-compose.yml`](infra/compose/docker-compose.yml). For the API/workers there is an example file in [`infra/compose/env.example`](infra/compose/env.example).
+Then add `apps/lr-plugin/LRFrameFlow.lrplugin` in Lightroom's Plug-in Manager. Details:
+[`CLAUDE.md`](CLAUDE.md) (developer overview), [`apps/lr-plugin/README.md`](apps/lr-plugin/README.md),
+[`apps/bridge/README.md`](apps/bridge/README.md).
 
-## Python components
+## Tests
 
-Every Python component has its own `pyproject.toml` (clear ownership). Install order matters because of the inference worker's dependencies:
+All of these run in CI (`.github/workflows/ci.yml`):
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate   # Windows
-pip install -e "libs/domain" -e "libs/persistence[dev]"
-pip install -e "libs/queue" -e "libs/observability"
-pip install -e "libs/edit-serializer" -e "libs/lr-io" -e "libs/inference-pipeline[dev]"
-pip install -e "services/api[dev]"
-pip install -e "services/workers/feature_worker" -e "services/workers/train_worker" -e "services/workers/inference_worker"
-
-cd services/api
-uvicorn lr_frameflow_api.main:app --reload
+python scripts/validate_contracts.py
+pytest libs services                                  # Python libs, API, workers
+cd apps/bridge && cargo test -p lrff-bridge-core      # Bridge, incl. end-to-end against a fake API
+luajit apps/lr-plugin/tests/run.lua                   # plugin with a faked Lightroom SDK
 ```
 
-After starting Postgres/Redis (Compose), run the migration: see [`infra/migrations/README.md`](infra/migrations/README.md). Check contracts locally: `python scripts/validate_contracts.py`.
+With a running Lightroom and `"automation": true` in `bridge.json`, `tools/lr_e2e/` drives the real
+plugin: apply + restore (`run.py`, `--train N`), straighten (`straighten_check.py`), culling
+(`cull_check.py`). Every test restores what it changed.
 
-## Bridge (Tauri)
+## Models and data
 
-Folder [`apps/bridge`](apps/bridge): minimal scaffold; complete the app with `pnpm create tauri-app` (see `apps/bridge/README.md`).
+Only permissively licensed models (MIT / Apache-2.0 / BSD, code *and* weights) are used; every one
+is listed with source, license and SHA-256 in [`THIRD_PARTY_MODELS.md`](THIRD_PARTY_MODELS.md) and
+downloaded on first use. No models, presets or values from other products are part of this project.
+Benchmarks against other tools' outputs are internal yardsticks only and never ship.
 
 ## License
 
-Unless marked otherwise, see `LICENSE` in the repo root (optional, to be added).
+To be decided (see `LICENSE` once added).
