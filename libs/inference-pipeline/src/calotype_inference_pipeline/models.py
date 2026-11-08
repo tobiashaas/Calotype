@@ -66,8 +66,10 @@ def model_dir() -> Path:
             try:
                 new.parent.mkdir(parents=True, exist_ok=True)
                 old.rename(new)
+                old.parent.rmdir()          # the old app folder, if nothing else is in it
             except OSError:
-                return old
+                if not new.exists():
+                    return old
     return new
 
 
