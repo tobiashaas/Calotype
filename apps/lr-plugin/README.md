@@ -17,6 +17,7 @@ are handled by the Bridge ([ADR 004](../../docs/adr/004-bridge-localhost-archite
 | Menu item | What happens |
 |---|---|
 | Train profile from selected photos... | Asks for name, genre, color/B&W. Hands the photos (path + current develop settings as the learning target) to the Bridge and waits for training. At least 3 photos, only RAW **or** only JPEG/TIFF. |
+| Sort selected photos (culling)... | Sorts the selection into the collections *LR-FrameFlow > Culling <date> > Keep / Check / Sort out*. Photos you already rated (stars) or flagged teach it your taste; without enough of them it uses starter rules. Stars, flags and edits are not changed. |
 | Apply profile to selected photos... | Shows finished profiles, hands over the matching photos, waits and writes the predicted values with `photo:applyDevelopSettings` in **one** catalog step (Edit → Undo works). Option *Straighten photos with clear lines*: levels photos with walls, door frames or a horizon (Lightroom crop keys, largest crop); photos you cropped or straightened yourself keep their crop. |
 | Bridge status... | Is the Bridge running? Is the server reachable? How many profiles are ready? |
 
