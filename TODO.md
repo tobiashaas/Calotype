@@ -115,7 +115,8 @@ See `docs/adr/005-culling-architecture.md`.
 - [x] Benchmarked embeddings (all Apache-2.0): DINOv2-S, Perception Encoder S16/B16, SigLIP 2 B16 → editing 33–37 % vs. 34 % without, culling AUC 0.72–0.73 vs. 0.74 without, +230–380 ms/photo on CPU → none integrated for now (`tools/lrff_eval/embed_compare.py`)
 - [ ] Zero-shot text prompts on SigLIP 2 / Perception Encoder ("blurry photo", "people hugging", "candid moment") as culling features — untested
 - [ ] Next model step for exposure: EXIF context (ISO, shutter, aperture → scene EV; folder mode must send EXIF) and consistency within a series/shoot (relative to neighbours)
-- [ ] Predict RAW white balance relative to as-shot (needs EXIF as-shot from the RAW)
+- [ ] Predict RAW white balance relative to as-shot (needs EXIF as-shot from the RAW). Why it matters (2026-11-08): a profile trained on one shoot/camera (R6) applied to another (5D, same look) gets exposure MAE 0.28 EV (guessing 0.64) but temperature only 21–26 % within ±150 K — absolute Kelvin carries the camera. Not possible via the SDK: `applyDevelopSettings{WhiteBalance="As Shot"}` keeps the old Temperature value (Lightroom recomputes only when rendering). Needs as-shot multipliers from the RAW + a per-camera mapping to Lightroom's Kelvin (LibRaw is LGPL — prefer an own parser in the Bridge)
+- [ ] Benchmarks: report contiguous-block / other-shoot splits, not only random splits — random splits put near-identical neighbours into training (R6: all-6 within 34 % random vs. 9 % by blocks)
 
 ### Straighten & people (done 2026-11-08)
 - [x] Straighten from the photo's own lines (keystone-aware), Lightroom crop keys verified in Lightroom, option in edit requests / plugin (DE/EN) / `lrff-folder apply --straighten`; own crops stay
