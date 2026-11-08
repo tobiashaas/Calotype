@@ -42,7 +42,7 @@ local function plain(r)
     ok = r.ok, title = r.title, text = r.text, canceled = r.canceled, job_id = r.job_id,
     profile_id = r.profile_id, applied = r.applied, applied_uuids = r.applied_uuids,
     skipped_type = r.skipped_type, photos = r.photos, straightened = r.straightened,
-    kept_crop = r.kept_crop,
+    kept_crop = r.kept_crop, masks = r.masks,
   })
 end
 
@@ -168,7 +168,8 @@ function Commands.apply(catalog, args)
   if not profile then error("no ready profile " .. tostring(args.profile)) end
   local photos, missing = photosByUuid(catalog, args.uuids)
   local progress = progressScope(profile.name)
-  local ok, r = pcall(Actions.apply, catalog, photos, profile, progress, { straighten = args.straighten == true })
+  local ok, r = pcall(Actions.apply, catalog, photos, profile, progress,
+    { straighten = args.straighten == true, retouch = args.retouch })
   progress:done()
   if not ok then error(r) end
   local out = plain(r)
@@ -196,6 +197,58 @@ function Commands.cull(catalog, args)
   if not ok then error(r) end
   return Json.object({ ok = r.ok, title = r.title, text = r.text, counts = r.counts, method = r.method,
     set_name = r.set_name, decisions = r.decisions, missing = missing })
+end
+
+--- Our retouch masks and LR-FrameFlow snapshots of photos, for checks and test cleanup.
+function Commands.retouch_state(catalog, args)
+  local photos = photosByUuid(catalog, args.uuids)
+  local out = Json.object({})
+  for _, photo in ipairs(photos) do
+    local groups = (photo:getDevelopSettings() or {}).MaskGroupBasedCorrections or {}
+    local ours = {}
+    for _, g in ipairs(groups) do
+      if tostring(g.CorrectionName or ""):find("^LR%-FrameFlow ") then
+        local digests, errors = 0, 0
+        for _, m in ipairs(g.CorrectionMasks or {}) do
+          if m.MaskDigest then digests = digests + 1 end
+          if (tonumber(m.ErrorReason or 0) or 0) ~= 0 then errors = errors + 1 end
+        end
+        ours[#ours + 1] = Json.object({ name = g.CorrectionName, masks = #(g.CorrectionMasks or {}),
+          computed = digests, nothing_found = errors })
+      end
+    end
+    local snaps = {}
+    local ok, list = pcall(function() return photo:getDevelopSnapshots() end)
+    for _, s in ipairs(ok and list or {}) do snaps[#snaps + 1] = s.name end
+    out[photo:getRawMetadata("uuid")] = Json.object({ masks = ours, all_masks = #groups, snapshots = snaps })
+  end
+  return out
+end
+
+--- Test cleanup: remove our masks (others stay) and our snapshots from these photos.
+function Commands.remove_retouch(catalog, args)
+  local photos = photosByUuid(catalog, args.uuids)
+  local Retouch = require "Retouch"
+  local removed = 0
+  catalog:withWriteAccessDo("LR-FrameFlow automation: remove retouch", function()
+    for _, photo in ipairs(photos) do
+      local groups = (photo:getDevelopSettings() or {}).MaskGroupBasedCorrections or {}
+      local keep = {}
+      for _, g in ipairs(groups) do
+        if tostring(g.CorrectionName or ""):find("^LR%-FrameFlow ") then removed = removed + 1 else keep[#keep + 1] = g end
+      end
+      if #keep ~= #groups then photo:applyDevelopSettings({ MaskGroupBasedCorrections = keep }) end
+    end
+  end, { timeout = 60 })
+  for _, photo in ipairs(photos) do
+    local ok, list = pcall(function() return photo:getDevelopSnapshots() end)
+    for _, s in ipairs(ok and list or {}) do
+      if s.name == Retouch.SNAPSHOT and photo.deleteDevelopSnapshot then
+        pcall(function() photo:deleteDevelopSnapshot(s.snapshotID) end)
+      end
+    end
+  end
+  return Json.object({ removed = removed })
 end
 
 --- Remove a culling collection set made by Commands.cull (test cleanup). Only sets directly

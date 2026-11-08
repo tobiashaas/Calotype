@@ -6,6 +6,10 @@ and it runs on your own machine.
 
 - **Edit profiles:** train a profile from finished edits, apply it to new photos (exposure, white
   balance, tone, presence per photo; a fixed look — curve, HSL, color grading — on top).
+- **Retouch:** adds Lightroom's own AI masks (subject, background, skin, eyes, teeth, sky) with
+  gentle adjustments; masks that find nothing are removed, your own masks stay, the original is
+  kept as a snapshot.
+- **Looks:** eight own looks as Lightroom presets (CC0), usable alone or as a profile's style.
 - **Straighten:** levels photos that have clear reference lines (walls, door frames, horizon) with
   the largest crop, like Lightroom does; photos you cropped yourself keep their crop.
 - **Culling:** sorts a shoot into *Keep / Check / Sort out* with a reason per photo ("best of its

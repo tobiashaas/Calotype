@@ -127,6 +127,7 @@ fn state_with(api: &str, dir: &std::path::Path, automation: bool) -> Arc<AppStat
         token: TOKEN.into(),
         api_base_url: api.into(),
         automation,
+        install_presets: false,
     };
     Arc::new(AppState::new(
         dir.to_path_buf(),

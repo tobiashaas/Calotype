@@ -10,6 +10,7 @@ pub mod config;
 pub mod db;
 pub mod folder;
 pub mod outbox;
+pub mod presets;
 pub mod preview;
 pub mod server;
 pub mod xmp;
@@ -123,6 +124,16 @@ impl Drop for Bridge {
 /// Load config + DB from `data_dir` and start on the configured port.
 pub async fn start(data_dir: PathBuf) -> Result<Bridge> {
     let config = config::load_or_create(&data_dir)?;
+    if config.install_presets {
+        match presets::camera_raw_settings_dir().map(|dir| presets::install(&dir)) {
+            Some(Ok(0)) => {}
+            Some(Ok(n)) => {
+                tracing::info!("installed {n} LR-FrameFlow presets — restart Lightroom to see them")
+            }
+            Some(Err(e)) => tracing::warn!("presets not installed: {e:#}"),
+            None => tracing::warn!("presets not installed: no Camera Raw settings folder"),
+        }
+    }
     let db = Db::open(&data_dir.join(DB_FILE))?;
     let port = config.port;
     start_with(Arc::new(AppState::new(data_dir, config, db)), port).await

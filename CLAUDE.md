@@ -122,6 +122,10 @@ TODO.md                # Completed + open work items — keep up to date
 | `libs/inference-pipeline/src/lr_frameflow_inference_pipeline/straighten.py` | Tilt from the photo's own lines (keystone-aware) + Lightroom crop keys |
 | `libs/culling/src/lr_frameflow_culling/cull.py` | `cull()`: learned from decided photos (≥ 8 per class) else rules; `decision_from_metadata` |
 | `apps/lr-plugin/LRFrameFlow.lrplugin/CullPhotos.lua` | Menu: sort selected photos into collections (stars/flags untouched) |
+| `apps/lr-plugin/LRFrameFlow.lrplugin/Retouch.lua` | AI-mask retouch: find our presets by correction name, snapshot, apply, `updateAISettings`, remove empty masks |
+| `apps/bridge/core/src/presets.rs` | Embeds `presets/` and installs them into Camera Raw's settings folder on start |
+| `tools/presets/build.py` | Generates the looks and retouch presets (CC0) |
+| `tools/lr_e2e/retouch_check.py` | Retouch end-to-end in Lightroom (masks computed, own masks kept, no duplicates, restore) |
 | `tools/lr_e2e/cull_check.py` | Culling end-to-end in a real Lightroom (collections, nothing else touched, cleanup) |
 | `tools/lr_e2e/straighten_check.py` | Straighten end-to-end in a real Lightroom (angle + crop arrive, own crops stay, restore) |
 | `tools/lrff_eval/cull_report.py` | Culling prototype on a preview folder → local HTML contact sheet + timing |

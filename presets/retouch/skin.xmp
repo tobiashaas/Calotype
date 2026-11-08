@@ -1,0 +1,84 @@
+<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="LR-FrameFlow">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    crs:PresetType="Normal"
+    crs:Cluster=""
+    crs:UUID="C1CAAC29DB195315A9C369BE31448E5E"
+    crs:SupportsAmount="False"
+    crs:SupportsColor="True"
+    crs:SupportsMonochrome="True"
+    crs:SupportsHighDynamicRange="True"
+    crs:SupportsNormalDynamicRange="True"
+    crs:SupportsSceneReferred="True"
+    crs:SupportsOutputReferred="True"
+    crs:CameraModelRestriction=""
+    crs:Copyright="CC0 — LR-FrameFlow contributors"
+    crs:ContactInfo=""
+    crs:Version="15.4"
+    crs:ProcessVersion="15.4"
+    crs:HasSettings="True">
+   <crs:Name>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default">Soften skin</rdf:li>
+     <rdf:li xml:lang="de-DE">Haut sanfter</rdf:li>
+    </rdf:Alt>
+   </crs:Name>
+   <crs:ShortName>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default"></rdf:li>
+    </rdf:Alt>
+   </crs:ShortName>
+   <crs:SortName>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default"></rdf:li>
+    </rdf:Alt>
+   </crs:SortName>
+   <crs:Group>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default">LR-FrameFlow Retouch</rdf:li>
+    </rdf:Alt>
+   </crs:Group>
+   <crs:Description>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default">Reduces fine skin texture without making faces look plastic.</rdf:li>
+     <rdf:li xml:lang="de-DE">Mildert feine Hautstruktur, ohne Gesichter künstlich wirken zu lassen.</rdf:li>
+    </rdf:Alt>
+   </crs:Description>
+   <crs:MaskGroupBasedCorrections>
+    <rdf:Seq>
+     <rdf:li>
+      <rdf:Description
+       crs:What="Correction"
+       crs:CorrectionAmount="1"
+       crs:CorrectionActive="true"
+       crs:CorrectionName="LR-FrameFlow skin"
+       crs:CorrectionSyncID="23DBDB057FEF575FB5E7FC3372254C2E"
+       crs:LocalTexture="-0.15"
+       crs:LocalClarity2012="-0.05">
+      <crs:CorrectionMasks>
+       <rdf:Seq>
+        <rdf:li
+         crs:What="Mask/Image"
+         crs:MaskActive="true"
+         crs:MaskName="Face Skin"
+         crs:MaskBlendMode="0"
+         crs:MaskInverted="false"
+         crs:MaskSyncID="2017FCE499A3566B80CA3E6B9DB7896F"
+         crs:MaskValue="1"
+         crs:MaskVersion="1"
+         crs:MaskSubType="3"
+         crs:MaskSubCategoryID="2"
+         crs:ReferencePoint="0.500000 0.500000"
+         crs:ErrorReason="0"/>
+       </rdf:Seq>
+      </crs:CorrectionMasks>
+      </rdf:Description>
+     </rdf:li>
+    </rdf:Seq>
+   </crs:MaskGroupBasedCorrections>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>

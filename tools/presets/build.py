@@ -140,6 +140,112 @@ LOOKS: list[dict] = [
 ]
 
 
+# Retouch: Lightroom's own AI masks with gentle local adjustments. A preset only stores the mask
+# *definition*; Lightroom finds subject / sky / skin … on each photo (photo:updateAISettings).
+# Mask types (Lightroom's format): subtype 1 = subject, 2 = sky, 0 + category 22 = background,
+# 3 + category = part of a person (2 face skin, 3 iris and pupil, 8 eye sclera, 12 teeth).
+# Local values are stored as -1…1 (slider value / 100).
+RETOUCH_GROUP = "LR-FrameFlow Retouch"
+RETOUCH: list[dict] = [
+    {
+        "id": "subject", "name": "Lift subject", "name_de": "Person hervorheben",
+        "about": "Brightens the people a little and opens their shadows, so they stand out from the scene.",
+        "about_de": "Hellt die Personen leicht auf und öffnet ihre Schatten, damit sie sich vom Umfeld abheben.",
+        "masks": [(1, None, "Subject")],
+        "local": {"LocalExposure2012": 0.06, "LocalShadows2012": 0.12, "LocalHighlights2012": -0.05,
+                  "LocalClarity2012": 0.04},
+    },
+    {
+        "id": "background", "name": "Calm background", "name_de": "Hintergrund beruhigen",
+        "about": "Slightly darker, less saturated and softer background.",
+        "about_de": "Hintergrund etwas dunkler, weniger gesättigt und weicher.",
+        "masks": [(0, 22, "Background")],
+        "local": {"LocalExposure2012": -0.08, "LocalSaturation": -0.08, "LocalClarity2012": -0.05},
+    },
+    {
+        "id": "skin", "name": "Soften skin", "name_de": "Haut sanfter",
+        "about": "Reduces fine skin texture without making faces look plastic.",
+        "about_de": "Mildert feine Hautstruktur, ohne Gesichter künstlich wirken zu lassen.",
+        "masks": [(3, 2, "Face Skin")],
+        "local": {"LocalTexture": -0.15, "LocalClarity2012": -0.05},
+    },
+    {
+        "id": "eyes", "name": "Clearer eyes", "name_de": "Augen klarer",
+        "about": "A touch of brightness and clarity in the eyes.",
+        "about_de": "Etwas mehr Helligkeit und Klarheit in den Augen.",
+        "masks": [(3, 8, "Eye Sclera"), (3, 3, "Iris and Pupil")],
+        "local": {"LocalExposure2012": 0.06, "LocalClarity2012": 0.08, "LocalSaturation": 0.03},
+    },
+    {
+        "id": "teeth", "name": "Brighten teeth", "name_de": "Zähne aufhellen",
+        "about": "Slightly brighter, less yellow teeth.",
+        "about_de": "Zähne etwas heller und weniger gelb.",
+        "masks": [(3, 12, "Teeth")],
+        "local": {"LocalExposure2012": 0.06, "LocalSaturation": -0.25},
+    },
+    {
+        "id": "sky", "name": "Deepen sky", "name_de": "Himmel vertiefen",
+        "about": "Holds back bright skies and gives them a little more color.",
+        "about_de": "Hält helle Himmel zurück und gibt ihnen etwas mehr Farbe.",
+        "masks": [(2, None, "Sky")],
+        "local": {"LocalExposure2012": -0.06, "LocalHighlights2012": -0.15, "LocalSaturation": 0.06,
+                  "LocalDehaze": 0.05},
+    },
+]
+
+
+def retouch_xmp(r: dict) -> str:
+    """A preset that adds one AI-mask correction named "LR-FrameFlow <id>"."""
+    uid = lambda key: str(uuid.uuid5(NS, key)).replace("-", "").upper()  # noqa: E731
+    head = {
+        "PresetType": "Normal", "Cluster": "", "UUID": uid("retouch-" + r["id"]),
+        "SupportsAmount": "False", "SupportsColor": "True", "SupportsMonochrome": "True",
+        "SupportsHighDynamicRange": "True", "SupportsNormalDynamicRange": "True",
+        "SupportsSceneReferred": "True", "SupportsOutputReferred": "True", "CameraModelRestriction": "",
+        "Copyright": "CC0 — LR-FrameFlow contributors", "ContactInfo": "",
+        "Version": "15.4", "ProcessVersion": "15.4", "HasSettings": "True",
+    }
+    lines = [
+        '<?xpacket begin="\ufeff" id="W5M0MpCehiHzreSzNTczkc9d"?>',
+        '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="LR-FrameFlow">',
+        ' <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">',
+        '  <rdf:Description rdf:about=""',
+        '    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"',
+    ] + [f'    crs:{k}="{escape(v)}"' for k, v in head.items()]
+    lines[-1] += ">"
+    lines += _alt("Name", r["name"], r["name_de"]) + _alt("ShortName", "") + _alt("SortName", "")
+    lines += _alt("Group", RETOUCH_GROUP) + _alt("Description", r["about"], r["about_de"])
+    local = "".join(f'\n       crs:{k}="{v}"' for k, v in r["local"].items())
+    lines += [
+        "   <crs:MaskGroupBasedCorrections>", "    <rdf:Seq>", "     <rdf:li>", "      <rdf:Description",
+        '       crs:What="Correction"', '       crs:CorrectionAmount="1"', '       crs:CorrectionActive="true"',
+        f'       crs:CorrectionName="LR-FrameFlow {r["id"]}"',
+        f'       crs:CorrectionSyncID="{uid("group-" + r["id"])}"{local}>',
+        "      <crs:CorrectionMasks>", "       <rdf:Seq>",
+    ]
+    for i, (sub, cat, name) in enumerate(r["masks"]):
+        lines += [
+            "        <rdf:li",
+            '         crs:What="Mask/Image"', '         crs:MaskActive="true"', f'         crs:MaskName="{name}"',
+            '         crs:MaskBlendMode="0"', '         crs:MaskInverted="false"',
+            f'         crs:MaskSyncID="{uid(f"mask-{r["id"]}-{i}")}"', '         crs:MaskValue="1"',
+            '         crs:MaskVersion="1"', f'         crs:MaskSubType="{sub}"',
+            *([f'         crs:MaskSubCategoryID="{cat}"'] if cat is not None else []),
+            '         crs:ReferencePoint="0.500000 0.500000"', '         crs:ErrorReason="0"/>',
+        ]
+    lines += ["       </rdf:Seq>", "      </crs:CorrectionMasks>", "      </rdf:Description>", "     </rdf:li>",
+              "    </rdf:Seq>", "   </crs:MaskGroupBasedCorrections>",
+              "  </rdf:Description>", " </rdf:RDF>", "</x:xmpmeta>", '<?xpacket end="w"?>', ""]
+    return "\n".join(lines)
+
+
+def _alt(tag: str, text: str, de: str | None = None) -> list[str]:
+    items = [f'     <rdf:li xml:lang="x-default">{escape(text)}</rdf:li>']
+    if de:   # Lightroom shows the German name when it runs in German
+        items.append(f'     <rdf:li xml:lang="de-DE">{escape(de)}</rdf:li>')
+    return [f"   <crs:{tag}>", "    <rdf:Alt>", *items, "    </rdf:Alt>", f"   </crs:{tag}>"]
+
+
 def slug(name: str) -> str:
     """"Warm & Soft" → "warm-soft", "Film B&W" → "film-bw"."""
     words = "".join(c for c in name.lower().replace("&", "") if c.isalnum() or c == " ").split()
@@ -170,18 +276,12 @@ def preset_xmp(look: dict) -> str:
     lines += [f'    crs:{k}="{escape(v, {chr(34): "&quot;"})}"' for k, v in attrs.items()]
     lines[-1] += ">"
 
-    def alt(tag: str, text: str, de: str | None = None) -> list[str]:
-        items = [f'     <rdf:li xml:lang="x-default">{escape(text)}</rdf:li>']
-        if de:   # Lightroom shows the German name when it runs in German
-            items.append(f'     <rdf:li xml:lang="de-DE">{escape(de)}</rdf:li>')
-        return [f"   <crs:{tag}>", "    <rdf:Alt>", *items, "    </rdf:Alt>", f"   </crs:{tag}>"]
-
     def seq(tag: str, points: list[tuple[int, int]]) -> list[str]:
         return ([f"   <crs:{tag}>", "    <rdf:Seq>"] + [f"     <rdf:li>{x}, {y}</rdf:li>" for x, y in points]
                 + ["    </rdf:Seq>", f"   </crs:{tag}>"])
 
-    lines += alt("Name", look["name"], look.get("name_de")) + alt("ShortName", "") + alt("SortName", "")
-    lines += alt("Group", GROUP) + alt("Description", look["about"], look.get("about_de"))
+    lines += _alt("Name", look["name"], look.get("name_de")) + _alt("ShortName", "") + _alt("SortName", "")
+    lines += _alt("Group", GROUP) + _alt("Description", look["about"], look.get("about_de"))
     lines += seq("ToneCurvePV2012", look["curve"])
     for channel in ("Red", "Green", "Blue"):
         lines += seq(f"ToneCurvePV2012{channel}", [(0, 0), (255, 255)])
@@ -202,6 +302,15 @@ def main() -> int:
                                    "ConvertToGrayscale": bool(look.get("bw"))}})
         print(f"wrote {path.relative_to(ROOT)}")
     (OUT / "looks.json").write_text(json.dumps(index, indent=1), encoding="utf-8")
+    retouch_dir = OUT / "retouch"
+    retouch_dir.mkdir(exist_ok=True)
+    for r in RETOUCH:
+        path = retouch_dir / f"{r['id']}.xmp"
+        path.write_text(retouch_xmp(r), encoding="utf-8")
+        print(f"wrote {path.relative_to(ROOT)}")
+    (retouch_dir / "retouch.json").write_text(json.dumps(
+        [{k: r[k] for k in ("id", "name", "name_de", "about", "about_de", "local")} | {"group": RETOUCH_GROUP}
+         for r in RETOUCH], indent=1, ensure_ascii=False), encoding="utf-8")
     return 0
 
 

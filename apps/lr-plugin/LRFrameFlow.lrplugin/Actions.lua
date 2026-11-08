@@ -9,6 +9,7 @@ local BridgeClient = require "BridgeClient"
 local JobWait = require "JobWait"
 local Log = require "Log"
 local PhotoData = require "PhotoData"
+local Retouch = require "Retouch"
 
 local Actions = {}
 
@@ -103,7 +104,8 @@ local function hasOwnCrop(photo)
   return angle ~= 0 or not full
 end
 
---- Apply `profile` to `photos`. options.straighten: also level photos with clear lines.
+--- Apply `profile` to `photos`. options.straighten: also level photos with clear lines;
+-- options.retouch: ids of Lightroom AI-mask retouches to add (see Retouch.lua).
 function Actions.apply(catalog, photos, profile, progress, options)
   options = options or {}
   -- Only photos of the profile's file type: RAW white balance (Kelvin) and JPEG
@@ -152,7 +154,23 @@ function Actions.apply(catalog, photos, profile, progress, options)
   end
 
   progress:setCaption(LOC "$$$/LRFrameFlow/Apply/Writing=Writing develop settings")
-  local applied, appliedUuids, straightened, keptCrop = 0, {}, 0, 0
+  local retouchIds = options.retouch or {}
+  local presets = #retouchIds > 0 and Retouch.findPresets() or {}
+  local missingPresets = 0
+  for _, id in ipairs(retouchIds) do
+    if not presets[id] then missingPresets = missingPresets + 1 end
+  end
+  local applied, appliedUuids, straightened, keptCrop, masksAdded, edited = 0, {}, 0, 0, 0, {}
+  if #retouchIds > 0 then
+    -- Own transaction: Lightroom applies settings at the end of a transaction, so removing our
+    -- earlier masks in the same one as adding the new would drop the new masks again.
+    catalog:withWriteAccessDo(LOC "$$$/LRFrameFlow/Retouch/Prepare=LR-FrameFlow: prepare retouch", function()
+      for _, r in ipairs(final.results or {}) do
+        local photo = reg.photosByUuid[r.lr_catalog_uuid]
+        if photo then Retouch.prepare(photo) end
+      end
+    end, { timeout = 60 })
+  end
   catalog:withWriteAccessDo(LOC("$$$/LRFrameFlow/Apply/Undo=LR-FrameFlow: ^1", profile.name), function()
     for _, r in ipairs(final.results or {}) do
       local photo = reg.photosByUuid[r.lr_catalog_uuid]
@@ -167,6 +185,8 @@ function Actions.apply(catalog, photos, profile, progress, options)
           end
         end
         photo:applyDevelopSettings(PhotoData.prepareSettings(settings))
+        if #retouchIds > 0 then masksAdded = masksAdded + Retouch.apply(photo, presets, retouchIds) end
+        edited[#edited + 1] = photo
         applied = applied + 1
         appliedUuids[#appliedUuids + 1] = r.lr_catalog_uuid
       end
@@ -175,6 +195,26 @@ function Actions.apply(catalog, photos, profile, progress, options)
   Log.info("edit job %s: applied %d of %d", job.job_id, applied, #reg.uuids)
 
   local notes = {}
+  local masks = { added = masksAdded, found = 0, removed = 0, pending = 0 }
+  if missingPresets > 0 then
+    notes[#notes + 1] = LOC "$$$/LRFrameFlow/Retouch/Missing=Retouch presets not found. Start the Bridge once, then restart Lightroom so it loads them."
+  end
+  if masksAdded > 0 then
+    progress:setCaption(LOC "$$$/LRFrameFlow/Retouch/Detecting=Lightroom detects the masks")
+    local found, removed, pending = Retouch.finish(catalog, edited, progress)
+    if pending == nil then
+      notes[#notes + 1] = LOC "$$$/LRFrameFlow/Retouch/Manual=To finish the masks: Photo > Develop Settings > Update AI Settings."
+    else
+      masks.found, masks.removed, masks.pending = found, removed, #pending
+      notes[#notes + 1] = LOC("$$$/LRFrameFlow/Retouch/Done=Retouch: ^1 masks set, ^2 had nothing to find and were removed.",
+        found, removed)
+      if #pending > 0 then
+        notes[#notes + 1] = LOC("$$$/LRFrameFlow/Retouch/Pending=^1 photos still need Photo > Develop Settings > Update AI Settings.",
+          #pending)
+      end
+    end
+    notes[#notes + 1] = LOC("$$$/LRFrameFlow/Retouch/Snapshot/Hint=The original is kept as the snapshot \"^1\".", Retouch.SNAPSHOT)
+  end
   if applied < #reg.uuids then
     notes[#notes + 1] = LOC("$$$/LRFrameFlow/Apply/NoResult=^1 photos got no result (no usable preview).", #reg.uuids - applied)
   end
@@ -191,7 +231,7 @@ function Actions.apply(catalog, photos, profile, progress, options)
   return result(true, LOC("$$$/LRFrameFlow/Apply/DoneTitle=\"^1\" applied to ^2 photos", profile.name, applied),
     #notes > 0 and table.concat(notes, "\n") or LOC "$$$/LRFrameFlow/Apply/UndoHint=Use Edit > Undo to revert.", "info",
     { job_id = job.job_id, applied = applied, applied_uuids = appliedUuids, skipped_type = wrongType,
-      straightened = straightened, kept_crop = keptCrop })
+      straightened = straightened, kept_crop = keptCrop, masks = masks })
 end
 
 -- ---------------------------------------------------------------------------- culling

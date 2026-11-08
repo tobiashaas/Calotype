@@ -20,9 +20,23 @@ grain, vignette. Exposure, white balance and the tone sliders are left out — t
 photo. So the looks work on any photo, and as the style layer of a trained profile the profile
 sets exposure and white balance per photo while the look adds the style.
 
+## Retouch (Lightroom AI masks)
+
+`retouch/` holds six presets that each add one of Lightroom's own AI masks with gentle local
+adjustments: *Lift subject, Calm background, Soften skin, Clearer eyes, Brighten teeth, Deepen
+sky* (German: *Person hervorheben, Hintergrund beruhigen, Haut sanfter, Augen klarer, Zähne
+aufhellen, Himmel vertiefen*). They store only the mask *definition*; Lightroom finds the subject,
+sky … on each photo. The plugin applies them together with a profile (apply dialog), lets
+Lightroom detect the masks (`photo:updateAISettings`, Lightroom 13.3+), removes masks that found
+nothing, keeps the photographer's own masks and saves the original as the snapshot
+*LR-FrameFlow: before*. The approach (mask presets + `updateAISettings`) follows
+[Retoucan](https://github.com/joemalott/retoucan) (MIT) — thanks!
+
 ## Use
 
-- **Lightroom Classic / Camera Raw:** Develop → Presets → `+` → *Import Presets…* and pick the
+- **Automatic:** the Bridge installs all presets on start (`install_presets` in `bridge.json`,
+  on by default); restart Lightroom once afterwards.
+- **Lightroom Classic / Camera Raw by hand:** Develop → Presets → `+` → *Import Presets…* and pick the
   `.xmp` files (or copy them to `%APPDATA%\Adobe\CameraRaw\Settings` on Windows,
   `~/Library/Application Support/Adobe/CameraRaw/Settings` on macOS, then restart Lightroom).
   They appear in the group *LR-FrameFlow*, with German names when Lightroom runs in German.

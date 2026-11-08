@@ -22,6 +22,9 @@ pub struct BridgeConfig {
     /// set to true by hand; missing in older files means off.
     #[serde(default)]
     pub automation: bool,
+    /// Install the project's looks and retouch presets for Lightroom / Camera Raw on start.
+    #[serde(default = "default_true")]
+    pub install_presets: bool,
 }
 
 impl BridgeConfig {
@@ -31,6 +34,7 @@ impl BridgeConfig {
             token: new_token(),
             api_base_url: DEFAULT_API_BASE_URL.to_string(),
             automation: false,
+            install_presets: true,
         }
     }
 }
@@ -75,6 +79,10 @@ pub fn save(data_dir: &Path, config: &BridgeConfig) -> Result<()> {
     fs::write(&tmp, serde_json::to_string_pretty(config)?)?;
     fs::rename(&tmp, &path).with_context(|| format!("cannot write {}", path.display()))?;
     Ok(())
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[cfg(test)]

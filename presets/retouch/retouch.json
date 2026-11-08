@@ -1,0 +1,80 @@
+[
+ {
+  "id": "subject",
+  "name": "Lift subject",
+  "name_de": "Person hervorheben",
+  "about": "Brightens the people a little and opens their shadows, so they stand out from the scene.",
+  "about_de": "Hellt die Personen leicht auf und öffnet ihre Schatten, damit sie sich vom Umfeld abheben.",
+  "local": {
+   "LocalExposure2012": 0.06,
+   "LocalShadows2012": 0.12,
+   "LocalHighlights2012": -0.05,
+   "LocalClarity2012": 0.04
+  },
+  "group": "LR-FrameFlow Retouch"
+ },
+ {
+  "id": "background",
+  "name": "Calm background",
+  "name_de": "Hintergrund beruhigen",
+  "about": "Slightly darker, less saturated and softer background.",
+  "about_de": "Hintergrund etwas dunkler, weniger gesättigt und weicher.",
+  "local": {
+   "LocalExposure2012": -0.08,
+   "LocalSaturation": -0.08,
+   "LocalClarity2012": -0.05
+  },
+  "group": "LR-FrameFlow Retouch"
+ },
+ {
+  "id": "skin",
+  "name": "Soften skin",
+  "name_de": "Haut sanfter",
+  "about": "Reduces fine skin texture without making faces look plastic.",
+  "about_de": "Mildert feine Hautstruktur, ohne Gesichter künstlich wirken zu lassen.",
+  "local": {
+   "LocalTexture": -0.15,
+   "LocalClarity2012": -0.05
+  },
+  "group": "LR-FrameFlow Retouch"
+ },
+ {
+  "id": "eyes",
+  "name": "Clearer eyes",
+  "name_de": "Augen klarer",
+  "about": "A touch of brightness and clarity in the eyes.",
+  "about_de": "Etwas mehr Helligkeit und Klarheit in den Augen.",
+  "local": {
+   "LocalExposure2012": 0.06,
+   "LocalClarity2012": 0.08,
+   "LocalSaturation": 0.03
+  },
+  "group": "LR-FrameFlow Retouch"
+ },
+ {
+  "id": "teeth",
+  "name": "Brighten teeth",
+  "name_de": "Zähne aufhellen",
+  "about": "Slightly brighter, less yellow teeth.",
+  "about_de": "Zähne etwas heller und weniger gelb.",
+  "local": {
+   "LocalExposure2012": 0.06,
+   "LocalSaturation": -0.25
+  },
+  "group": "LR-FrameFlow Retouch"
+ },
+ {
+  "id": "sky",
+  "name": "Deepen sky",
+  "name_de": "Himmel vertiefen",
+  "about": "Holds back bright skies and gives them a little more color.",
+  "about_de": "Hält helle Himmel zurück und gibt ihnen etwas mehr Farbe.",
+  "local": {
+   "LocalExposure2012": -0.06,
+   "LocalHighlights2012": -0.15,
+   "LocalSaturation": 0.06,
+   "LocalDehaze": 0.05
+  },
+  "group": "LR-FrameFlow Retouch"
+ }
+]

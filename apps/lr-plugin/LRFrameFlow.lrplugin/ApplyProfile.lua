@@ -12,6 +12,7 @@ local LrPrefs = import "LrPrefs"
 local LrView = import "LrView"
 
 local Actions = require "Actions"
+local Retouch = require "Retouch"
 
 local function askForProfile(context, items, count)
   local f = LrView.osFactory()
@@ -19,6 +20,11 @@ local function askForProfile(context, items, count)
   props.profileId = items[1].value
   local prefs = LrPrefs.prefsForPlugin()
   props.straighten = prefs.straighten == true
+  for _, item in ipairs(Retouch.ITEMS) do props["retouch_" .. item.id] = prefs["retouch_" .. item.id] == true end
+  local checks = {}
+  for _, item in ipairs(Retouch.ITEMS) do
+    checks[#checks + 1] = f:checkbox { value = LrView.bind("retouch_" .. item.id), title = item.title }
+  end
   local answer = LrDialogs.presentModalDialog {
     title = LOC "$$$/LRFrameFlow/Apply/Title=LR-FrameFlow: Apply profile",
     contents = f:column {
@@ -30,13 +36,26 @@ local function askForProfile(context, items, count)
         value = LrView.bind "straighten",
         title = LOC "$$$/LRFrameFlow/Apply/Straighten=Straighten photos with clear lines (your own crops stay)",
       },
+      f:group_box {
+        title = LOC "$$$/LRFrameFlow/Retouch/Box=Retouch with Lightroom AI masks",
+        fill_horizontal = 1,
+        f:row { checks[1], checks[2], checks[3] },
+        f:row { checks[4], checks[5], checks[6] },
+      },
     },
     actionVerb = LOC "$$$/LRFrameFlow/Apply/Action=Apply",
   }
   if answer ~= "ok" then return nil end
   prefs.straighten = props.straighten
+  local retouch = {}
+  for _, item in ipairs(Retouch.ITEMS) do
+    prefs["retouch_" .. item.id] = props["retouch_" .. item.id]
+    if props["retouch_" .. item.id] then retouch[#retouch + 1] = item.id end
+  end
   for _, item in ipairs(items) do
-    if item.value == props.profileId then return item.profile, { straighten = props.straighten } end
+    if item.value == props.profileId then
+      return item.profile, { straighten = props.straighten, retouch = retouch }
+    end
   end
   return nil
 end

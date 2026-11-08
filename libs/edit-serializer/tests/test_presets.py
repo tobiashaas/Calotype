@@ -42,9 +42,26 @@ def test_every_preset_is_a_valid_look_without_photo_dependent_values():
         assert xs == sorted(xs) and xs[0] == 0 and xs[-1] == 255, path.name
 
 
+def _all_files():
+    return [*_presets(), PRESETS / "looks.json", *sorted((PRESETS / "retouch").iterdir())]
+
+
+def test_retouch_presets_carry_one_named_ai_mask_correction_each():
+    retouch = sorted((PRESETS / "retouch").glob("*.xmp"))
+    assert len(retouch) >= 6
+    for path in retouch:
+        desc = ET.parse(path).getroot().find(f"{RDF}RDF/{RDF}Description")
+        groups = list(desc.find(f"{CRS}MaskGroupBasedCorrections").iter(f"{RDF}Description"))
+        assert len(groups) == 1, path.name
+        assert groups[0].get(f"{CRS}CorrectionName") == f"LR-FrameFlow {path.stem}"
+        masks = list(groups[0].find(f"{CRS}CorrectionMasks").iter(f"{RDF}li"))
+        assert masks and all(m.get(f"{CRS}What") == "Mask/Image" for m in masks), path.name
+        assert all(-1 <= float(v) <= 1 for k, v in groups[0].attrib.items() if k.startswith(f"{CRS}Local"))
+
+
 def test_presets_are_in_sync_with_the_build_script(tmp_path):
-    before = {p.name: p.read_text(encoding="utf-8") for p in [*_presets(), PRESETS / "looks.json"]}
+    before = {p.name: p.read_text(encoding="utf-8") for p in _all_files()}
     subprocess.run([sys.executable, str(ROOT / "tools/presets/build.py")], check=True, capture_output=True)
-    after = {p.name: p.read_text(encoding="utf-8") for p in [*_presets(), PRESETS / "looks.json"]}
+    after = {p.name: p.read_text(encoding="utf-8") for p in _all_files()}
     assert after == before, "run tools/presets/build.py and commit the result"
     assert len(json.loads(before["looks.json"])) == len(_presets())

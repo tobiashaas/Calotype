@@ -361,7 +361,7 @@ end
 test("every UI text has a German translation with the same placeholders", function()
   local english = {}
   for _, file in ipairs({ "Info.lua", "BridgeClient.lua", "JobWait.lua", "Actions.lua", "TrainProfile.lua",
-                          "ApplyProfile.lua", "BridgeStatus.lua", "AutomationCommands.lua", "CullPhotos.lua" }) do
+                          "ApplyProfile.lua", "BridgeStatus.lua", "AutomationCommands.lua", "CullPhotos.lua", "Retouch.lua" }) do
     local src = readFile(PLUGIN .. file)
     for key, value in src:gmatch('"(%$%$%$/LRFrameFlow/[%w/]+)=(.-[^\\])"') do english[key] = value end
   end
@@ -529,6 +529,53 @@ test("cull: decisions become collections, nothing else is touched", function()
   eq(photos[1].applied, nil, "develop settings untouched")
 end)
 
+test("retouch: masks added, empty ones removed, snapshot kept, re-apply replaces", function()
+  local Retouch = require "Retouch"
+  local function preset(id)
+    return { getSetting = function() return { MaskGroupBasedCorrections = {
+      { CorrectionName = "LR-FrameFlow " .. id, CorrectionMasks = { { What = "Mask/Image" } } } } } end }
+  end
+  sdk.LrApplication.developPresetFolders = function()
+    return { { getDevelopPresets = function() return { preset("subject"), preset("sky"), { getSetting = function() return {} end } } end } }
+  end
+  local own = { CorrectionName = "My dodge", CorrectionMasks = { { MaskDigest = "ABC" } } }
+  local settings = { MaskGroupBasedCorrections = { own } }
+  local snapshots = {}
+  local photo = {
+    getDevelopSettings = function() return settings end,
+    applyDevelopSettings = function(_, s) for k, v in pairs(s) do settings[k] = v end end,
+    applyDevelopPreset = function(_, p)
+      local g = p:getSetting().MaskGroupBasedCorrections[1]
+      local copy = { CorrectionName = g.CorrectionName, CorrectionMasks = { { What = "Mask/Image" } } }
+      table.insert(settings.MaskGroupBasedCorrections, copy)
+    end,
+    updateAISettings = function()
+      for _, g in ipairs(settings.MaskGroupBasedCorrections) do
+        for _, m in ipairs(g.CorrectionMasks) do
+          if g.CorrectionName == "LR-FrameFlow sky" then m.ErrorReason = 1 elseif not m.MaskDigest then m.MaskDigest = "D" end
+        end
+      end
+    end,
+    getDevelopSnapshots = function() return snapshots end,
+    createDevelopSnapshot = function(_, name) snapshots[#snapshots + 1] = { name = name, snapshotID = "s1" } end,
+  }
+  local catalog = { withWriteAccessDo = function(_, _, fn) fn() end }
+  local presets = Retouch.findPresets()
+  assert(presets.subject and presets.sky and not presets.skin, "presets found by correction name")
+  for run = 1, 2 do
+    Retouch.prepare(photo)
+    eq(Retouch.apply(photo, presets, { "subject", "sky", "skin" }), 2, "two of three presets installed")
+    local found, removed, pending = Retouch.finish(catalog, { photo })
+    eq(found, 1, "subject found (run " .. run .. ")")
+    eq(removed, 1, "empty sky removed (run " .. run .. ")")
+    eq(#pending, 0, "nothing pending")
+  end
+  local names = {}
+  for _, g in ipairs(settings.MaskGroupBasedCorrections) do names[#names + 1] = g.CorrectionName end
+  eq(table.concat(names, ","), "My dodge,LR-FrameFlow subject", "own mask kept, ours not duplicated")
+  eq(#snapshots, 1, "one snapshot of the original")
+end)
+
 -- ------------------------------------------------------------ syntax of UI scripts
 
 test("automation init runs in a Lightroom-like plugin environment", function()
@@ -554,7 +601,7 @@ end)
 
 test("menu scripts compile", function()
   for _, file in ipairs({ "Info.lua", "TrainProfile.lua", "ApplyProfile.lua", "BridgeStatus.lua", "CullPhotos.lua",
-                          "Actions.lua", "Automation.lua", "AutomationCommands.lua" }) do
+                          "Actions.lua", "Automation.lua", "AutomationCommands.lua", "Retouch.lua" }) do
     assert(loadfile(PLUGIN .. file))
   end
   local info = assert(loadfile(PLUGIN .. "Info.lua"))()

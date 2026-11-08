@@ -28,6 +28,8 @@ pub const COMMANDS: &[&str] = &[
     "straighten_probe",
     "cull",
     "remove_cull_set",
+    "retouch_state",
+    "remove_retouch",
 ];
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
