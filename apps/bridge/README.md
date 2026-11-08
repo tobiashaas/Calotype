@@ -10,7 +10,7 @@ Plugin ──HTTP 127.0.0.1:47600──▶ Bridge ──SQLite outbox──▶ S
 
 | Folder | Contents |
 |---|---|
-| `core/` | `calotype-bridge-core`: local API (axum), outbox (SQLite), preview from the original file, API client. Testable without Tauri, also runs headless. |
+| `core/` | `calotype-bridge-core`: local API (axum), outbox (SQLite), preview from the original file, API client, XMP sidecars, preset installer, `calotype-folder`, automation channel. Testable without Tauri, also runs headless. |
 | `src-tauri/` | Desktop app: starts the core, status window, commands `bridge_status` / `set_api_base_url` / `retry_now`. |
 | `ui/` | Status window (static HTML/JS, no bundler). |
 
@@ -30,7 +30,17 @@ Contract of the local API: [`packages/contracts/openapi/plugin-bridge-api.yaml`]
   covers 1200 px (otherwise the largest); for JPEG/TIFF/PNG, the file itself. Longest side
   ≤ 1200 px, orientation from the RAW container or EXIF applied. If a RAW contains only a
   full-size JPEG (e.g. Canon CR2), it is decoded directly at reduced size (DCT scaling).
-  Measured: Canon CR3 ~200 ms, Canon CR2 ~300 ms per photo (local SSD).
+  When the RAW holds a mid-size preview, only its first 4 MB are read (CR3 from USB 650 → 237 ms
+  per photo, ~85 % less data over a NAS). Measured: Canon CR3 ~200 ms, Canon CR2 ~300 ms per photo
+  (local SSD); 8 photos are prepared in parallel.
+- **Jobs:** train, edit (optionally with straighten) and cull jobs go to the server; results are
+  mapped back to catalog UUIDs. A file that stays unreachable after 5 attempts is skipped instead
+  of blocking the job.
+- **Presets:** on start the Bridge installs the project's looks and retouch presets into Camera
+  Raw's settings folder (`…\Adobe\CameraRaw\Settings\Calotype`); `"install_presets": false` in
+  `bridge.json` turns this off. Files it once installed under the old names are removed.
+- **Automation channel** (`"automation": true` in `bridge.json`, off by default): lets
+  `tools/lr_e2e/` run whitelisted plugin commands in a running Lightroom.
 
 ## Folder mode (without Lightroom)
 
@@ -47,12 +57,21 @@ calotype-folder train  <folder> --name "Business + Look" --style my-preset.xmp
 # Train/test split and output to another folder (source stays untouched)
 calotype-folder train  <folder> --name X --files-from train.txt
 calotype-folder apply  <folder> --profile X --files-from test.txt --out <output>
+
+# Edits exported from a catalog into another folder; straighten while applying
+calotype-folder train  <folder> --name X --sidecars <xmp-folder>
+calotype-folder apply  <folder> --profile X --straighten
+
+# Culling: color label green / yellow / red + calotype:Cull / calotype:CullReason in the sidecar
+calotype-folder cull   <folder> [--out <output>]
 ```
 
 - Training uses only RAWs whose XMP contains develop settings (`crs:Exposure2012` …).
 - `apply` skips photos that are already edited (your XMPs); `--force` updates only the
   `crs:` values in them and leaves stars, keywords etc. in place. New XMPs carry
-  `crs:ProcessVersion="15.4"` and `calotype:Profile="…"`.
+  `crs:ProcessVersion="15.4"` and `calotype:Profile="…"`; `lrff:` / `tarsier:` attributes from
+  before the rename are upgraded.
+- `cull` leaves stars and edits alone; sidecars that already carry stars or labels teach the scorer.
 - Then import the folder into Lightroom — the photos are edited right away. For photos that
   are already in the catalog, the plugin is the right way.
 - Photo IDs outside a catalog: `file-` + SHA-256 over size, first and last MiB
@@ -84,5 +103,4 @@ Windows needs the MSVC Build Tools and WebView2 (preinstalled on Windows 11).
 - Closing the window quits the Bridge (tray mode will follow).
 - Photos that are already uploaded are not updated when registered again —
   the server API is idempotent per `lr_catalog_uuid` and does not take over new develop settings.
-- Previews are built one after another (4 per pass) — parallelize for large shoots.
 - Folder mode writes RAW sidecars only; JPEG/TIFF carry XMP inside the file itself.

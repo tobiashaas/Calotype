@@ -7,12 +7,15 @@
 | `LR_FF_POSTGRES_USER` | `calotype` | DB user |
 | `LR_FF_POSTGRES_PASSWORD` | `calotype` | DB password (**fine in dev, rotate in prod**) |
 | `LR_FF_REDIS_PORT` | `6379` | Host port Redis (job queue) |
-| `LR_FF_MINIO_PORT` | `9000` | S3-compatible API port |
-| `LR_FF_MINIO_CONSOLE_PORT` | `9001` | MinIO web UI |
+| `LR_FF_MINIO_PORT` | `9000` | S3-compatible API port (RustFS) |
+| `LR_FF_MINIO_CONSOLE_PORT` | `9001` | RustFS web console |
 | `LR_FF_MINIO_USER` | `minio` | Root user |
 | `LR_FF_MINIO_PASSWORD` | `miniosecret_changeme` | Root password |
 
-API/worker (later, not all included in Compose):
+The `LR_FF_*` names predate the rename and the switch from MinIO to RustFS; they stay so existing
+`.env` files keep working.
+
+API and workers (run outside Compose):
 
 | Variable | Example | Description |
 |----------|----------|--------------|
@@ -26,5 +29,5 @@ API/worker (later, not all included in Compose):
 Start:
 
 ```bash
-docker compose up -d
+docker compose -p calotype up -d
 ```
