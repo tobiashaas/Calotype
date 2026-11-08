@@ -14,6 +14,7 @@ code: `libs/culling/src/lr_frameflow_culling/models.py`.
 |---|---|---|---|---|
 | YuNet (`face_detection_yunet_2023mar.onnx`) | Face detection, also small and distant faces | MIT / MIT | [opencv_zoo](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) | `8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4` |
 | MediaPipe Face Landmarker (`face_landmarker.task`, float16 v1) | Face landmarks + blendshapes (eyes closed, smile, mouth open) | Apache-2.0 / Apache-2.0 | [Google AI Edge](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker) | `64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff` |
+| SFace (`face_recognition_sface_2021dec.onnx`) | Face embedding: which photos show the same person (culling per person, stays local) | Apache-2.0 / Apache-2.0 (training data: public research face datasets, see the [SFace paper](https://arxiv.org/abs/2205.12010)) | [opencv_zoo](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface) | `0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79` |
 
 Libraries with built-in models: OpenCV (Apache-2.0), MediaPipe (Apache-2.0).
 

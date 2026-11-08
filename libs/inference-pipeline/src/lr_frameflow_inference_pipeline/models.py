@@ -42,6 +42,15 @@ MODELS: dict[str, ModelFile] = {
         license="Apache-2.0",
         source="https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker",
     ),
+    "sface": ModelFile(
+        name="sface",
+        filename="face_recognition_sface_2021dec.onnx",
+        url="https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/"
+        "face_recognition_sface_2021dec.onnx",
+        sha256="0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
+        license="Apache-2.0",
+        source="https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface",
+    ),
 }
 
 
