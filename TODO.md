@@ -122,7 +122,7 @@ See `docs/adr/005-culling-architecture.md`.
 - [x] Server under load: long jobs were re-run by the reaper and returned results 2–3×; progress heartbeat, one reaper per job kind, upserted edit results (migration 010)
 - [x] Culling measured against the photographer's real choice (exports in the catalog), leave-one-group-out (`tools/lrff_eval/cull_groups.py`)
 - [x] Group photos by person (SFace, Apache-2.0); ranking within each person gave no gain on kindergarten shoots
-- [ ] Subject mask ("person pops") in the style layer: write the mask definition (Lightroom computes the mask itself — `.acr` sidecars); test via plugin and XMP together with the user
+- [ ] Subject mask ("person pops") in the style layer: write only the mask definition, Lightroom computes the mask itself (`.acr` sidecars; another tool writes the same `MaskDigest` into every photo, so the digest is not checked). Found 2026-11-08: `photo:applyDevelopSettings` with `MaskGroupBasedCorrections` never returns (plugin task hangs, nothing written) → test (a) XMP sidecar + "Read metadata from file" and (b) a plugin develop preset with the mask, together with the user
 - [ ] Straighten: let the user judge the contact sheets; learn from the user's own corrections once there are some
 - [ ] Culling within a person's photos: better moment/expression cues (see embedding result in the culling notes)
 
