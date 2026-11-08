@@ -1,0 +1,95 @@
+<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="LR-FrameFlow">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    crs:PresetType="Normal"
+    crs:Cluster=""
+    crs:UUID="27C7A152D0EB5E78A0EF099BDCB48DDB"
+    crs:SupportsAmount="False"
+    crs:SupportsColor="False"
+    crs:SupportsMonochrome="True"
+    crs:SupportsHighDynamicRange="True"
+    crs:SupportsNormalDynamicRange="True"
+    crs:SupportsSceneReferred="True"
+    crs:SupportsOutputReferred="True"
+    crs:CameraModelRestriction=""
+    crs:Copyright="CC0 — LR-FrameFlow contributors"
+    crs:ContactInfo=""
+    crs:Version="15.4"
+    crs:ProcessVersion="15.4"
+    crs:HasSettings="True"
+    crs:ToneCurveName2012="Custom"
+    crs:Clarity2012="12"
+    crs:Texture="4"
+    crs:GrayMixerRed="10"
+    crs:GrayMixerOrange="15"
+    crs:GrayMixerYellow="5"
+    crs:GrayMixerGreen="-10"
+    crs:GrayMixerAqua="-10"
+    crs:GrayMixerBlue="-15"
+    crs:GrayMixerPurple="0"
+    crs:GrayMixerMagenta="5"
+    crs:GrainAmount="25"
+    crs:GrainSize="25"
+    crs:GrainFrequency="55"
+    crs:PostCropVignetteAmount="-15"
+    crs:ConvertToGrayscale="True">
+   <crs:Name>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default">Film B&amp;W</rdf:li>
+     <rdf:li xml:lang="de-DE">Film S/W</rdf:li>
+    </rdf:Alt>
+   </crs:Name>
+   <crs:ShortName>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default"></rdf:li>
+    </rdf:Alt>
+   </crs:ShortName>
+   <crs:SortName>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default"></rdf:li>
+    </rdf:Alt>
+   </crs:SortName>
+   <crs:Group>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default">LR-FrameFlow</rdf:li>
+    </rdf:Alt>
+   </crs:Group>
+   <crs:Description>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default">Punchy black and white with deep blacks, glowing skin and grain.</rdf:li>
+     <rdf:li xml:lang="de-DE">Kräftiges Schwarz-Weiß mit tiefen Schwarztönen, leuchtender Haut und Korn.</rdf:li>
+    </rdf:Alt>
+   </crs:Description>
+   <crs:ToneCurvePV2012>
+    <rdf:Seq>
+     <rdf:li>0, 10</rdf:li>
+     <rdf:li>50, 40</rdf:li>
+     <rdf:li>128, 130</rdf:li>
+     <rdf:li>200, 215</rdf:li>
+     <rdf:li>255, 250</rdf:li>
+    </rdf:Seq>
+   </crs:ToneCurvePV2012>
+   <crs:ToneCurvePV2012Red>
+    <rdf:Seq>
+     <rdf:li>0, 0</rdf:li>
+     <rdf:li>255, 255</rdf:li>
+    </rdf:Seq>
+   </crs:ToneCurvePV2012Red>
+   <crs:ToneCurvePV2012Green>
+    <rdf:Seq>
+     <rdf:li>0, 0</rdf:li>
+     <rdf:li>255, 255</rdf:li>
+    </rdf:Seq>
+   </crs:ToneCurvePV2012Green>
+   <crs:ToneCurvePV2012Blue>
+    <rdf:Seq>
+     <rdf:li>0, 0</rdf:li>
+     <rdf:li>255, 255</rdf:li>
+    </rdf:Seq>
+   </crs:ToneCurvePV2012Blue>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>

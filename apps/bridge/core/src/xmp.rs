@@ -502,6 +502,22 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn project_looks_read_as_style_presets() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../presets");
+        let mut n = 0;
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|e| e == "xmp") {
+                let s = read_develop_settings(&std::fs::read_to_string(&path).unwrap());
+                assert!(s.contains_key("ToneCurvePV2012"), "{}", path.display());
+                assert!(!s.contains_key("Exposure2012"), "{}", path.display());
+                n += 1;
+            }
+        }
+        assert!(n >= 8);
+    }
+
+    #[test]
     fn cull_decision_sets_label_and_keeps_the_rest() {
         let existing = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about=""
