@@ -44,16 +44,47 @@ pub enum PreviewError {
 
 const DIRECT_EXTENSIONS: &[&str] = &["jpg", "jpeg", "tif", "tiff", "png"];
 
-pub fn build_preview(path: &Path) -> Result<Vec<u8>, PreviewError> {
-    let bytes = std::fs::read(path).map_err(|source| PreviewError::Read {
+/// RAW files are read in two steps: first only this many bytes from the start. Many RAWs (e.g.
+/// Canon CR3) keep a mid-size JPEG preview there; a RAW is 25–60 MB, so over a NAS or a USB
+/// drive this is 10–20x less to read. Without a usable preview in the head the whole file is read.
+const RAW_HEAD_BYTES: u64 = 4 << 20;
+
+fn read_error(path: &Path, source: std::io::Error) -> PreviewError {
+    PreviewError::Read {
         path: path.display().to_string(),
         source,
-    })?;
+    }
+}
+
+fn read_head(path: &Path, n: u64) -> Result<Vec<u8>, PreviewError> {
+    use std::io::Read;
+    let file = std::fs::File::open(path).map_err(|e| read_error(path, e))?;
+    let mut head = Vec::with_capacity(n as usize);
+    file.take(n)
+        .read_to_end(&mut head)
+        .map_err(|e| read_error(path, e))?;
+    Ok(head)
+}
+
+pub fn build_preview(path: &Path) -> Result<Vec<u8>, PreviewError> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_ascii_lowercase())
         .unwrap_or_default();
+    if !DIRECT_EXTENSIONS.contains(&ext.as_str()) {
+        let head = read_head(path, RAW_HEAD_BYTES)?;
+        // Only a preview that is complete in the head and would also be the choice from the
+        // whole file (a mid-size one, not a cut-off full-size JPEG) is used from the head.
+        if let Ok((mut img, jpeg_orientation)) = mid_size_embedded_jpeg(&head) {
+            let orientation = raw_container_orientation(&head)
+                .filter(|o| *o != Orientation::NoTransforms)
+                .unwrap_or(jpeg_orientation);
+            img.apply_orientation(orientation);
+            return encode(downscale(img));
+        }
+    }
+    let bytes = std::fs::read(path).map_err(|e| read_error(path, e))?;
 
     let (mut img, orientation) = if DIRECT_EXTENSIONS.contains(&ext.as_str()) {
         decode_oriented(&bytes, None)?
@@ -149,6 +180,24 @@ fn tiff_orientation(t: &[u8]) -> Option<u8> {
 /// Decode the best embedded JPEG (plus its own EXIF orientation): the smallest one that
 /// still covers [`MAX_EDGE`], else the largest. RAWs often embed a full-size JPEG
 /// (24+ MP) next to a ~1.6k preview; decoding the full one would cost seconds per photo.
+/// The embedded preview `best_embedded_jpeg` would pick, but only when it is mid-size (covers
+/// MAX_EDGE, below the full-size range) and decodes completely from `bytes`.
+fn mid_size_embedded_jpeg(bytes: &[u8]) -> Result<(DynamicImage, Orientation), PreviewError> {
+    let mut candidates: Vec<(u64, u32, usize)> = Vec::new();
+    for offset in jpeg_start_offsets(bytes).take(MAX_CANDIDATES) {
+        let reader = ImageReader::with_format(Cursor::new(&bytes[offset..]), ImageFormat::Jpeg);
+        if let Ok((w, h)) = reader.into_dimensions() {
+            candidates.push((u64::from(w) * u64::from(h), w.max(h), offset));
+        }
+    }
+    let best = candidates
+        .iter()
+        .filter(|c| c.1 >= MAX_EDGE && c.1 < 2 * MAX_EDGE)
+        .min_by_key(|c| c.0)
+        .ok_or(PreviewError::NoEmbeddedJpeg)?;
+    decode_oriented(&bytes[best.2..], Some(ImageFormat::Jpeg))
+}
+
 pub fn best_embedded_jpeg(bytes: &[u8]) -> Result<(DynamicImage, Orientation), PreviewError> {
     // (pixels, longest edge, offset)
     let mut candidates: Vec<(u64, u32, usize)> = Vec::new();
