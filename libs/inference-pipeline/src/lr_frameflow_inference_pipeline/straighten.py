@@ -11,11 +11,13 @@ angles match closely (median difference 0.35–0.57°); the camera's roll sensor
 all. The photographer's own corrections mostly reset portrait tilts to 0, which is the default
 here.
 
-`Tilt.crop_angle` is Lightroom's `CropAngle` in degrees (0 = leave as is).
+`Tilt.crop_angle` is Lightroom's `CropAngle` in degrees (0 = leave as is); `crop_settings` turns
+it into the full set of Lightroom crop keys.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import cv2
@@ -113,3 +115,31 @@ def tilt_from_segments(segments: np.ndarray, width: int, height: int) -> Tilt:
 def estimate_tilt(image: Image.Image) -> Tilt:
     gray = _gray(image)
     return tilt_from_segments(_segments(gray), gray.shape[1], gray.shape[0])
+
+
+def crop_settings(crop_angle: float, sensor_width: int, sensor_height: int) -> dict[str, float | bool]:
+    """Lightroom crop keys for a straighten angle: the largest crop with the photo's aspect ratio
+    inside the rotated photo — what Lightroom's Develop module sets itself.
+
+    Lightroom stores the top-left and bottom-right corners of the rotated crop rectangle,
+    normalized to the unrotated *sensor* image (not the displayed orientation; the angle keeps
+    its sign either way). Checked against Lightroom (3° on 6000×4000: left 0.052637, top 0) and
+    against 1,335 straightened photos of another tool that match exactly.
+    """
+    if not crop_angle:
+        return {"CropAngle": 0.0, "CropLeft": 0.0, "CropTop": 0.0, "CropRight": 1.0, "CropBottom": 1.0}
+    w, h = float(sensor_width), float(sensor_height)
+    t = math.radians(crop_angle)
+    c, s = math.cos(t), math.sin(t)
+    k = min(w / (w * c + h * abs(s)), h / (w * abs(s) + h * c))
+    half_w, half_h = k * w / 2, k * h / 2
+    x = -half_w * c + half_h * s        # top-left corner, relative to the centre
+    y = -half_w * s - half_h * c
+    return {
+        "CropAngle": round(crop_angle, 2),
+        "CropLeft": round(0.5 + x / w, 6),
+        "CropTop": round(0.5 + y / h, 6),
+        "CropRight": round(0.5 - x / w, 6),
+        "CropBottom": round(0.5 - y / h, 6),
+        "HasCrop": True,
+    }

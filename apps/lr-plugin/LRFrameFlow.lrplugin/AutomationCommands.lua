@@ -5,6 +5,8 @@ A fixed set of commands — nothing from a command is ever executed as code. `ap
 command's args and returns a JSON-serializable table. Call only from an async task. ]]
 
 local LrApplication = import "LrApplication"
+local LrApplicationView = import "LrApplicationView"
+local LrDevelopController = import "LrDevelopController"
 local LrProgressScope = import "LrProgressScope"
 local LrTasks = import "LrTasks"
 
@@ -109,6 +111,48 @@ function Commands.select(catalog, args)
   local photos = photosByUuid(catalog, args.uuids)
   if #photos > 0 then catalog:setSelectedPhotos(photos[1], photos) end
   return Json.object({ selected = #photos })
+end
+
+-- Lightroom's own crop for a straighten angle: Develop computes the largest crop that keeps the
+-- aspect ratio inside the rotated photo. Read it, then put the photo back as it was. Used to
+-- check our crop formula against Lightroom (tools/lr_e2e).
+local CROP_KEYS = { "CropAngle", "CropLeft", "CropTop", "CropRight", "CropBottom", "HasCrop",
+  "CropConstrainToWarp", "orientation" }
+
+function Commands.straighten_probe(catalog, args)
+  local photo = catalog:findPhotoByUuid(args.uuid)
+  if not photo then error("no photo " .. tostring(args.uuid)) end
+  local before = photo:getDevelopSettings()
+  catalog:setSelectedPhotos(photo, { photo })
+  LrApplicationView.switchToModule("develop")
+  LrTasks.sleep(1.5)
+  local out = Json.object({ results = {} })
+  LrDevelopController.selectTool("crop")
+  LrTasks.sleep(0.8)
+  for _, angle in ipairs(args.angles or { args.angle or 0 }) do
+    LrDevelopController.setValue("straightenAngle", angle)
+    LrTasks.sleep(1.0)
+    local s = photo:getDevelopSettings()
+    local r = Json.object({ angle = angle, controller = LrDevelopController.getValue("straightenAngle") })
+    for _, k in ipairs(CROP_KEYS) do r[k] = s[k] end
+    out.results[#out.results + 1] = r
+  end
+  LrDevelopController.selectTool("loupe")
+  LrTasks.sleep(0.5)
+  out.dimensions = photo:getRawMetadata("croppedDimensions")
+  out.orientation = photo:getRawMetadata("orientation")
+  local restore = {}
+  for _, k in ipairs(CROP_KEYS) do
+    if k ~= "orientation" and before[k] ~= nil then restore[k] = before[k] end
+  end
+  catalog:withWriteAccessDo("LR-FrameFlow automation: restore crop", function()
+    photo:applyDevelopSettings(restore)
+  end, { timeout = 30 })
+  local after = photo:getDevelopSettings()
+  out.restored = after.CropAngle == before.CropAngle and after.CropLeft == before.CropLeft
+    and after.CropRight == before.CropRight and after.CropTop == before.CropTop
+    and after.CropBottom == before.CropBottom
+  return out
 end
 
 function Commands.apply(catalog, args)

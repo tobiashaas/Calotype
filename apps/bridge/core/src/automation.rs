@@ -25,6 +25,7 @@ pub const COMMANDS: &[&str] = &[
     "apply",
     "train",
     "select",
+    "straighten_probe",
 ];
 
 #[derive(Debug, Clone, Serialize, PartialEq)]

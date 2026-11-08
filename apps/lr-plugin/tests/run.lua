@@ -42,6 +42,8 @@ local sdk = {
   end,
   LrTasks = { sleep = function() end, pcall = pcall },
   LrApplication = { versionString = function() return "15.0 (test)" end },
+  LrApplicationView = { switchToModule = function() end },
+  LrDevelopController = { setValue = function() end, getValue = function() end, selectTool = function() end },
   LrProgressScope = function()
     return { setCaption = function() end, setPortionComplete = function() end,
              setIndeterminate = function() end, isCanceled = function() return false end,

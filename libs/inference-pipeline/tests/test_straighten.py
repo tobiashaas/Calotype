@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image, ImageDraw
 
-from lr_frameflow_inference_pipeline.straighten import estimate_tilt, tilt_from_segments
+from lr_frameflow_inference_pipeline.straighten import crop_settings, estimate_tilt, tilt_from_segments
 
 
 def _building(tilt: float) -> Image.Image:
@@ -41,3 +41,19 @@ def test_a_few_short_or_odd_lines_do_not_rotate():
     # Two long tilted lines (a hat brim, an arm) are not enough evidence.
     seg = np.array([[100, 100, 900, 130], [100, 400, 900, 430]], dtype=float)
     assert tilt_from_segments(seg, 1000, 800).crop_angle == 0.0
+
+
+def test_crop_matches_lightroom():
+    # Read from Lightroom Classic 15.6 (Develop, straighten 3° on a 6000×4000 CR3).
+    c = crop_settings(3.0, 6000, 4000)
+    assert (round(c["CropLeft"], 4), round(c["CropTop"], 4)) == (0.0526, 0.0)
+    assert (round(c["CropRight"], 4), round(c["CropBottom"], 4)) == (0.9474, 1.0)
+    assert c["HasCrop"] is True
+
+
+def test_negative_angle_corners_and_zero_is_full_frame():
+    # Corners of the rotated rectangle, not a mirrored box: -3.16° as Lightroom stores it
+    # (value from a real straightened sidecar).
+    c = crop_settings(-3.16, 6000, 4000)
+    assert [round(c[k], 3) for k in ("CropLeft", "CropTop", "CropRight", "CropBottom")] == [0.021, 0.076, 0.979, 0.924]
+    assert crop_settings(0.0, 6000, 4000)["CropRight"] == 1.0
