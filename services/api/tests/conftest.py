@@ -28,6 +28,7 @@ class _FakeStore:
         self.photos: dict[str, object] = {}
         self.profiles: dict[str, object] = {}
         self.edit_results: dict[str, list] = {}
+        self.cull_results: dict[str, list] = {}
 
 
 def _fake_job(job_id, kind, status, payload, payload_schema_version, correlation_id, idempotency_key, profile_id):
@@ -169,6 +170,8 @@ def client(store, mock_publisher, mock_storage) -> Generator[TestClient, None, N
         patch("lr_frameflow_api.main.PhotoRepository.get_by_id", side_effect=_photo_get_by_id),
         patch("lr_frameflow_api.main.PhotoRepository.get_by_lr_catalog_uuid", side_effect=_photo_get_by_lr_catalog_uuid),
         patch("lr_frameflow_api.main.EditResultRepository.get_all_by_job_id", side_effect=_edit_result_get_all),
+        patch("lr_frameflow_api.main.CullResultRepository.get_all_by_job_id",
+              side_effect=lambda session, job_id: store.cull_results.get(str(job_id), [])),
         patch("lr_frameflow_api.storage.upload_photo"),
     ]
 

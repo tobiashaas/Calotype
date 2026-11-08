@@ -5,7 +5,7 @@ import os
 from redis import Redis
 
 from lr_frameflow_domain.jobs import JobKind
-from lr_frameflow_queue.constants import QUEUE_FEATURE, QUEUE_INFERENCE, QUEUE_TRAIN
+from lr_frameflow_queue.constants import QUEUE_CULL, QUEUE_FEATURE, QUEUE_INFERENCE, QUEUE_TRAIN
 from lr_frameflow_queue.envelope import JobEnvelopeV1
 
 # Maximum number of messages allowed in a queue before enqueue is refused.
@@ -38,6 +38,8 @@ def first_stage_queue(kind: JobKind) -> str:
         return QUEUE_TRAIN
     if kind == JobKind.EDIT:
         return QUEUE_FEATURE
+    if kind == JobKind.CULL:
+        return QUEUE_CULL
     raise ValueError(kind)
 
 

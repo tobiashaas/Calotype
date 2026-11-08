@@ -43,6 +43,7 @@ jobs:
             services/workers/feature_worker/src \
             services/workers/train_worker/src \
             services/workers/inference_worker/src \
+            services/workers/cull_worker/src \
             tools
 
   inference-pipeline:

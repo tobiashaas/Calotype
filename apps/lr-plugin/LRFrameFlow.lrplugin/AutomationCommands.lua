@@ -20,7 +20,7 @@ local Commands = {}
 -- or metamethod call", found in the first automated run). LrTasks.pcall can.
 local pcall = LrTasks.pcall or pcall
 
-local PLUGIN_VERSION = "0.2.0"
+local PLUGIN_VERSION = "0.3.0"
 local LIST_KEYS = { "uuid", "path", "fileFormat", "rating", "pickStatus", "isVirtualCopy" }
 
 local function photosByUuid(catalog, uuids)
@@ -186,6 +186,35 @@ function Commands.train(catalog, args)
   local out = plain(r)
   out.missing = missing
   return out
+end
+
+function Commands.cull(catalog, args)
+  local photos, missing = photosByUuid(catalog, args.uuids)
+  local progress = progressScope("culling")
+  local ok, r = pcall(Actions.cull, catalog, photos, progress, { set_name = args.set_name })
+  progress:done()
+  if not ok then error(r) end
+  return Json.object({ ok = r.ok, title = r.title, text = r.text, counts = r.counts, method = r.method,
+    set_name = r.set_name, decisions = r.decisions, missing = missing })
+end
+
+--- Remove a culling collection set made by Commands.cull (test cleanup). Only sets directly
+-- inside "LR-FrameFlow" whose name is given exactly; photos themselves are never touched.
+function Commands.remove_cull_set(catalog, args)
+  local removed = 0
+  catalog:withWriteAccessDo("LR-FrameFlow automation: remove culling set", function()
+    for _, parent in ipairs(catalog:getChildCollectionSets()) do
+      if parent:getName() == Actions.CULL_PARENT then
+        for _, set in ipairs(parent:getChildCollectionSets()) do
+          if set:getName() == args.set_name then
+            set:delete()
+            removed = removed + 1
+          end
+        end
+      end
+    end
+  end, { timeout = 30 })
+  return Json.object({ removed = removed })
 end
 
 --- Run one command; returns ok, result (result = { error = message } on failure).

@@ -24,6 +24,7 @@ return {
   LrLibraryMenuItems = {
     { title = LOC "$$$/LRFrameFlow/Menu/Train=Train profile from selected photos...", file = "TrainProfile.lua" },
     { title = LOC "$$$/LRFrameFlow/Menu/Apply=Apply profile to selected photos...", file = "ApplyProfile.lua" },
+    { title = LOC "$$$/LRFrameFlow/Menu/Cull=Sort selected photos (culling)...", file = "CullPhotos.lua" },
     { title = LOC "$$$/LRFrameFlow/Menu/Status=Bridge status...", file = "BridgeStatus.lua" },
   },
 
@@ -31,8 +32,9 @@ return {
   LrExportMenuItems = {
     { title = LOC "$$$/LRFrameFlow/Menu/TrainFile=LR-FrameFlow: Train profile...", file = "TrainProfile.lua" },
     { title = LOC "$$$/LRFrameFlow/Menu/ApplyFile=LR-FrameFlow: Apply profile...", file = "ApplyProfile.lua" },
+    { title = LOC "$$$/LRFrameFlow/Menu/CullFile=LR-FrameFlow: Sort photos (culling)...", file = "CullPhotos.lua" },
     { title = LOC "$$$/LRFrameFlow/Menu/StatusFile=LR-FrameFlow: Bridge status...", file = "BridgeStatus.lua" },
   },
 
-  VERSION = { major = 0, minor = 2, revision = 0 },
+  VERSION = { major = 0, minor = 3, revision = 0 },
 }

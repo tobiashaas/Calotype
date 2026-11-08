@@ -28,6 +28,7 @@ pub fn router(state: Shared) -> Router {
         .route("/v1/photos/{uuid}", get(photo_state))
         .route("/v1/jobs/train", post(queue_train))
         .route("/v1/jobs/edit", post(queue_edit))
+        .route("/v1/jobs/cull", post(queue_cull))
         .route("/v1/jobs/{job_id}", get(job_state))
         .route("/v1/profiles", get(profiles))
         .route("/v1/automation/status", get(automation_status))
@@ -270,6 +271,30 @@ async fn queue_edit(State(state): State<Shared>, Json(body): Json<Value>) -> Res
         "straighten": req.straighten,
     });
     accept_job(&state, "edit", request, &uuids)
+}
+
+#[derive(Deserialize)]
+struct CullReq {
+    schema_version: String,
+    #[serde(default)]
+    correlation_id: Option<String>,
+    lr_catalog_uuids: Vec<String>,
+}
+
+async fn queue_cull(State(state): State<Shared>, Json(body): Json<Value>) -> Response {
+    let req: CullReq = match parse(body) {
+        Ok(r) => r,
+        Err(resp) => return resp,
+    };
+    if let Err(resp) = expect_schema(&req.schema_version, "bridge-cull-v1") {
+        return resp;
+    }
+    let uuids = match checked_uuids(&state, req.lr_catalog_uuids) {
+        Ok(u) => u,
+        Err(resp) => return resp,
+    };
+    let request = json!({ "correlation_id": req.correlation_id });
+    accept_job(&state, "cull", request, &uuids)
 }
 
 async fn job_state(State(state): State<Shared>, Path(job_id): Path<String>) -> Response {

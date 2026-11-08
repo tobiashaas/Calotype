@@ -101,6 +101,24 @@ paths:
               schema: { $ref: "#/components/schemas/JobState" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "422": { $ref: "#/components/responses/Invalid" }
+  /v1/jobs/cull:
+    post:
+      operationId: queueCullJob
+      summary: Sort photos into keep / uncertain / reject; photos with stars or flags teach the scorer
+      security: [{ token: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BridgeCullV1" }
+      responses:
+        "202":
+          description: Job accepted into the outbox
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobState" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/Invalid" }
   /v1/jobs/{job_id}:
     get:
       operationId: getJobState
@@ -201,12 +219,19 @@ components:
         collection_name: { type: string, nullable: true }
         straighten: { type: boolean, default: false, description: Level photos with clear reference lines. }
         lr_catalog_uuids: { type: array, minItems: 1, items: { type: string } }
+    BridgeCullV1:
+      type: object
+      required: [schema_version, lr_catalog_uuids]
+      properties:
+        schema_version: { type: string, enum: [bridge-cull-v1] }
+        correlation_id: { type: string, nullable: true }
+        lr_catalog_uuids: { type: array, minItems: 1, items: { type: string } }
     JobState:
       type: object
       required: [job_id, kind, status, attempts]
       properties:
         job_id: { type: string, format: uuid, description: Local Bridge job id }
-        kind: { type: string, enum: [train, edit] }
+        kind: { type: string, enum: [train, edit, cull] }
         status:
           type: string
           enum: [waiting_for_photos, queued, running, completed, failed]

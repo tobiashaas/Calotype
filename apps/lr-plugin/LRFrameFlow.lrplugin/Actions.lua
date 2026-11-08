@@ -194,4 +194,87 @@ function Actions.apply(catalog, photos, profile, progress, options)
       straightened = straightened, kept_crop = keptCrop })
 end
 
+-- ---------------------------------------------------------------------------- culling
+
+local BUCKETS = {
+  { key = "keep", title = LOC "$$$/LRFrameFlow/Cull/Keep=1 Keep" },
+  { key = "uncertain", title = LOC "$$$/LRFrameFlow/Cull/Uncertain=2 Check" },
+  { key = "reject", title = LOC "$$$/LRFrameFlow/Cull/Reject=3 Sort out" },
+}
+Actions.CULL_PARENT = "LR-FrameFlow"
+
+
+--- Sort `photos` into keep / check / sort out. Photos that already have stars or a pick/reject
+-- flag teach the scorer. The result goes into collections in the set "LR-FrameFlow > <name>";
+-- stars, flags and labels stay untouched. options.set_name overrides the set name.
+function Actions.cull(catalog, photos, progress, options)
+  options = options or {}
+  -- Series (near-identical shots) are found in shooting order. Read the times first: catalog
+  -- calls yield, and yielding inside table.sort's comparator is an error in Lightroom.
+  local meta = catalog:batchGetRawMetadata(photos, { "dateTimeOriginal", "dateTime" })
+  local when, ordered = {}, {}
+  for i, p in ipairs(photos) do
+    local m = meta[p] or {}
+    when[p] = m.dateTimeOriginal or m.dateTime or 0
+    ordered[i] = p
+  end
+  table.sort(ordered, function(a, b) return when[a] < when[b] end)
+
+  local reg, regErr = JobWait.registerPhotos(ordered, progress)
+  if not reg then
+    if regErr == "canceled" then return result(false, "LR-FrameFlow", regErr, "info", { canceled = true }) end
+    return result(false, "LR-FrameFlow", regErr)
+  end
+  local job, jobErr = BridgeClient.queueCull { schema_version = "bridge-cull-v1", lr_catalog_uuids = reg.uuids }
+  if not job then return result(false, "LR-FrameFlow", jobErr) end
+  Log.info("cull job %s queued with %d photos", job.job_id, #reg.uuids)
+
+  local final, waitErr = JobWait.waitForJob(job.job_id, progress, LOC "$$$/LRFrameFlow/Cull/Label=Sorting")
+  if not final then
+    if waitErr == "canceled" then
+      return result(false, LOC "$$$/LRFrameFlow/Apply/StoppedTitle=Stopped waiting",
+        LOC "$$$/LRFrameFlow/Cull/Stopped=The Bridge finishes the job, but no collections were made. Run it again later.",
+        "info", { canceled = true, job_id = job.job_id })
+    end
+    return result(false, "LR-FrameFlow", waitErr, nil, { job_id = job.job_id })
+  end
+  if final.status ~= "completed" then
+    return result(false, LOC "$$$/LRFrameFlow/Cull/FailedTitle=Sorting failed",
+      final.last_error or LOC "$$$/LRFrameFlow/Common/NoReason=No reason given.", nil, { job_id = job.job_id })
+  end
+
+  local byBucket, counts, method, decisions = { keep = {}, uncertain = {}, reject = {} }, {}, "rules", {}
+  for _, r in ipairs(final.results or {}) do
+    local photo = reg.photosByUuid[r.lr_catalog_uuid]
+    if photo and byBucket[r.bucket] then
+      local list = byBucket[r.bucket]
+      list[#list + 1] = photo
+      method = r.method or method
+      decisions[#decisions + 1] = { uuid = r.lr_catalog_uuid, bucket = r.bucket, reason = r.reason }
+    end
+  end
+  local setName = options.set_name or LOC("$$$/LRFrameFlow/Cull/SetName=Culling ^1", os.date("%Y-%m-%d %H:%M"))
+  progress:setCaption(LOC "$$$/LRFrameFlow/Cull/Writing=Creating collections")
+  catalog:withWriteAccessDo(LOC "$$$/LRFrameFlow/Cull/Undo=LR-FrameFlow: culling", function()
+    local parent = catalog:createCollectionSet(Actions.CULL_PARENT, nil, true)
+    local set = catalog:createCollectionSet(setName, parent, true)
+    for _, b in ipairs(BUCKETS) do
+      local collection = catalog:createCollection(b.title, set, true)
+      collection:removeAllPhotos()
+      if #byBucket[b.key] > 0 then collection:addPhotos(byBucket[b.key]) end
+      counts[b.key] = #byBucket[b.key]
+    end
+  end, { timeout = 60 })
+  Log.info("cull job %s: keep %d, check %d, sort out %d (%s)", job.job_id, counts.keep, counts.uncertain,
+    counts.reject, method)
+
+  local how = method == "learned"
+    and LOC "$$$/LRFrameFlow/Cull/Learned=Learned from the photos you had already rated or flagged."
+    or LOC "$$$/LRFrameFlow/Cull/Rules=Starter rules — rate or flag about 10 keepers and 10 rejects among the selected photos, and LR-FrameFlow learns your taste."
+  return result(true, LOC("$$$/LRFrameFlow/Cull/DoneTitle=^1 photos sorted", counts.keep + counts.uncertain + counts.reject),
+    LOC("$$$/LRFrameFlow/Cull/Done=Keep ^1, check ^2, sort out ^3.^nCollections: LR-FrameFlow > ^4^n^5",
+      counts.keep, counts.uncertain, counts.reject, setName, how), "info",
+    { job_id = job.job_id, counts = counts, method = method, set_name = setName, decisions = decisions })
+end
+
 return Actions

@@ -2,7 +2,13 @@
 (the training target) and a small EXIF snapshot. The Bridge builds the preview itself
 from the original file, so nothing is exported here. ]]
 
+local LrTasks = import "LrTasks"
+
 local Json = require "Json"
+
+-- Catalog calls yield; Lua 5.1's pcall cannot yield, so a plain pcall made every read fail
+-- silently in Lightroom (stars, flags and EXIF arrived empty). LrTasks.pcall can.
+local pcall = LrTasks.pcall or pcall
 
 local PhotoData = {}
 

@@ -14,6 +14,8 @@ from lr_frameflow_api.middleware import RateLimitMiddleware, RequestIdMiddleware
 from lr_frameflow_observability import configure_logging, get_request_id
 from lr_frameflow_queue.publisher import QueueFullError, redis_from_env
 from lr_frameflow_api.schemas import (
+    CullJobRequestV1,
+    CullResultResponse,
     EditJobRequestV1,
     EditResultResponse,
     JobAcceptedResponse,
@@ -26,6 +28,7 @@ from lr_frameflow_api.schemas import (
 from lr_frameflow_api.storage import upload_photo
 from lr_frameflow_domain.jobs import JobKind
 from lr_frameflow_domain.profiles import ProfileStatus
+from lr_frameflow_persistence.repositories.cull_results import CullResultRepository
 from lr_frameflow_persistence.repositories.edit_results import EditResultRepository
 from lr_frameflow_persistence.repositories.jobs import JobRepository
 from lr_frameflow_persistence.repositories.photos import PhotoRepository
@@ -246,6 +249,63 @@ def create_edit_job(
     except QueueFullError as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     return JobAcceptedResponse(job_id=job_id, kind="edit")
+
+
+@app.post("/v1/jobs/cull", status_code=202, response_model=JobAcceptedResponse)
+def create_cull_job(
+    body: CullJobRequestV1,
+    session: Session = Depends(get_session),
+    publisher: RedisQueuePublisher = Depends(get_publisher),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+):
+    norm_key = (idempotency_key or "").strip() or None
+    if norm_key:
+        existing = JobRepository.get_by_idempotency_key(session, norm_key)
+        if existing:
+            if existing.kind != JobKind.CULL.value:
+                raise HTTPException(status_code=409, detail="idempotency key conflicts with another job kind")
+            return JobAcceptedResponse(job_id=existing.id, kind="cull")
+
+    missing = [str(pid) for pid in body.photo_ids if PhotoRepository.get_by_id(session, pid) is None]
+    if missing:
+        raise HTTPException(status_code=422, detail=f"unknown photo_ids: {missing}")
+
+    job_id = uuid4()
+    JobRepository.create(
+        session,
+        job_id=job_id,
+        kind=JobKind.CULL,
+        payload_schema_version=body.schema_version,
+        payload=body.model_dump(mode="json"),
+        correlation_id=body.correlation_id,
+        idempotency_key=norm_key,
+    )
+    trace: dict = {"request_id": get_request_id()}
+    if body.correlation_id:
+        trace["correlation_id"] = body.correlation_id
+    envelope = JobEnvelopeV1(job_id=str(job_id), job_kind="cull", payload=body.model_dump(mode="json"),
+                             trace_context=trace)
+    try:
+        publisher.enqueue(envelope)
+    except QueueFullError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    return JobAcceptedResponse(job_id=job_id, kind="cull")
+
+
+@app.get("/v1/jobs/{job_id}/cull-result", response_model=list[CullResultResponse])
+def get_cull_result(job_id: UUID, session: Session = Depends(get_session)):
+    record = JobRepository.get_by_id(session, job_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    if record.kind != JobKind.CULL.value:
+        raise HTTPException(status_code=409, detail="not a cull job")
+    if record.status != "completed":
+        raise HTTPException(status_code=409, detail=f"job not yet completed (status: {record.status})")
+    return [
+        CullResultResponse(job_id=r.job_id, photo_id=r.photo_id, bucket=r.bucket, score=r.score,
+                           reason=r.reason, method=r.method)
+        for r in CullResultRepository.get_all_by_job_id(session, job_id)
+    ]
 
 
 @app.get("/v1/jobs/{job_id}", response_model=JobSnapshotResponse)

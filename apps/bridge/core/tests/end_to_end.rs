@@ -87,11 +87,27 @@ async fn fake_results(State(fake): State<Fake>) -> Json<Value> {
     ))
 }
 
+async fn fake_cull_results(State(fake): State<Fake>) -> Json<Value> {
+    let f = fake.lock().unwrap();
+    let photo_ids = f.jobs[0].1["photo_ids"].as_array().unwrap().clone();
+    Json(Value::Array(
+        photo_ids
+            .iter()
+            .map(|id| {
+                json!({"job_id": "remote-job-1", "photo_id": id, "bucket": "keep",
+                             "score": 0.8, "reason": "+ eyes open", "method": "learned"})
+            })
+            .collect(),
+    ))
+}
+
 async fn spawn_fake_api(fake: Fake) -> String {
     let app = Router::new()
         .route("/health", get(|| async { Json(json!({"status": "ok"})) }))
         .route("/v1/photos", post(fake_upload))
         .route("/v1/jobs/edit", post(fake_job))
+        .route("/v1/jobs/cull", post(fake_job))
+        .route("/v1/jobs/{id}/cull-result", get(fake_cull_results))
         .route("/v1/jobs/{id}", get(fake_job_state))
         .route("/v1/jobs/{id}/result", get(fake_results))
         .with_state(fake);
@@ -443,4 +459,57 @@ async fn job_goes_on_without_offline_and_broken_photos() {
         json!(["remote-good"])
     );
     assert_eq!(st.db().photo("off").unwrap().unwrap().status, "pending");
+}
+
+#[tokio::test]
+async fn cull_job_round_trip_maps_decisions_to_catalog_uuids() {
+    let dir = tempfile::tempdir().unwrap();
+    let fake: Fake = Arc::new(Mutex::new(FakeApi::default()));
+    let api = spawn_fake_api(fake.clone()).await;
+    let st = state(&api, dir.path());
+    let jpg = dir.path().join("a.jpg");
+    write_jpeg(&jpg, 1600, 1200);
+    call(
+        &st,
+        "POST",
+        "/v1/photos",
+        Some(TOKEN),
+        Some(photo_body("lr-a", &jpg)),
+    )
+    .await;
+
+    let (s, err) = call(
+        &st,
+        "POST",
+        "/v1/jobs/cull",
+        Some(TOKEN),
+        Some(json!({"schema_version": "bridge-edit-v1", "lr_catalog_uuids": ["lr-a"]})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::UNPROCESSABLE_ENTITY, "{err}");
+    let (s, job) = call(
+        &st,
+        "POST",
+        "/v1/jobs/cull",
+        Some(TOKEN),
+        Some(json!({"schema_version": "bridge-cull-v1", "lr_catalog_uuids": ["lr-a"]})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::ACCEPTED);
+    let job_id = job["job_id"].as_str().unwrap().to_string();
+
+    for _ in 0..3 {
+        st.db().retry_all_now().unwrap();
+        outbox::tick(&st).await;
+    }
+    let (_, job) = call(&st, "GET", &format!("/v1/jobs/{job_id}"), Some(TOKEN), None).await;
+    assert_eq!(job["status"], "completed");
+    assert_eq!(
+        job["results"],
+        json!([{"lr_catalog_uuid": "lr-a", "bucket": "keep", "score": 0.8,
+                                       "reason": "+ eyes open", "method": "learned"}])
+    );
+    let f = fake.lock().unwrap();
+    assert_eq!(f.jobs[0].1["schema_version"], "cull-request-v1");
+    assert_eq!(f.jobs[0].1["photo_ids"], json!(["remote-lr-a"]));
 }

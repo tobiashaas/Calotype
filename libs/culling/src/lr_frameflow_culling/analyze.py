@@ -76,6 +76,18 @@ class PhotoFeatures:
         )
         return d
 
+    @classmethod
+    def from_dict(cls, d: dict) -> PhotoFeatures:
+        """Inverse of to_dict (blendshapes are not kept)."""
+        faces = [Face(box=tuple(f["box"]), score=f["score"], rel_size=f["rel_size"],
+                      sharpness=f["sharpness"], eyes_closed=f.get("eyes_closed"), smile=f.get("smile"),
+                      mouth_open=f.get("mouth_open"), looking_down=f.get("looking_down"),
+                      head_pitch=f.get("head_pitch")) for f in d.get("faces", [])]
+        return cls(name=d["name"], width=d["width"], height=d["height"], sharpness=d["sharpness"],
+                   center_sharpness=d["center_sharpness"], mean_luma=d["mean_luma"],
+                   clipped_highlights=d["clipped_highlights"], crushed_shadows=d["crushed_shadows"],
+                   dhash=int(d["dhash"], 16), faces=faces, face_clipped=d.get("face_clipped", 0.0))
+
 
 def load_rgb(path: Path) -> np.ndarray:
     with Image.open(path) as im:
@@ -83,12 +95,15 @@ def load_rgb(path: Path) -> np.ndarray:
 
 
 def analyze(path: Path, faces: FaceAnalyzer | None) -> PhotoFeatures:
-    rgb = load_rgb(path)
+    return analyze_rgb(load_rgb(path), path.name, faces)
+
+
+def analyze_rgb(rgb: np.ndarray, name: str, faces: FaceAnalyzer | None) -> PhotoFeatures:
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     exp = exposure(gray)
     found = faces.analyze(rgb, gray) if faces else []
     photo = PhotoFeatures(
-        name=path.name,
+        name=name,
         width=rgb.shape[1],
         height=rgb.shape[0],
         sharpness=sharpness(gray),

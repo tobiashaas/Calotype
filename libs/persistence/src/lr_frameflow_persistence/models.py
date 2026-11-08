@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -123,6 +123,26 @@ class EditResult(Base):
         JSONB, nullable=False, server_default=func.cast("{}", JSONB)
     )
 
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CullResult(Base):
+    """Migration 012: culling decision per photo and cull job."""
+
+    __tablename__ = "cull_results"
+    __table_args__ = (UniqueConstraint("job_id", "photo_id", name="uq_cull_results_job_photo"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False
+    )
+    photo_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("photos.id", ondelete="CASCADE"), nullable=False
+    )
+    bucket: Mapped[str] = mapped_column(String(16), nullable=False)      # keep | uncertain | reject
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    reason: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    method: Mapped[str] = mapped_column(String(16), nullable=False)      # learned | rules
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

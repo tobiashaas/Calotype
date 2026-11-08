@@ -13,6 +13,7 @@ log = logging.getLogger("lr_ff.api.schemas")
 
 TrainSchema = Literal["train-request-v1"]
 EditSchema = Literal["edit-request-v1"]
+CullSchema = Literal["cull-request-v1"]
 PhotoSchema = Literal["photo-upload-v1"]
 
 
@@ -59,6 +60,15 @@ class EditJobRequestV1(TolerantRequest):
     straighten: bool = False
 
 
+class CullJobRequestV1(TolerantRequest):
+    """Cull these photos. Photos among them that already carry a decision (stars, pick/reject
+    flag) teach the scorer the photographer's taste."""
+
+    schema_version: CullSchema
+    correlation_id: str | None = None
+    photo_ids: Annotated[list[UUID], Field(min_length=1)]
+
+
 class PhotoMetadataV1(TolerantRequest):
 
     schema_version: PhotoSchema
@@ -72,7 +82,7 @@ class PhotoMetadataV1(TolerantRequest):
 class JobAcceptedResponse(BaseModel):
     job_id: UUID
     status: Literal["queued"] = "queued"
-    kind: Literal["train", "edit"]
+    kind: Literal["train", "edit", "cull"]
     profile_id: UUID | None = None
 
 
@@ -101,6 +111,15 @@ class ProfileResponse(BaseModel):
     version: int
     model_artifact_key: str | None = None
     failure_reason: str | None = None
+
+
+class CullResultResponse(BaseModel):
+    job_id: UUID
+    photo_id: UUID
+    bucket: Literal["keep", "uncertain", "reject"]
+    score: float
+    reason: str
+    method: Literal["learned", "rules"]
 
 
 class EditResultResponse(BaseModel):

@@ -173,7 +173,9 @@ fn server_body(job: &JobRow, photo_ids: Vec<String>) -> Value {
     let mut body = job.request.as_object().cloned().unwrap_or_default();
     body.remove("lr_catalog_uuids");
     body.retain(|_, v| !v.is_null());
-    let schema = if job.kind == "train" {
+    let schema = if job.kind == "cull" {
+        "cull-request-v1"
+    } else if job.kind == "train" {
         "train-request-v1"
     } else {
         "edit-request-v1"
@@ -240,6 +242,14 @@ async fn poll(state: &AppState, job: &JobRow) -> Result<()> {
             Err(ApiError::Transient(msg)) => state.db().retry_job_later(&job.job_id, &msg)?,
             Err(ApiError::Permanent(msg)) => state.db().fail_job(&job.job_id, &msg)?,
         },
+        "completed" if job.kind == "cull" => match state.api.get_cull_results(remote).await {
+            Ok(results) => {
+                let mapped = map_cull_results(state, job, results)?;
+                state.db().complete_job(&job.job_id, Some(&mapped))?;
+            }
+            Err(ApiError::Transient(msg)) => state.db().retry_job_later(&job.job_id, &msg)?,
+            Err(ApiError::Permanent(msg)) => state.db().fail_job(&job.job_id, &msg)?,
+        },
         "completed" => state.db().complete_job(&job.job_id, None)?,
         "failed" => {
             let reason = snapshot
@@ -255,18 +265,43 @@ async fn poll(state: &AppState, job: &JobRow) -> Result<()> {
     Ok(())
 }
 
-fn map_results(
-    state: &AppState,
-    job: &JobRow,
-    results: Vec<crate::api_client::EditResult>,
-) -> Result<Value> {
+/// Server photo ids → catalog UUIDs of this job's photos.
+fn remote_to_uuid(state: &AppState, job: &JobRow) -> Result<HashMap<String, String>> {
     let db = state.db();
-    let mut by_remote: HashMap<String, String> = HashMap::new();
+    let mut by_remote = HashMap::new();
     for uuid in &job.lr_catalog_uuids {
         if let Some(remote) = db.photo(uuid)?.and_then(|p| p.remote_photo_id) {
             by_remote.insert(remote, uuid.clone());
         }
     }
+    Ok(by_remote)
+}
+
+/// Culling decisions with catalog UUIDs instead of server photo ids.
+fn map_cull_results(state: &AppState, job: &JobRow, results: Vec<Value>) -> Result<Value> {
+    let by_remote = remote_to_uuid(state, job)?;
+    let mapped: Vec<Value> = results
+        .into_iter()
+        .filter_map(|r| {
+            let uuid = by_remote.get(r["photo_id"].as_str()?)?;
+            Some(json!({
+                "lr_catalog_uuid": uuid,
+                "bucket": r["bucket"],
+                "score": r["score"],
+                "reason": r["reason"],
+                "method": r["method"],
+            }))
+        })
+        .collect();
+    Ok(Value::Array(mapped))
+}
+
+fn map_results(
+    state: &AppState,
+    job: &JobRow,
+    results: Vec<crate::api_client::EditResult>,
+) -> Result<Value> {
+    let by_remote = remote_to_uuid(state, job)?;
     let mapped: Vec<Value> = results
         .into_iter()
         .filter_map(|r| {

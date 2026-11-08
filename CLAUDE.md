@@ -10,7 +10,7 @@ LRFrameFlow is an AI-powered Lightroom Classic photo editing system. It uses an 
 1. **LR Plugin** (Lua, `apps/lr-plugin/`) — Lightroom Classic SDK, triggers jobs
 2. **Bridge Desktop App** (Tauri/Rust, `apps/bridge/`) — local orchestration layer
 3. **API** (FastAPI, `services/api/`) — thin HTTP gateway, returns 202 immediately, no blocking
-4. **Workers** (`services/workers/`) — three independent workers: feature, train, inference
+4. **Workers** (`services/workers/`) — four independent workers: feature, train, inference, cull
 5. **Shared Libs** (`libs/`) — domain, persistence, queue, observability, inference-pipeline, edit-serializer, lr-io
 
 ---
@@ -24,7 +24,7 @@ LRFrameFlow is an AI-powered Lightroom Classic photo editing system. It uses an 
 | Phase 3 — Real ML Pipeline | ✅ Done | Pillow histogram features (128-dim), Ridge regression, joblib serialization |
 | Phase 4 — Production Hardening | ✅ Done | Redis AOF, stuck-job reaper, at-least-once, heartbeat, CI lint+tests, contracts, JSON logs, rate limiting |
 | Phase 5 — Bridge & Plugin | 🟡 In progress | Bridge, LR plugin, folder mode (RAW+XMP) done; full stack verified end-to-end on 60 real CR3 (synthetic-rule test 93 % within tolerance); automated end-to-end test in real Lightroom passes (`tools/lr_e2e/run.py`, opt-in automation channel) |
-| Phase 6 — Culling | 🟡 Started | Labels (rating/flag/label) flow plugin→bridge→API; `libs/culling` prototype (YuNet + MediaPipe blendshapes, series, explainable baseline) at ~130 ms/photo; learned scorer open — see ADR 005 |
+| Phase 6 — Culling | 🟡 In progress | Cull job end to end (plugin menu → Bridge → API → `cull_worker` → collections Keep / Check / Sort out in Lightroom): learns from the stars/flags among the selected photos, else starter rules; verified in Lightroom 15.6 (80 photos in 14 s, 85 % agreement with existing stars). Measured against a photographer's real exports: ROC-AUC 0.654 — see ADR 005 |
 
 See `TODO.md` for the detailed task breakdown.
 
@@ -54,9 +54,10 @@ services/
     feature_worker/    # lrff:jobs:feature → extract features → lrff:jobs:inference
     train_worker/      # lrff:jobs:train → train Ridge model → Profile READY
     inference_worker/  # lrff:jobs:inference → run inference → EditResult
+    cull_worker/       # lrff:jobs:cull → culling features (cached in photos.analysis) → CullResult
 infra/
   compose/             # docker-compose.yml: Postgres 16+pgvector, Redis 7, MinIO
-  migrations/          # Alembic migrations (001–011)
+  migrations/          # Alembic migrations (001–012)
 docs/
   adr/                 # Architecture Decision Records
   plan/                # mvp.md — phased plan
@@ -79,7 +80,7 @@ TODO.md                # Completed + open work items — keep up to date
   - `services/api` imports: domain, persistence, queue — NOT workers, NOT torch
   - `edit-serializer` imports: stdlib only
   - `culling` imports: inference-pipeline (model registry), numpy, Pillow, opencv-python-headless, mediapipe, scikit-learn — no DB/Redis; models only via the registry (SHA-256, `THIRD_PARTY_MODELS.md`)
-  - `services/workers/*` import: domain, persistence, queue, observability, inference-pipeline, edit-serializer
+  - `services/workers/*` import: domain, persistence, queue, observability, inference-pipeline, edit-serializer; `cull_worker` also culling
   - **Workers CANNOT import `lr_frameflow_api`**
   - **API CANNOT import worker modules**
 - **Versioned contracts:** Every queue message and API schema has a `schema_version` field. Never break existing schema versions; add new ones.
@@ -119,6 +120,9 @@ TODO.md                # Completed + open work items — keep up to date
 | `libs/culling/src/lr_frameflow_culling/scoring.py` | Series + explainable baseline (keep/uncertain/reject with reasons) |
 | `libs/culling/src/lr_frameflow_culling/identity.py` | SFace face embeddings + grouping photos by person |
 | `libs/inference-pipeline/src/lr_frameflow_inference_pipeline/straighten.py` | Tilt from the photo's own lines (keystone-aware) + Lightroom crop keys |
+| `libs/culling/src/lr_frameflow_culling/cull.py` | `cull()`: learned from decided photos (≥ 8 per class) else rules; `decision_from_metadata` |
+| `apps/lr-plugin/LRFrameFlow.lrplugin/CullPhotos.lua` | Menu: sort selected photos into collections (stars/flags untouched) |
+| `tools/lr_e2e/cull_check.py` | Culling end-to-end in a real Lightroom (collections, nothing else touched, cleanup) |
 | `tools/lr_e2e/straighten_check.py` | Straighten end-to-end in a real Lightroom (angle + crop arrive, own crops stay, restore) |
 | `tools/lrff_eval/cull_report.py` | Culling prototype on a preview folder → local HTML contact sheet + timing |
 | `THIRD_PARTY_MODELS.md` | Every downloaded model with license and SHA-256 — permissive only |
@@ -128,7 +132,7 @@ TODO.md                # Completed + open work items — keep up to date
 | `packages/contracts/json-schema/photo-upload-v1.schema.json` | Photo upload metadata schema |
 | `infra/compose/docker-compose.yml` | Local infra (Postgres, Redis, MinIO) |
 | `infra/compose/.env` | Local port overrides (Postgres 5433, MinIO 9100) |
-| `infra/migrations/versions/` | Migrations 001–011 (010 job progress + unique edit results, 011 `photos.analysis`) |
+| `infra/migrations/versions/` | Migrations 001–012 (010 job progress + unique edit results, 011 `photos.analysis`, 012 `cull_results`) |
 
 ---
 
@@ -144,6 +148,8 @@ TODO.md                # Completed + open work items — keep up to date
 | POST | `/v1/jobs/edit` | Enqueue edit job (profile must be READY, photo_ids must exist) |
 | GET | `/v1/jobs/{id}` | Get job status snapshot (incl. `profile_id`, short `failure_reason`) |
 | GET | `/v1/jobs/{id}/result` | Get edit results (only when job is COMPLETED) |
+| POST | `/v1/jobs/cull` | Enqueue cull job (`cull-request-v1`: photo_ids; photos with stars/flags teach the scorer) |
+| GET | `/v1/jobs/{id}/cull-result` | Culling decisions (bucket keep/uncertain/reject, score, reason, method) |
 
 ---
 
@@ -152,6 +158,7 @@ TODO.md                # Completed + open work items — keep up to date
 ```
 Edit job:   API → lrff:jobs:feature → feature_worker → lrff:jobs:inference → inference_worker
 Train job:  API → lrff:jobs:train   → train_worker   → COMPLETED
+Cull job:   API → lrff:jobs:cull    → cull_worker    → CullResult → COMPLETED
 ```
 
 Train flow detail:

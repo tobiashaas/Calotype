@@ -176,6 +176,16 @@ impl ApiClient {
         Ok(check(resp).await?.json().await?)
     }
 
+    /// Culling decisions of a completed cull job (photo_id, bucket, score, reason, method).
+    pub async fn get_cull_results(&self, job_id: &str) -> Result<Vec<Value>, ApiError> {
+        let resp = self
+            .http
+            .get(self.url(&format!("/v1/jobs/{job_id}/cull-result")))
+            .send()
+            .await?;
+        Ok(check(resp).await?.json().await?)
+    }
+
     pub async fn list_profiles(&self) -> Result<Value, ApiError> {
         let resp = self.http.get(self.url("/v1/profiles")).send().await?;
         Ok(check(resp).await?.json().await?)

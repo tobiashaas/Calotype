@@ -118,6 +118,15 @@ class LearnedScorer:
         model.fit(scaler.transform(X), np.asarray(keep, dtype=int))
         return cls(scaler, model)
 
+    @classmethod
+    def fit_subset(cls, photos: list[PhotoFeatures], rows: list[int], keep: list[bool]) -> LearnedScorer:
+        """Fit on some photos of a shoot; series and ranks still come from the whole shoot."""
+        X = feature_matrix(photos)[rows]
+        scaler = StandardScaler().fit(X)
+        model = LogisticRegression(C=1.0, max_iter=2000, class_weight="balanced")
+        model.fit(scaler.transform(X), np.asarray(keep, dtype=int))
+        return cls(scaler, model)
+
     def keep_probability(self, photos: list[PhotoFeatures]) -> np.ndarray:
         return self.model.predict_proba(self.scaler.transform(feature_matrix(photos)))[:, 1]
 

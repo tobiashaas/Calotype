@@ -102,3 +102,33 @@ def test_list_profiles_after_train_job(client):
     profiles = resp.json()
     assert len(profiles) == 1
     assert profiles[0]["status"] == "draft"
+
+
+def _upload(client) -> str:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8)).save(buf, "JPEG")
+    meta = {"schema_version": "photo-upload-v1", "lr_catalog_uuid": str(uuid.uuid4()),
+            "lr_metadata": {"rating": 5}}
+    import json
+
+    r = client.post("/v1/photos", files={"file": ("p.jpg", buf.getvalue(), "image/jpeg")},
+                    data={"metadata": json.dumps(meta)})
+    return r.json()["photo_id"]
+
+
+def test_cull_job_is_queued_and_result_waits_for_completion(client, mock_publisher):
+    pid = _upload(client)
+    r = client.post("/v1/jobs/cull", json={"schema_version": "cull-request-v1", "photo_ids": [pid]})
+    assert r.status_code == 202 and r.json()["kind"] == "cull"
+    assert mock_publisher.enqueue.call_args[0][0].job_kind == "cull"
+    res = client.get(f"/v1/jobs/{r.json()['job_id']}/cull-result")
+    assert res.status_code == 409
+
+
+def test_cull_job_rejects_unknown_photos(client):
+    r = client.post("/v1/jobs/cull", json={"schema_version": "cull-request-v1", "photo_ids": [str(uuid.uuid4())]})
+    assert r.status_code == 422 and "unknown photo_ids" in r.json()["detail"]

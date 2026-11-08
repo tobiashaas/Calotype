@@ -276,6 +276,39 @@ local function fakeProgress(cancelAfter)
   return p
 end
 
+test("photo data reads decisions and EXIF with a pcall that may yield", function()
+  -- Like Lightroom: a catalog read inside Lua's plain pcall fails ("Yielding is not allowed").
+  local plainDepth = 0
+  local realPcall = pcall
+  _G.pcall = function(...)
+    plainDepth = plainDepth + 1
+    local r = { realPcall(...) }
+    plainDepth = plainDepth - 1
+    return unpack(r)
+  end
+  local photo = fakePhoto("y", "RAW")
+  local inner = photo.getRawMetadata
+  photo.getRawMetadata = function(self, key)
+    if plainDepth > 0 then error("Yielding is not allowed within a C or metamethod call") end
+    return inner(self, key)
+  end
+  package.loaded.PhotoData = nil
+  local ok, fresh = realPcall(require, "PhotoData")
+  _G.pcall = realPcall
+  assert(ok, tostring(fresh))
+  _G.pcall = function(...)
+    plainDepth = plainDepth + 1
+    local r = { realPcall(...) }
+    plainDepth = plainDepth - 1
+    return unpack(r)
+  end
+  local d = fresh.decisions(photo)
+  _G.pcall = realPcall
+  package.loaded.PhotoData = PhotoData
+  eq(d.rating, 4, "rating read")
+  eq(d.pick_status, -1, "pick flag read")
+end)
+
 test("register photos skips videos and collects formats", function()
   fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
   respond(202, { status = "pending" })
@@ -328,7 +361,7 @@ end
 test("every UI text has a German translation with the same placeholders", function()
   local english = {}
   for _, file in ipairs({ "Info.lua", "BridgeClient.lua", "JobWait.lua", "Actions.lua", "TrainProfile.lua",
-                          "ApplyProfile.lua", "BridgeStatus.lua", "AutomationCommands.lua" }) do
+                          "ApplyProfile.lua", "BridgeStatus.lua", "AutomationCommands.lua", "CullPhotos.lua" }) do
     local src = readFile(PLUGIN .. file)
     for key, value in src:gmatch('"(%$%$%$/LRFrameFlow/[%w/]+)=(.-[^\\])"') do english[key] = value end
   end
@@ -367,6 +400,21 @@ local function fakeCatalog(photos)
     end,
     withWriteAccessDo = function(_, _, fn) fn() end,
     setSelectedPhotos = function() end,
+    -- Collections (culling): sets and collections keyed by "parent/name".
+    sets = {},
+    createCollectionSet = function(self, name, parent, _)
+      local key = (parent and parent.key .. "/" or "") .. name
+      self.sets[key] = self.sets[key] or { key = key, name = name, collections = {} }
+      return self.sets[key]
+    end,
+    createCollection = function(_, name, set, _)
+      set.collections[name] = set.collections[name] or {
+        photos = {},
+        removeAllPhotos = function(c) c.photos = {} end,
+        addPhotos = function(c, list) for _, ph in ipairs(list) do c.photos[#c.photos + 1] = ph end end,
+      }
+      return set.collections[name]
+    end,
   }
 end
 
@@ -454,6 +502,33 @@ test("apply with straighten: crop for uncropped photos, own crops stay", functio
   eq(r.kept_crop, 1, "count kept")
 end)
 
+test("cull: decisions become collections, nothing else is touched", function()
+  local Commands = require "AutomationCommands"
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  local photos = { fakePhoto("a", "RAW"), fakePhoto("b", "RAW"), fakePhoto("c", "JPG") }
+  local catalog = fakeCatalog(photos)
+  respond(202, { status = "pending" })
+  respond(202, { status = "pending" })
+  respond(202, { status = "pending" })
+  respond(202, { job_id = "j3", status = "waiting_for_photos" })
+  respond(200, { job_id = "j3", status = "completed", results = {
+    { lr_catalog_uuid = "a", bucket = "keep", score = 0.8, reason = "+ eyes open", method = "learned" },
+    { lr_catalog_uuid = "b", bucket = "reject", score = 0.1, reason = "- eyes closed", method = "learned" },
+    { lr_catalog_uuid = "c", bucket = "uncertain", score = 0.5, reason = "+ smiling", method = "learned" },
+  } })
+  local ok, r = Commands.run(catalog, { command = "cull", args = { uuids = { "a", "b", "c" }, set_name = "T" } })
+  eq(ok, true, "cull ok: " .. tostring(r.error))
+  eq(Json.decode(fake.requests[#fake.requests - 1].body).schema_version, "bridge-cull-v1", "cull request")
+  eq(r.counts.keep, 1, "keep")
+  eq(r.counts.reject, 1, "reject")
+  eq(r.method, "learned", "method")
+  local set = catalog.sets["LR-FrameFlow/T"]
+  assert(set, "collection set LR-FrameFlow > T")
+  eq(set.collections["1 Keep"].photos[1], photos[1], "keeper in Keep")
+  eq(set.collections["3 Sort out"].photos[1], photos[2], "reject in Sort out")
+  eq(photos[1].applied, nil, "develop settings untouched")
+end)
+
 -- ------------------------------------------------------------ syntax of UI scripts
 
 test("automation init runs in a Lightroom-like plugin environment", function()
@@ -478,7 +553,7 @@ test("automation init runs in a Lightroom-like plugin environment", function()
 end)
 
 test("menu scripts compile", function()
-  for _, file in ipairs({ "Info.lua", "TrainProfile.lua", "ApplyProfile.lua", "BridgeStatus.lua",
+  for _, file in ipairs({ "Info.lua", "TrainProfile.lua", "ApplyProfile.lua", "BridgeStatus.lua", "CullPhotos.lua",
                           "Actions.lua", "Automation.lua", "AutomationCommands.lua" }) do
     assert(loadfile(PLUGIN .. file))
   end

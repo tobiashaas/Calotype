@@ -6,6 +6,7 @@ from enum import StrEnum
 class JobKind(StrEnum):
     TRAIN = "train"
     EDIT = "edit"
+    CULL = "cull"
 
 
 class JobStatus(StrEnum):

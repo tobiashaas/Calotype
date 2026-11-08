@@ -99,7 +99,9 @@ See `docs/adr/005-culling-architecture.md`.
 - [ ] Content/moment features: image embeddings (DINOv2/CLIP), interaction (hug, kiss, eye contact), candid vs. posed
 - [ ] Series via embeddings + capture time instead of dHash
 - [ ] Eyes "closed" vs. "looking down": separate via gaze/head pitch (blendshapes `eyeLookDown*`)
-- [ ] Culling job type: worker (or Bridge-local) + results back to Lightroom as flags/stars/labels
+- [x] Culling job type (2026-11-08): `cull_worker`, `POST /v1/jobs/cull`, Bridge `bridge-cull-v1`, plugin menu → collections LR-FrameFlow > Culling <date> > Keep / Check / Sort out (non-destructive); learns from the stars/flags among the selection; verified in Lightroom (`tools/lr_e2e/cull_check.py`)
+- [x] Plugin read stars, flags and EXIF inside a plain `pcall` — it cannot yield in Lightroom, so they always arrived empty; fixed with `LrTasks.pcall` + regression test
+- [ ] Culling: show the reason per photo in Lightroom (plugin metadata field) and a "why" view; folder mode `lrff-folder cull` writing `xmp:Rating`/`xmp:Label` to `--out`
 - [ ] Scorer trained on the user's own decisions; explanations per photo; "uncertain" bucket
 - [ ] Labeling UI + `lrff-eval cull` (agreement, rescued technically-weak keepers)
 

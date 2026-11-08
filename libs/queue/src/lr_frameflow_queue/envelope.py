@@ -18,7 +18,7 @@ class JobEnvelopeV1(BaseModel):
         Field(description="Frozen contract version marker"),
     ] = "job-envelope-v1"
     job_id: str = Field(description="UUID as string")
-    job_kind: Literal["train", "edit"]
+    job_kind: Literal["train", "edit", "cull"]
     attempt: Annotated[int, Field(ge=0)] = 0
     trace_context: dict[str, Any] = Field(default_factory=dict)
     payload: dict[str, Any] = Field(

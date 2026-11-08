@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lr-frameflow/job-cull-request-v1.schema.json",
+  "title": "CullJobRequestV1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "photo_ids"],
+  "properties": {
+    "schema_version": { "const": "cull-request-v1" },
+    "correlation_id": { "type": "string" },
+    "photo_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "format": "uuid" },
+      "description": "Photos to sort into keep / uncertain / reject. Those that already carry a decision (stars, pick/reject flag) teach the scorer the photographer's taste."
+    }
+  },
+  "description": "Servers are tolerant readers: unknown optional fields are ignored. New required fields need a new schema version."
+}

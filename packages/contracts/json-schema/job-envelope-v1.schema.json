@@ -15,7 +15,7 @@
     },
     "job_kind": {
       "type": "string",
-      "enum": ["train", "edit"]
+      "enum": ["train", "edit", "cull"]
     },
     "attempt": {
       "type": "integer",

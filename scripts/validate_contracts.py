@@ -37,6 +37,10 @@ def main() -> None:
             "examples/job-edit-request.example.json",
         ),
         (
+            "json-schema/job-cull-request-v1.schema.json",
+            "examples/job-cull-request.example.json",
+        ),
+        (
             "json-schema/photo-upload-v1.schema.json",
             "examples/photo-upload.example.json",
         ),

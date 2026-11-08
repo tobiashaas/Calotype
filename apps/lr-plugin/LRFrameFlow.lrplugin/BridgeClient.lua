@@ -120,6 +120,10 @@ function BridgeClient.queueEdit(body)
   return request("POST", "/v1/jobs/edit", body)
 end
 
+function BridgeClient.queueCull(body)
+  return request("POST", "/v1/jobs/cull", body)
+end
+
 function BridgeClient.job(jobId)
   return request("GET", "/v1/jobs/" .. jobId)
 end
