@@ -17,7 +17,7 @@ are handled by the Bridge ([ADR 004](../../docs/adr/004-bridge-localhost-archite
 | Menu item | What happens |
 |---|---|
 | Train profile from selected photos... | Asks for name, genre, color/B&W. Hands the photos (path + current develop settings as the learning target) to the Bridge and waits for training. At least 3 photos, only RAW **or** only JPEG/TIFF. |
-| Apply profile to selected photos... | Shows finished profiles, hands over the matching photos, waits and writes the predicted values with `photo:applyDevelopSettings` in **one** catalog step (Edit → Undo works). |
+| Apply profile to selected photos... | Shows finished profiles, hands over the matching photos, waits and writes the predicted values with `photo:applyDevelopSettings` in **one** catalog step (Edit → Undo works). Option *Straighten photos with clear lines*: levels photos with walls, door frames or a horizon (Lightroom crop keys, largest crop); photos you cropped or straightened yourself keep their crop. |
 | Bridge status... | Is the Bridge running? Is the server reachable? How many profiles are ready? |
 
 Cancel in the progress bar only stops the waiting — the Bridge keeps working.
@@ -47,4 +47,5 @@ luajit apps/lr-plugin/tests/run.lua
 - ✅ Plugin loads, finds `bridge.json` (`%APPDATA%\LRFrameFlow`), Bridge status shows server and profiles.
 - ✅ "Apply profile" on 45 Canon R6 photos: preview → Bridge → server → worker → `applyDevelopSettings`, look plausible.
 - 🐞 Fixed: Lightroom's Lua sandbox has no `os.getenv` (the tests now replicate this).
-- ⏳ Still to check: training from Lightroom, JPEG/TIFF (`IncrementalTemperature`), white balance "Custom" after applying, style profile with B&W.
+- ✅ Automated end-to-end tests in Lightroom 15.6 (`tools/lr_e2e/`): apply + restore, white balance "Custom", training from Lightroom, straighten (angle and crop arrive, own crops stay).
+- ⏳ Still to check: JPEG/TIFF (`IncrementalTemperature`), style profile with B&W.
