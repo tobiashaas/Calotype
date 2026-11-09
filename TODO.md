@@ -140,7 +140,8 @@ See `docs/adr/005-culling-architecture.md`.
 - [x] Bridge reads only the first 4 MB of a RAW when it holds a mid-size preview: 30/30 previews identical, CR3 from USB 650 → 237 ms per photo, ~85 % less data over a NAS
 - [x] Pooled base model from other shoots (offline, `tools/eval`): with 20 own photos R6 white balance 14 → 32 % within tolerance but exposure worse; 5D exposure 14 → 37 % — helps new users, mixed styles can hurt → per-user opt-in, not default
 - [ ] Re-run all Lightroom end-to-end tests under the renamed plugin (`Calotype.lrplugin` must be added once in the Plug-in Manager)
-- [ ] Training on the maintainer's own wedding archive (~10 years, finished selections, on a NAS): editing yes, culling no (rejects were deleted)
+- [x] `calotype-folder train` reads several folders, `--recursive` (skips `.lrdata`, `@eaDir`, `._*`) and `--catalogs` (edits straight from old `.lrcat` files, read-only); `--dry-run` counts first
+- [ ] Training on the maintainer's own wedding archive (2015–2019 on E:: 41,842 RAWs, 13,345 edited in 11 per-shoot catalogs; most 2017/18 shoots have neither XMP nor catalog → main catalog on the NAS?); hold-out by wedding running
 - [ ] License for the code (presets are CC0)
 
 ### Backlog / Nice-to-have

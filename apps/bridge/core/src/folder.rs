@@ -20,6 +20,13 @@ pub const RAW_EXTENSIONS: &[&str] = &[
 const SAMPLE: u64 = 1 << 20;
 
 pub fn is_raw(path: &Path) -> bool {
+    // "._x.CR2" are macOS metadata files (copies from a Mac or a NAS), not photos.
+    if path
+        .file_name()
+        .is_some_and(|n| n.to_string_lossy().starts_with("._"))
+    {
+        return false;
+    }
     path.extension()
         .and_then(|e| e.to_str())
         .is_some_and(|e| RAW_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()))
@@ -105,6 +112,87 @@ pub fn scan_with_sidecars(dir: &Path, sidecars: Option<&Path>) -> Result<Vec<Fol
     Ok(photos)
 }
 
+/// Lightroom catalogs (`*.lrcat`) directly in `dir` (macOS `._` copies skipped).
+pub fn catalogs_in(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut out: Vec<PathBuf> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.is_file()
+                && p.extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("lrcat"))
+                && !p
+                    .file_name()
+                    .is_some_and(|n| n.to_string_lossy().starts_with("._"))
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// Take develop settings and decisions from Lightroom catalogs: for each photo the nearest
+/// catalog above it that knows the file wins over the sidecar (the catalog is Lightroom's
+/// own state; sidecars may be older or missing). A photo the catalog lists as only imported
+/// or reset counts as not edited. Returns (photos found in a catalog, of them edited).
+pub fn apply_catalogs(
+    photos: &mut [FolderPhoto],
+    catalogs: &[(PathBuf, crate::catalog::Catalog)],
+) -> (usize, usize) {
+    let (mut found, mut edited) = (0, 0);
+    for photo in photos.iter_mut() {
+        // Nearest catalog first; one further up is asked when it does not know the file.
+        let mut near: Vec<_> = catalogs
+            .iter()
+            .filter(|(dir, _)| photo.path.starts_with(dir))
+            .collect();
+        near.sort_by_key(|(dir, _)| std::cmp::Reverse(dir.components().count()));
+        let entry = near.into_iter().find_map(|(_, c)| c.find(&photo.path));
+        let Some(entry) = entry else {
+            continue;
+        };
+        found += 1;
+        photo.settings = if entry.edited {
+            edited += 1;
+            entry.settings.clone()
+        } else {
+            Map::new()
+        };
+        for (k, v) in &entry.decisions {
+            photo.decisions.insert(k.clone(), v.clone());
+        }
+    }
+    (found, edited)
+}
+
+/// `root` and every folder below it, sorted. Skips what is not the photographer's photos:
+/// Lightroom's preview folders (`*.lrdata` — smart previews are DNG files), hidden folders
+/// (`.AppleDouble`, `.Trash`) and NAS metadata (`@eaDir`, `@tmp`).
+pub fn photo_dirs(root: &Path) -> Result<Vec<PathBuf>> {
+    let mut out = vec![root.to_path_buf()];
+    let mut i = 0;
+    while i < out.len() {
+        let dir = out[i].clone();
+        i += 1;
+        let entries =
+            std::fs::read_dir(&dir).with_context(|| format!("cannot read {}", dir.display()))?;
+        for entry in entries {
+            let path = entry?.path();
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
+            let skip = name.starts_with('.') || name.starts_with('@') || name.ends_with(".lrdata");
+            if !skip && path.is_dir() {
+                out.push(path);
+            }
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
 /// Write predicted settings next to the RAW: new sidecar, or update an existing one.
 pub fn write_result(
     photo: &FolderPhoto,
@@ -128,6 +216,48 @@ pub fn write_result(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn photo_dirs_skip_previews_and_metadata() {
+        let root = tempfile::tempdir().unwrap();
+        for d in [
+            "2015/Wedding A/Bilder",
+            "2015/Wedding A/Wedding A Smart Previews.lrdata/0",
+            "2015/Wedding A/.AppleDouble",
+            "2015/@eaDir",
+            "2016/Wedding B",
+        ] {
+            std::fs::create_dir_all(root.path().join(d)).unwrap();
+        }
+        let rel: Vec<String> = photo_dirs(root.path())
+            .unwrap()
+            .iter()
+            .map(|p| {
+                p.strip_prefix(root.path())
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect();
+        assert_eq!(
+            rel,
+            [
+                "",
+                "2015",
+                "2015/Wedding A",
+                "2015/Wedding A/Bilder",
+                "2016",
+                "2016/Wedding B"
+            ]
+        );
+    }
+
+    #[test]
+    fn mac_metadata_files_are_not_raws() {
+        assert!(is_raw(Path::new("IMG_1.CR2")));
+        assert!(!is_raw(Path::new("._IMG_1.CR2")));
+        assert!(!is_raw(Path::new("IMG_1.xmp")));
+    }
 
     #[test]
     fn id_is_stable_across_copies_and_differs_by_content() {

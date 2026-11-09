@@ -6,6 +6,7 @@
 
 pub mod api_client;
 pub mod automation;
+pub mod catalog;
 pub mod config;
 pub mod db;
 pub mod folder;

@@ -127,7 +127,8 @@ TODO.md                # Completed + open work items — keep up to date
 | `apps/bridge/core/src/preview.rs` | Unedited preview: smallest embedded RAW JPEG ≥ 1200 px (else largest) / original JPEG/TIFF, orientation applied; reads only the first 4 MB when the preview is there (CR3: 2.7x faster from USB, ~85 % less data over a NAS) |
 | `apps/lr-plugin/Calotype.lrplugin/BridgeClient.lua` | Plugin → Bridge HTTP, reads `bridge.json` |
 | `apps/bridge/core/src/xmp.rs` | Read/write Adobe `crs:` XMP sidecars (ProcessVersion 15.4, `calotype:Profile`) |
-| `apps/bridge/core/src/bin/folder.rs` | `calotype-folder train/apply/cull/profiles` — folder mode without Lightroom |
+| `apps/bridge/core/src/bin/folder.rs` | `calotype-folder train/apply/cull/profiles` — folder mode without Lightroom; `train --recursive --catalogs` reads whole archives |
+| `apps/bridge/core/src/catalog.rs` | Read-only Lightroom catalog reader (`.lrcat`): develop settings (Lua table → XMP-like values), ratings, "edited" = last history step neither import nor reset |
 | `libs/culling/src/calotype_culling/scoring.py` | Series + explainable baseline (keep/uncertain/reject with reasons) |
 | `libs/culling/src/calotype_culling/identity.py` | SFace face embeddings + grouping photos by person |
 | `libs/inference-pipeline/src/calotype_inference_pipeline/straighten.py` | Tilt from the photo's own lines (keystone-aware) + Lightroom crop keys |

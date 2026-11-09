@@ -58,6 +58,10 @@ calotype-folder train  <folder> --name "Business + Look" --style my-preset.xmp
 calotype-folder train  <folder> --name X --files-from train.txt
 calotype-folder apply  <folder> --profile X --files-from test.txt --out <output>
 
+# A whole archive (one folder per shoot); edits from the Lightroom catalogs next to the photos
+calotype-folder train  E:/2018 E:/2019 --recursive --catalogs --name "Weddings" --dry-run   # count first
+calotype-folder train  E:/2018 E:/2019 --recursive --catalogs --name "Weddings"
+
 # Edits exported from a catalog into another folder; straighten while applying
 calotype-folder train  <folder> --name X --sidecars <xmp-folder>
 calotype-folder apply  <folder> --profile X --straighten
@@ -67,6 +71,12 @@ calotype-folder cull   <folder> [--out <output>]
 ```
 
 - Training uses only RAWs whose XMP contains develop settings (`crs:Exposure2012` …).
+- `--recursive` reads every folder below the given ones and skips Lightroom's preview folders
+  (`*.lrdata` — smart previews are DNGs), hidden folders and NAS metadata (`@eaDir`, `._*`).
+- `--catalogs` reads Lightroom catalogs (`.lrcat`) next to or above the photos, read-only
+  (SQLite `immutable`: no lock, no journal). The nearest catalog that knows a file wins over its
+  sidecar; photos it lists as only imported (also with an import preset) or reset are left out.
+  Matched by file name below the catalog's folder — catalogs store paths of another computer.
 - `apply` skips photos that are already edited (your XMPs); `--force` updates only the
   `crs:` values in them and leaves stars, keywords etc. in place. New XMPs carry
   `crs:ProcessVersion="15.4"` and `calotype:Profile="…"`; `lrff:` / `tarsier:` attributes from

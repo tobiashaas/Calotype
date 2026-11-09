@@ -1,10 +1,16 @@
 //! Folder mode without Lightroom. Talks to the running Bridge like the plugin does.
 //!
-//!     calotype-folder train  <DIR> --name "Business Warm" [--genre business] [--color color]
+//!     calotype-folder train  <DIR>... --name "Business Warm" [--genre business] [--color color]
+//!                            [--recursive]
 //!     calotype-folder apply  <DIR> --profile "Business Warm" [--force] [--out <DIR>]
 //!     calotype-folder profiles
 //!
-//! train: edited RAWs (RAW + XMP with develop settings) are the training material.
+//! train: edited RAWs (RAW + XMP with develop settings) are the training material. Several
+//!        folders can be given; --recursive also reads every folder below them (an archive
+//!        with one folder per shoot), skipping Lightroom previews and NAS/macOS metadata.
+//! train --catalogs: take the edits from Lightroom catalogs (`.lrcat`) next to or above the
+//!        photos, read-only — for shoots whose edits never made it into XMP sidecars. Photos
+//!        the catalog lists as only imported (also with an import preset) are left out.
 //! apply: unedited RAWs get a new XMP sidecar; import the folder into Lightroom afterwards.
 //! train --style <preset.xmp>: a Lightroom preset as the profile's style layer — the model
 //!              predicts exposure/white balance/tone per photo, the preset adds the look.
@@ -44,7 +50,19 @@ struct Cli {
 enum Command {
     /// Train a profile from edited RAWs (those with an XMP sidecar holding develop settings).
     Train {
-        dir: PathBuf,
+        /// One or more folders with RAW + XMP.
+        #[arg(required = true)]
+        dirs: Vec<PathBuf>,
+        /// Also read every folder below the given ones (skips Lightroom previews, NAS metadata).
+        #[arg(long)]
+        recursive: bool,
+        /// Take edits and ratings from Lightroom catalogs (.lrcat) next to or above the photos
+        /// (read-only); they win over XMP sidecars.
+        #[arg(long)]
+        catalogs: bool,
+        /// Only count what would be trained; nothing is uploaded.
+        #[arg(long)]
+        dry_run: bool,
         #[arg(long)]
         name: String,
         #[arg(long, default_value = "other")]
@@ -376,9 +394,54 @@ fn scan_selected(dir: &Path, selection: Selection) -> Result<Vec<FolderPhoto>> {
     Ok(selected)
 }
 
+/// The folders to read: the given ones, with `recursive` also everything below them.
+fn expand_dirs(dirs: &[PathBuf], recursive: bool) -> Result<Vec<PathBuf>> {
+    let mut out = Vec::new();
+    for dir in dirs {
+        if recursive {
+            out.extend(folder::photo_dirs(dir)?);
+        } else {
+            out.push(dir.clone());
+        }
+    }
+    out.dedup();
+    Ok(out)
+}
+
+/// Lightroom catalogs in the given folders and every folder above them.
+fn find_catalogs(
+    dirs: &[PathBuf],
+) -> Result<Vec<(PathBuf, calotype_bridge_core::catalog::Catalog)>> {
+    let mut places: Vec<PathBuf> = Vec::new();
+    for dir in dirs {
+        let dir = std::path::absolute(dir).unwrap_or_else(|_| dir.clone());
+        for a in dir.ancestors() {
+            places.push(a.to_path_buf());
+        }
+    }
+    places.sort();
+    places.dedup();
+    let mut out = Vec::new();
+    for place in places {
+        for file in folder::catalogs_in(&place) {
+            match calotype_bridge_core::catalog::Catalog::open(&file) {
+                Ok(c) => {
+                    println!("catalog {}: {} photos", file.display(), c.len());
+                    out.push((place.clone(), c));
+                }
+                Err(e) => println!("catalog {} skipped: {e:#}", file.display()),
+            }
+        }
+    }
+    Ok(out)
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn train(
     bridge: &Bridge,
-    dir: &Path,
+    dirs: &[PathBuf],
+    catalogs: bool,
+    dry_run: bool,
     name: &str,
     genre: &str,
     color: &str,
@@ -402,14 +465,41 @@ async fn train(
         }
         None => None,
     };
-    let (edited, other): (Vec<_>, Vec<_>) = scan_selected(dir, selection)?
-        .into_iter()
-        .partition(FolderPhoto::is_edited);
+    if dirs.len() > 1 && selection.sidecars.is_some() {
+        bail!("--sidecars works with one folder only");
+    }
+    let mut photos = Vec::new();
+    for dir in dirs {
+        let found = scan_selected(dir, selection)?;
+        if dirs.len() > 1 && !found.is_empty() {
+            let edited = found.iter().filter(|p| p.is_edited()).count();
+            println!("{}: {edited} edited of {} RAWs", dir.display(), found.len());
+        }
+        photos.extend(found);
+    }
+    if catalogs {
+        let found = find_catalogs(dirs)?;
+        for p in &mut photos {
+            if let Ok(abs) = std::path::absolute(&p.path) {
+                p.path = abs;
+            }
+        }
+        let (known, edited) = folder::apply_catalogs(&mut photos, &found);
+        println!(
+            "{known} of {} RAWs found in a catalog, {edited} of them edited there",
+            photos.len()
+        );
+    }
+    let (edited, other): (Vec<_>, Vec<_>) = photos.into_iter().partition(FolderPhoto::is_edited);
     println!(
         "{} edited RAWs for training, {} without develop settings ignored",
         edited.len(),
         other.len()
     );
+    if dry_run {
+        println!("dry run: nothing uploaded");
+        return Ok(());
+    }
     if edited.len() < 3 {
         bail!("need at least 3 edited RAWs (RAW + XMP with develop settings)");
     }
@@ -561,7 +651,10 @@ async fn main() -> Result<()> {
     let bridge = Bridge::connect()?;
     match cli.command {
         Command::Train {
-            dir,
+            dirs,
+            recursive,
+            catalogs,
+            dry_run,
             name,
             genre,
             color,
@@ -571,7 +664,9 @@ async fn main() -> Result<()> {
         } => {
             train(
                 &bridge,
-                &dir,
+                &expand_dirs(&dirs, recursive)?,
+                catalogs,
+                dry_run,
                 &name,
                 &genre,
                 &color,
