@@ -141,7 +141,10 @@ See `docs/adr/005-culling-architecture.md`.
 - [x] Pooled base model from other shoots (offline, `tools/eval`): with 20 own photos R6 white balance 14 → 32 % within tolerance but exposure worse; 5D exposure 14 → 37 % — helps new users, mixed styles can hurt → per-user opt-in, not default
 - [ ] Re-run all Lightroom end-to-end tests under the renamed plugin (`Calotype.lrplugin` must be added once in the Plug-in Manager)
 - [x] `calotype-folder train` reads several folders, `--recursive` (skips `.lrdata`, `@eaDir`, `._*`) and `--catalogs` (edits straight from old `.lrcat` files, read-only); `--dry-run` counts first
-- [ ] Training on the maintainer's own wedding archive (2015–2019 on E:: 41,842 RAWs, 13,345 edited in 11 per-shoot catalogs; most 2017/18 shoots have neither XMP nor catalog → main catalog on the NAS?); hold-out by wedding running
+- [x] Hold-out by wedding on the maintainer's archive (2026-11-09; trained on 10,154 photos of 8 weddings, scored on 3 unseen weddings, 3,192 photos, truth from their catalogs): the model alone does not transfer — exposure ±0.15 EV 27 %, temperature ±150 K 21 %, all sliders 1 %. The look (contrast, blacks, saturation …) is synced per wedding and cannot be guessed. **Calibrating on k edited photos of the same wedding** (pred = mean_k(truth) + β·(model − mean_k(model)), β from the k photos) brings the look sliders to 95–100 % with k = 5 (contrast 49 % on one wedding), exposure 40–54 %, all sliders 3–6 % (2019) / 33 % (2015). Temperature stays at 13–20 % on 2019 weddings (white balance varied per scene) → as-shot-relative target
+- [ ] **Shoot calibration** (next): edit request gets optional `reference_photo_ids` (already edited photos of the same shoot); inference fits offset + β per slider from them; plugin option "learn from the edited photos in this selection", folder mode `apply --reference <dir>`
+- [ ] Final wedding profile on all 13,345 photos (`train E:/2015 … E:/2019 --recursive --catalogs`) — stopped once when the machine ran out of memory
+- [ ] Wedding archive: most 2017/18 shoots have neither XMP nor catalog on E: (disk full during the copy; one truncated CR2) → copy their `.lrcat` files from the NAS
 - [ ] License for the code (presets are CC0)
 
 ### Backlog / Nice-to-have
