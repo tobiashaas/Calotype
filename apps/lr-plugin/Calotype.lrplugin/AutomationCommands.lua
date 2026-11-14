@@ -169,7 +169,8 @@ function Commands.apply(catalog, args)
   local photos, missing = photosByUuid(catalog, args.uuids)
   local progress = progressScope(profile.name)
   local ok, r = pcall(Actions.apply, catalog, photos, profile, progress,
-    { straighten = args.straighten == true, retouch = args.retouch })
+    { straighten = args.straighten == true, retouch = args.retouch,
+      learnFromEdits = args.learn_from_edits == true })
   progress:done()
   if not ok then error(r) end
   local out = plain(r)

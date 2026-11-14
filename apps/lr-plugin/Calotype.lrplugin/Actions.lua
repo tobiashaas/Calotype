@@ -105,7 +105,9 @@ local function hasOwnCrop(photo)
 end
 
 --- Apply `profile` to `photos`. options.straighten: also level photos with clear lines;
--- options.retouch: ids of Lightroom AI-mask retouches to add (see Retouch.lua).
+-- options.retouch: ids of Lightroom AI-mask retouches to add (see Retouch.lua);
+-- options.learnFromEdits: photos of the selection already edited set the shoot's look and
+-- stay as they are.
 function Actions.apply(catalog, photos, profile, progress, options)
   options = options or {}
   -- Only photos of the profile's file type: RAW white balance (Kelvin) and JPEG
@@ -135,6 +137,7 @@ function Actions.apply(catalog, photos, profile, progress, options)
     profile_id = profile.profile_id,
     lr_catalog_uuids = reg.uuids,
     straighten = options.straighten or nil,   -- only sent when asked (older Bridges)
+    learn_from_edits = options.learnFromEdits or nil,
   }
   if not job then return result(false, "Calotype", jobErr) end
   Log.info("edit job %s queued with %d photos", job.job_id, #reg.uuids)
@@ -215,7 +218,10 @@ function Actions.apply(catalog, photos, profile, progress, options)
     end
     notes[#notes + 1] = LOC("$$$/Calotype/Retouch/Snapshot/Hint=The original is kept as the snapshot \"^1\".", Retouch.SNAPSHOT)
   end
-  if applied < #reg.uuids then
+  if applied < #reg.uuids and options.learnFromEdits then
+    notes[#notes + 1] = LOC("$$$/Calotype/Apply/Examples=^1 photos stayed as they are: your edited photos set the look (or a photo had no usable preview).",
+      #reg.uuids - applied)
+  elseif applied < #reg.uuids then
     notes[#notes + 1] = LOC("$$$/Calotype/Apply/NoResult=^1 photos got no result (no usable preview).", #reg.uuids - applied)
   end
   if straightened > 0 then

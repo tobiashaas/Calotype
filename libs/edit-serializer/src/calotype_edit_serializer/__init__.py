@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 
+from calotype_edit_serializer.edits import edit_signature, edited_photos
 from calotype_edit_serializer.style import PHOTO_DEPENDENT, apply_style, is_style_key, style_settings
 from calotype_edit_serializer.sliders import (
     FormatType,
@@ -14,6 +15,8 @@ from calotype_edit_serializer.sliders import (
 __all__ = [
     "PHOTO_DEPENDENT",
     "apply_style",
+    "edit_signature",
+    "edited_photos",
     "is_style_key",
     "style_settings",
     "FormatType",

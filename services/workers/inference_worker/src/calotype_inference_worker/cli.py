@@ -13,9 +13,10 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.orm import sessionmaker
 
-from calotype_edit_serializer import apply_style, serialize_for_lightroom
+from calotype_edit_serializer import apply_style, edited_photos, from_lightroom, serialize_for_lightroom
 from calotype_domain.jobs import JobStatus
 from calotype_inference_pipeline import artifact_feature_version, run_inference
+from calotype_inference_pipeline.shoot import calibrate
 from calotype_inference_pipeline.straighten import MIN_LINES, crop_settings
 from calotype_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
 from calotype_persistence.repositories.edit_results import EditResultRepository
@@ -54,6 +55,40 @@ def straighten_settings(analysis: dict | None) -> dict:
     return crop_settings(angle, max(size), min(size))
 
 
+def calibrate_to_shoot(
+    predictions: dict[UUID, dict[str, float]],
+    vectors: dict[UUID, list[float]],
+    settings: dict[UUID, dict],
+    photo_ids: list[UUID],
+    format_type: str,
+    job_uuid: UUID,
+) -> list[UUID]:
+    """Learn the shoot's look from the photos already edited in the selection.
+
+    Rewrites ``predictions`` of the other photos in place and returns them (the photos to
+    edit); the edited photos are examples only and keep the photographer's settings. Without
+    edited photos (or nothing left to edit) every prediction stays as the profile made it.
+    """
+    edited = dict(zip(photo_ids, edited_photos([settings[p] for p in photo_ids], format_type)))
+    refs = [p for p in predictions if edited[p]]
+    rest = [p for p in predictions if not edited[p]]
+    if not refs or not rest:
+        log.info("no shoot calibration (examples=%d, to edit=%d) job_id=%s", len(refs), len(rest), job_uuid)
+        return list(predictions)
+    calibrated, methods = calibrate(
+        [from_lightroom(settings[p], format_type) for p in refs],
+        [predictions[p] for p in refs],
+        [vectors[p] for p in refs],
+        [predictions[p] for p in rest],
+        [vectors[p] for p in rest],
+    )
+    for p, values in zip(rest, calibrated):
+        predictions[p] = values
+    log.info("shoot calibration from %d edited photos, %d to edit, methods %s job_id=%s",
+             len(refs), len(rest), methods, job_uuid)
+    return rest
+
+
 def process_one(redis: Redis, factory: sessionmaker) -> bool:
     envelope, raw = consumer.blpop_envelope(redis, QUEUE_INFERENCE, timeout_seconds=5)
     if envelope is None and raw is None:
@@ -70,6 +105,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
     profile_id_str = envelope.payload.get("profile_id")
     photo_ids = [UUID(pid) for pid in envelope.payload.get("photo_ids", [])]
     straighten = bool(envelope.payload.get("straighten"))
+    learn_from_edits = bool(envelope.payload.get("learn_from_edits"))
     set_request_id(envelope.trace_context.get("request_id", ""))
 
     try:
@@ -99,18 +135,31 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         # The model was trained on one feature version; use exactly that one.
         feature_version = artifact_feature_version(model_bytes)
 
-        # Run inference for each photo; photos without features (no usable preview) get no result.
+        # Model prediction per photo; photos without features (no usable preview) get no result.
+        predictions: dict[UUID, dict[str, float]] = {}
+        vectors: dict[UUID, list[float]] = {}
+        settings: dict[UUID, dict] = {}
         for photo_id in photo_ids:
             with session_scope(factory) as session:
                 JobRepository.touch(session, job_uuid)
+                photo = PhotoRepository.get_by_id(session, photo_id)
+                settings[photo_id] = dict(photo.lr_develop_settings or {}) if photo else {}
                 fv = FeatureVectorRepository.get_by_photo_id(session, photo_id, feature_version)
                 if fv is None:
                     log.warning("no %s feature vector, skipping photo_id=%s job_id=%s",
                                 feature_version, photo_id, job_uuid)
                     continue
+                vectors[photo_id] = list(fv.vector)
+                predictions[photo_id] = run_inference(model_bytes, vectors[photo_id])
 
-                prediction = run_inference(model_bytes, list(fv.vector))
-                lr_settings = apply_style(serialize_for_lightroom(prediction, format_type), base_preset)
+        targets = list(predictions)
+        if learn_from_edits:
+            targets = calibrate_to_shoot(predictions, vectors, settings, photo_ids, format_type, job_uuid)
+
+        for photo_id in targets:
+            with session_scope(factory) as session:
+                JobRepository.touch(session, job_uuid)
+                lr_settings = apply_style(serialize_for_lightroom(predictions[photo_id], format_type), base_preset)
                 if straighten:
                     photo = PhotoRepository.get_by_id(session, photo_id)
                     lr_settings.update(straighten_settings(photo.analysis if photo else None))

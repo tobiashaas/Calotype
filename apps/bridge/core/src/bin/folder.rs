@@ -18,6 +18,8 @@
 //! train --sidecars <dir>: read the XMPs from another folder (e.g. edits exported from a
 //!              catalog) — the RAW folder stays untouched.
 //! apply --straighten: also level photos with clear reference lines (own crops stay).
+//! apply --learn-from-edits: the RAWs of the folder you already edited set the shoot's look;
+//!        the others are edited from it (those edits stay untouched).
 //! cull: keep / check / sort out as color label (green / yellow / red) + reason in the sidecar;
 //!       sidecars with stars or a red/purple label teach the scorer.
 //! --out <dir>: write sidecars there instead of next to the RAWs (read-only cards,
@@ -97,6 +99,9 @@ enum Command {
         /// Also level photos with clear reference lines (sidecars with an own crop keep it).
         #[arg(long)]
         straighten: bool,
+        /// Learn the shoot's look from the RAWs here you already edited (they stay untouched).
+        #[arg(long)]
+        learn_from_edits: bool,
     },
     /// Sort RAWs into keep / check / sort out: color label (green / yellow / red) and the
     /// reason in the sidecar. Stars and edits stay; sidecars with stars or a red/purple label
@@ -338,6 +343,11 @@ const CROP_KEYS: &[&str] = &[
     "HasCrop",
 ];
 
+/// Sidecar written by an earlier `apply`: our own prediction, not an example of the look.
+fn written_by_calotype(photo: &FolderPhoto) -> bool {
+    std::fs::read_to_string(&photo.sidecar).is_ok_and(|x| x.contains("calotype:Profile=\""))
+}
+
 /// The sidecar already holds a crop or straighten of its own: keep it.
 fn has_own_crop(settings: &Map<String, Value>) -> bool {
     let num = |k: &str, default: f64| {
@@ -547,6 +557,7 @@ async fn find_profile(bridge: &Bridge, wanted: &str) -> Result<Value> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn apply(
     bridge: &Bridge,
     dir: &Path,
@@ -555,22 +566,28 @@ async fn apply(
     files_from: Option<&Path>,
     out: Option<&Path>,
     straighten: bool,
+    learn_from_edits: bool,
 ) -> Result<()> {
     let profile = find_profile(bridge, wanted).await?;
     if profile["format_type"] != "raw" {
         bail!("folder mode writes RAW sidecars; this profile is for JPEG/TIFF");
     }
     let name = profile["name"].as_str().unwrap_or(wanted).to_string();
-    // With --out nothing next to the RAWs is overwritten, so existing edits do not block.
-    let (todo, edited): (Vec<_>, Vec<_>) = scan_selected(
+    let scanned = scan_selected(
         dir,
         Selection {
             files_from,
             sidecars: None,
         },
-    )?
-    .into_iter()
-    .partition(|p| force || out.is_some() || !p.is_edited());
+    )?;
+    // --learn-from-edits: the photographer's own edits are examples (never overwritten).
+    let (examples, scanned): (Vec<_>, Vec<_>) = scanned
+        .into_iter()
+        .partition(|p| learn_from_edits && p.is_edited() && !written_by_calotype(p));
+    // With --out nothing next to the RAWs is overwritten, so existing edits do not block.
+    let (todo, edited): (Vec<_>, Vec<_>) = scanned
+        .into_iter()
+        .partition(|p| force || out.is_some() || !p.is_edited());
     if let Some(out) = out {
         std::fs::create_dir_all(out)?;
     }
@@ -579,18 +596,25 @@ async fn apply(
         todo.len(),
         edited.len()
     );
+    if learn_from_edits {
+        println!("{} edited RAWs set the shoot's look", examples.len());
+    }
     if todo.is_empty() {
         return Ok(());
     }
     let by_id = bridge.register(todo, false).await?;
+    let mut uuids: Vec<&String> = by_id.keys().collect();
+    let example_ids = bridge.register(examples, true).await?;
+    uuids.extend(example_ids.keys());
     let job = bridge
         .post(
             "/v1/jobs/edit",
             &json!({
                 "schema_version": "bridge-edit-v1",
                 "profile_id": profile["profile_id"],
-                "lr_catalog_uuids": by_id.keys().collect::<Vec<_>>(),
+                "lr_catalog_uuids": uuids,
                 "straighten": straighten,
+                "learn_from_edits": learn_from_edits,
             }),
         )
         .await?;
@@ -685,6 +709,7 @@ async fn main() -> Result<()> {
             files_from,
             out,
             straighten,
+            learn_from_edits,
         } => {
             apply(
                 &bridge,
@@ -694,6 +719,7 @@ async fn main() -> Result<()> {
                 files_from.as_deref(),
                 out.as_deref(),
                 straighten,
+                learn_from_edits,
             )
             .await
         }

@@ -20,6 +20,7 @@ local function askForProfile(context, items, count)
   props.profileId = items[1].value
   local prefs = LrPrefs.prefsForPlugin()
   props.straighten = prefs.straighten == true
+  props.learnFromEdits = prefs.learnFromEdits == true
   for _, item in ipairs(Retouch.ITEMS) do props["retouch_" .. item.id] = prefs["retouch_" .. item.id] == true end
   local checks = {}
   for _, item in ipairs(Retouch.ITEMS) do
@@ -36,6 +37,13 @@ local function askForProfile(context, items, count)
         value = LrView.bind "straighten",
         title = LOC "$$$/Calotype/Apply/Straighten=Straighten photos with clear lines (your own crops stay)",
       },
+      f:checkbox {
+        value = LrView.bind "learnFromEdits",
+        title = LOC "$$$/Calotype/Apply/LearnFromEdits=Learn this shoot's look from the photos in the selection you already edited",
+      },
+      f:static_text {
+        title = LOC "$$$/Calotype/Apply/LearnFromEditsHint=Edit about 20 typical photos first; they stay as they are.",
+      },
       f:group_box {
         title = LOC "$$$/Calotype/Retouch/Box=Retouch with Lightroom AI masks",
         fill_horizontal = 1,
@@ -47,6 +55,7 @@ local function askForProfile(context, items, count)
   }
   if answer ~= "ok" then return nil end
   prefs.straighten = props.straighten
+  prefs.learnFromEdits = props.learnFromEdits
   local retouch = {}
   for _, item in ipairs(Retouch.ITEMS) do
     prefs["retouch_" .. item.id] = props["retouch_" .. item.id]
@@ -54,7 +63,8 @@ local function askForProfile(context, items, count)
   end
   for _, item in ipairs(items) do
     if item.value == props.profileId then
-      return item.profile, { straighten = props.straighten, retouch = retouch }
+      return item.profile, { straighten = props.straighten, retouch = retouch,
+        learnFromEdits = props.learnFromEdits }
     end
   end
   return nil

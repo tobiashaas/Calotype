@@ -310,6 +310,10 @@ components:
           type: boolean
           default: false
           description: Level photos with clear reference lines (result carries Lightroom crop keys).
+        learn_from_edits:
+          type: boolean
+          default: false
+          description: Photos among photo_ids the photographer already edited set the shoot's look; they get no result.
         photo_ids:
           type: array
           minItems: 1

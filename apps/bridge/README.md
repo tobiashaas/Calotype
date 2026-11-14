@@ -66,6 +66,9 @@ calotype-folder train  E:/2018 E:/2019 --recursive --catalogs --name "Weddings"
 calotype-folder train  <folder> --name X --sidecars <xmp-folder>
 calotype-folder apply  <folder> --profile X --straighten
 
+# Edit ~20 typical photos of the shoot yourself first: they set the look, the rest follows
+calotype-folder apply  <folder> --profile X --learn-from-edits
+
 # Culling: color label green / yellow / red + calotype:Cull / calotype:CullReason in the sidecar
 calotype-folder cull   <folder> [--out <output>]
 ```
@@ -75,7 +78,8 @@ calotype-folder cull   <folder> [--out <output>]
   (`*.lrdata` — smart previews are DNGs), hidden folders and NAS metadata (`@eaDir`, `._*`).
 - `--catalogs` reads Lightroom catalogs (`.lrcat`) next to or above the photos, read-only
   (SQLite `immutable`: no lock, no journal). The nearest catalog that knows a file wins over its
-  sidecar; photos it lists as only imported (also with an import preset) or reset are left out.
+  sidecar; photos it lists as only imported (also with an import preset) or reset are left out
+  (export steps in the history do not count as edits).
   Matched by file name below the catalog's folder — catalogs store paths of another computer.
 - `apply` skips photos that are already edited (your XMPs); `--force` updates only the
   `crs:` values in them and leaves stars, keywords etc. in place. New XMPs carry

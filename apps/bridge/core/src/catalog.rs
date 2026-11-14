@@ -149,11 +149,15 @@ fn read_photos(conn: &Connection) -> Result<Vec<CatalogPhoto>> {
     Ok(out)
 }
 
-/// Name of the newest develop history step per image.
+/// Name of the newest develop history step per image, exports left out: Lightroom logs every
+/// export ("Exportieren - PicDrop FTP Upload (date)") as a step without changing anything, so
+/// an imported-and-exported photo would look edited (found in a client job: 1,129 of 1,264
+/// "edited" photos were only exported).
 fn last_history_steps(conn: &Connection) -> Result<HashMap<i64, String>> {
     let mut stmt = conn.prepare(
         "SELECT h.image, h.name FROM Adobe_libraryImageDevelopHistoryStep h
          JOIN (SELECT image, MAX(id_local) AS last FROM Adobe_libraryImageDevelopHistoryStep
+               WHERE name IS NULL OR lower(name) NOT LIKE 'export%'
                GROUP BY image) x ON x.last = h.id_local",
     )?;
     let rows = stmt.query_map([], |r| {
@@ -422,7 +426,8 @@ mod tests {
                 (1, 100, 'Importieren (1.1.19)'), (2, 100, 'Belichtung'),
                 (3, 101, 'Importieren (1.1.19)'),
                 (4, 102, 'Belichtung'), (5, 102, 'Einstellungen zurücksetzen'),
-                (6, 103, 'Belichtung');
+                (6, 103, 'Belichtung'),
+                (7, 101, 'Exportieren - Festplatte (2.1.19)'), (8, 100, 'Export - Hard Drive (1/2/19)');
             "#,
         )
         .unwrap();
@@ -443,7 +448,8 @@ mod tests {
         assert_eq!(a.decisions["pick_status"], Value::from(1));
         assert_eq!(a.decisions["color_label"], Value::from("grün"));
 
-        // Only imported (maybe with an import preset): not the photographer's edit.
+        // Only imported (maybe with an import preset) and exported: not the photographer's edit;
+        // an export after real edits keeps the photo edited (A-0001).
         assert!(!cat.find(Path::new("A-0002.CR2")).unwrap().edited);
         // Same name in two folders: the folder decides; reset photos are not edited.
         let reset = cat.find(Path::new("E:/x/Fotos/IMG_1.CR2")).unwrap();

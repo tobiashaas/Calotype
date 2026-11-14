@@ -182,6 +182,9 @@ struct EditReq {
     collection_name: Option<String>,
     #[serde(default)]
     straighten: bool,
+    /// Already edited photos of the selection set the shoot's look (and get no result).
+    #[serde(default)]
+    learn_from_edits: bool,
     lr_catalog_uuids: Vec<String>,
 }
 
@@ -275,6 +278,7 @@ async fn queue_edit(State(state): State<Shared>, Json(body): Json<Value>) -> Res
         "profile_id": req.profile_id.to_string(),
         "collection_name": req.collection_name,
         "straighten": req.straighten,
+        "learn_from_edits": req.learn_from_edits,
     });
     accept_job(&state, "edit", request, &uuids)
 }
