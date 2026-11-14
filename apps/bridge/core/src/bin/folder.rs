@@ -203,6 +203,10 @@ impl Bridge {
                     "file_path": path.display().to_string(),
                     "lr_develop_settings": settings,
                     "lr_metadata": photo.decisions,
+                    // Capture time: lets the shoot calibration follow series of the same scene.
+                    "exif_snapshot": json!({
+                        "date_time_original": calotype_bridge_core::preview::capture_time(&photo.path),
+                    }),
                 }),
             )
             .await

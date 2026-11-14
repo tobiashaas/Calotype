@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+from datetime import datetime
 from uuid import UUID, uuid4
 
 import boto3
@@ -55,6 +56,20 @@ def straighten_settings(analysis: dict | None) -> dict:
     return crop_settings(angle, max(size), min(size))
 
 
+def capture_time(exif: dict | None) -> float | None:
+    """Seconds of the capture time (`date_time_original`, ISO 8601) — None if unknown.
+
+    Only differences within one shoot matter, so a time zone offset is ignored.
+    """
+    raw = (exif or {}).get("date_time_original")
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw[:19]).timestamp()
+    except ValueError:
+        return None
+
+
 def calibrate_to_shoot(
     predictions: dict[UUID, dict[str, float]],
     vectors: dict[UUID, list[float]],
@@ -62,12 +77,15 @@ def calibrate_to_shoot(
     photo_ids: list[UUID],
     format_type: str,
     job_uuid: UUID,
+    times: dict[UUID, float | None] | None = None,
 ) -> list[UUID]:
     """Learn the shoot's look from the photos already edited in the selection.
 
     Rewrites ``predictions`` of the other photos in place and returns them (the photos to
     edit); the edited photos are examples only and keep the photographer's settings. Without
     edited photos (or nothing left to edit) every prediction stays as the profile made it.
+    With capture times for all photos, the closest edited photo in time is one more candidate
+    (series of the same scene).
     """
     edited = dict(zip(photo_ids, edited_photos([settings[p] for p in photo_ids], format_type)))
     refs = [p for p in predictions if edited[p]]
@@ -75,17 +93,21 @@ def calibrate_to_shoot(
     if not refs or not rest:
         log.info("no shoot calibration (examples=%d, to edit=%d) job_id=%s", len(refs), len(rest), job_uuid)
         return list(predictions)
+    times = times or {}
+    timed = all(times.get(p) is not None for p in refs + rest)
     calibrated, methods = calibrate(
         [from_lightroom(settings[p], format_type) for p in refs],
         [predictions[p] for p in refs],
         [vectors[p] for p in refs],
         [predictions[p] for p in rest],
         [vectors[p] for p in rest],
+        [times[p] for p in refs] if timed else None,
+        [times[p] for p in rest] if timed else None,
     )
     for p, values in zip(rest, calibrated):
         predictions[p] = values
-    log.info("shoot calibration from %d edited photos, %d to edit, methods %s job_id=%s",
-             len(refs), len(rest), methods, job_uuid)
+    log.info("shoot calibration from %d edited photos, %d to edit, capture times %s, methods %s job_id=%s",
+             len(refs), len(rest), timed, methods, job_uuid)
     return rest
 
 
@@ -139,11 +161,13 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         predictions: dict[UUID, dict[str, float]] = {}
         vectors: dict[UUID, list[float]] = {}
         settings: dict[UUID, dict] = {}
+        times: dict[UUID, float | None] = {}
         for photo_id in photo_ids:
             with session_scope(factory) as session:
                 JobRepository.touch(session, job_uuid)
                 photo = PhotoRepository.get_by_id(session, photo_id)
                 settings[photo_id] = dict(photo.lr_develop_settings or {}) if photo else {}
+                times[photo_id] = capture_time(photo.exif_snapshot if photo else None)
                 fv = FeatureVectorRepository.get_by_photo_id(session, photo_id, feature_version)
                 if fv is None:
                     log.warning("no %s feature vector, skipping photo_id=%s job_id=%s",
@@ -154,7 +178,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
 
         targets = list(predictions)
         if learn_from_edits:
-            targets = calibrate_to_shoot(predictions, vectors, settings, photo_ids, format_type, job_uuid)
+            targets = calibrate_to_shoot(predictions, vectors, settings, photo_ids, format_type, job_uuid, times)
 
         for photo_id in targets:
             with session_scope(factory) as session:

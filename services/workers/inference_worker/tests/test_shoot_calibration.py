@@ -38,3 +38,26 @@ def test_photos_without_features_are_neither_examples_nor_targets():
     targets = calibrate_to_shoot(predictions, vectors, settings, ids, "raw", uuid4())
     assert targets == [ids[2]]
     assert predictions[ids[2]]["exposure"] == 0.7
+
+
+def test_capture_time_from_lightroom_and_folder_mode():
+    from calotype_inference_worker.cli import capture_time
+
+    a = capture_time({"date_time_original": "2022-03-19T14:05:33"})
+    b = capture_time({"date_time_original": "2022-03-19T14:05:43.25+01:00"})
+    assert b - a == 10
+    assert capture_time({}) is None and capture_time(None) is None
+    assert capture_time({"date_time_original": "garbage"}) is None
+
+
+def test_series_follows_the_closest_edited_photo_in_time():
+    ids, settings, predictions, vectors = _job([0.0] * 10, untouched=2)
+    # Two scenes: examples 0-4 in the morning (exposure 0.2), 5-9 in the evening (1.2).
+    for i, p in enumerate(ids[:10]):
+        settings[p]["Exposure2012"] = 0.2 if i < 5 else 1.2
+    times = {p: (i % 5 if i < 5 else 36000 + i) for i, p in enumerate(ids[:10])}
+    times[ids[10]], times[ids[11]] = 2.5, 36007.5
+    targets = calibrate_to_shoot(predictions, vectors, settings, ids, "raw", uuid4(), times)
+    assert targets == ids[10:]
+    assert predictions[ids[10]]["exposure"] == 0.2
+    assert predictions[ids[11]]["exposure"] == 1.2
