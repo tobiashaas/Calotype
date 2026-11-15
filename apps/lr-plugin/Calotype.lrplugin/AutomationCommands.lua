@@ -338,6 +338,29 @@ function Commands.mask_probe(catalog, args)
   return out
 end
 
+--- Give photos our AI masks with set strengths (test setup for learned mask strengths):
+-- args.uuids, args.strengths = {subject = {LocalShadows2012 = 0.25, …}}. The same steps as an
+-- apply with learned strengths: preset, detection, then the values.
+function Commands.set_mask_strength(catalog, args)
+  local Retouch = require "Retouch"
+  local photos = photosByUuid(catalog, args.uuids)
+  local presets = Retouch.findPresets()
+  local ids = Retouch.idsFor({}, args.strengths)
+  catalog:withWriteAccessDo("Calotype automation: prepare masks", function()
+    for _, photo in ipairs(photos) do Retouch.prepare(photo) end
+  end, { timeout = 60 })
+  local added = 0
+  catalog:withWriteAccessDo("Calotype automation: add masks", function()
+    for _, photo in ipairs(photos) do added = added + Retouch.apply(photo, presets, ids) end
+  end, { timeout = 60 })
+  local found, removed = Retouch.finish(catalog, photos)
+  local set = 0
+  catalog:withWriteAccessDo("Calotype automation: mask strengths", function()
+    for _, photo in ipairs(photos) do set = set + Retouch.setStrengths(photo, args.strengths) end
+  end, { timeout = 60 })
+  return Json.object({ added = added, found = found, removed = removed, set = set })
+end
+
 --- Remove a culling collection set made by Commands.cull (test cleanup). Only sets directly
 -- inside "Calotype" whose name is given exactly; photos themselves are never touched.
 function Commands.remove_cull_set(catalog, args)

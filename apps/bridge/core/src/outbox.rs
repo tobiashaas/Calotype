@@ -306,7 +306,14 @@ fn map_results(
         .into_iter()
         .filter_map(|r| {
             let uuid = by_remote.get(&r.photo_id)?;
-            Some(json!({ "lr_catalog_uuid": uuid, "lr_settings": r.lr_settings }))
+            let mut out = json!({ "lr_catalog_uuid": uuid, "lr_settings": r.lr_settings });
+            if let Some(retouch) = r
+                .retouch
+                .filter(|v| v.as_object().is_some_and(|m| !m.is_empty()))
+            {
+                out["retouch"] = retouch;
+            }
+            Some(out)
         })
         .collect();
     Ok(Value::Array(mapped))

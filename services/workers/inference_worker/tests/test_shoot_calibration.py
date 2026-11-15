@@ -89,3 +89,18 @@ def test_the_shoots_look_comes_from_the_edited_photos():
     look = examples_look(predictions, targets, settings)
     assert look == {"Glow": 45, "GlowStyle": 2, "ColorGradeMidtoneHue": 30}
     assert examples_look(predictions, list(predictions), settings) == {}   # no examples, no look
+
+
+def test_the_shoots_mask_strengths_come_from_the_edited_photos():
+    from calotype_inference_worker.cli import examples_masks
+
+    ids, settings, predictions, vectors = _job([0.5, 0.7, 0.6], untouched=2)
+    subject = {"What": "Mask/Image", "MaskSubType": 1, "MaskBlendMode": 0}
+    for p, shadows in zip(ids[:3], [0.1, 0.2, 0.3]):
+        settings[p]["MaskGroupBasedCorrections"] = [
+            {"CorrectionAmount": 1, "CorrectionMasks": [subject], "LocalShadows2012": shadows}]
+    # an untouched photo with a mask is no example
+    settings[ids[3]]["MaskGroupBasedCorrections"] = [
+        {"CorrectionAmount": 1, "CorrectionMasks": [subject], "LocalShadows2012": -0.9}]
+    targets = calibrate_to_shoot(predictions, vectors, settings, ids, "raw", uuid4())
+    assert examples_masks(predictions, targets, settings) == {"subject": {"LocalShadows2012": 0.2}}

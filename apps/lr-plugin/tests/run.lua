@@ -652,6 +652,64 @@ test("retouch: masks added, empty ones removed, snapshot kept, re-apply replaces
   eq(#snapshots, 1, "one snapshot of the original")
 end)
 
+test("apply with learned mask strengths: their masks are added, detected, then get the values", function()
+  local Commands = require "AutomationCommands"
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  local function preset(id)
+    return { getSetting = function() return { MaskGroupBasedCorrections = {
+      { CorrectionName = "Calotype " .. id, LocalShadows2012 = 0.12, LocalClarity2012 = 0.04,
+        CorrectionMasks = { { What = "Mask/Image" } } } } } end }
+  end
+  sdk.LrApplication.developPresetFolders = function()
+    return { { getDevelopPresets = function() return { preset("subject"), preset("sky") } end } }
+  end
+  local photo = fakePhoto("a", "RAW")
+  local settings = { Exposure2012 = 0, MaskGroupBasedCorrections = {} }
+  local order = {}
+  photo.getDevelopSettings = function() return settings end
+  photo.applyDevelopSettings = function(_, s)
+    if s.MaskGroupBasedCorrections then
+      order[#order + 1] = "values"
+      for _, g in ipairs(s.MaskGroupBasedCorrections) do
+        assert(g.CorrectionMasks[1].MaskDigest, "values only on detected masks")
+      end
+    end
+    for k, v in pairs(s) do settings[k] = v end
+  end
+  photo.applyDevelopPreset = function(_, p)
+    order[#order + 1] = "preset"
+    local g = p:getSetting().MaskGroupBasedCorrections[1]
+    local copy = {}
+    for k, v in pairs(g) do copy[k] = v end
+    copy.CorrectionMasks = { { What = "Mask/Image" } }
+    table.insert(settings.MaskGroupBasedCorrections, copy)
+  end
+  photo.updateAISettings = function()
+    order[#order + 1] = "detect"
+    for _, g in ipairs(settings.MaskGroupBasedCorrections) do g.CorrectionMasks[1].MaskDigest = "D" end
+  end
+  photo.getDevelopSnapshots = function() return {} end
+  local catalog = fakeCatalog({ photo })
+  respond(200, { { profile_id = "p1", name = "Test", genre = "event", format_type = "raw", status = "ready", version = 1 } })
+  respond(202, { status = "pending" })
+  respond(202, { job_id = "j1", status = "waiting_for_photos" })
+  respond(200, { job_id = "j1", status = "completed", results = {
+    { lr_catalog_uuid = "a", lr_settings = { Exposure2012 = 0.3 },
+      retouch = { subject = { LocalShadows2012 = 0.16, LocalHighlights2012 = -0.18 } } },
+  } })
+  local ok, r = Commands.run(catalog, { command = "apply", args = { profile = "Test", uuids = { "a" } } })
+  eq(ok, true, "apply ok: " .. tostring(r.error))
+  eq(r.masks.added, 1, "only the learned kind added (no retouch chosen)")
+  eq(r.masks.learned, 1, "learned values set")
+  eq(table.concat(order, ","), "preset,detect,values", "values after the detection")
+  local g = settings.MaskGroupBasedCorrections[1]
+  eq(g.CorrectionName, "Calotype subject", "our subject mask")
+  eq(g.LocalShadows2012, 0.16, "learned shadows")
+  eq(g.LocalHighlights2012, -0.18, "learned highlights")
+  eq(g.LocalClarity2012, 0, "preset value the photographer does not use is reset")
+  assert(tostring(r.text):find("Lift subject", 1, true), "note names the learned mask: " .. tostring(r.text))
+end)
+
 -- ------------------------------------------------------------ syntax of UI scripts
 
 test("automation init runs in a Lightroom-like plugin environment", function()

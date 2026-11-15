@@ -114,6 +114,57 @@ local function status(photo)
   return groups, empty, pending, found
 end
 
+-- Local values a learned strength sets (same list as calotype_edit_serializer.masks.LOCAL_KEYS).
+Retouch.LOCAL_KEYS = {
+  "LocalExposure2012", "LocalContrast2012", "LocalHighlights2012", "LocalShadows2012",
+  "LocalWhites2012", "LocalBlacks2012", "LocalTexture", "LocalClarity2012", "LocalDehaze",
+  "LocalSaturation", "LocalTemperature", "LocalTint", "LocalSharpness", "LocalLuminanceNoise",
+}
+
+--- The retouch ids to add to one photo: the chosen ones plus every kind with learned strengths,
+-- in the order of Retouch.ITEMS.
+function Retouch.idsFor(chosen, learned)
+  local want = {}
+  for _, id in ipairs(chosen or {}) do want[id] = true end
+  if type(learned) == "table" then
+    for id in pairs(learned) do want[id] = true end
+  end
+  local ids = {}
+  for _, item in ipairs(Retouch.ITEMS) do
+    if want[item.id] then ids[#ids + 1] = item.id end
+  end
+  return ids
+end
+
+--- Inside catalog write access, after the masks were detected: give our masks the learned
+-- strengths ({id = {LocalShadows2012 = 0.16, …}}). The learned values replace the preset's
+-- (keys the photographer leaves at 0 become 0). Only changes values of existing masks — never
+-- adds one (applyDevelopSettings with new masks hangs). Returns how many masks got values.
+function Retouch.setStrengths(photo, learned)
+  if type(learned) ~= "table" or next(learned) == nil then return 0 end
+  local groups = (photo:getDevelopSettings() or {}).MaskGroupBasedCorrections
+  if type(groups) ~= "table" then return 0 end
+  local set = 0
+  for _, g in ipairs(groups) do
+    local values = learned[ourId(g) or ""]
+    if type(values) == "table" then
+      for _, k in ipairs(Retouch.LOCAL_KEYS) do g[k] = tonumber(values[k]) or 0 end
+      set = set + 1
+    end
+  end
+  if set > 0 then photo:applyDevelopSettings({ MaskGroupBasedCorrections = groups }) end
+  return set
+end
+
+--- Readable titles of the learned kinds, for the result note.
+function Retouch.titles(ids)
+  local out = {}
+  for _, item in ipairs(Retouch.ITEMS) do
+    if ids[item.id] then out[#out + 1] = item.title end
+  end
+  return table.concat(out, ", ")
+end
+
 --- After the write transaction: let Lightroom detect the masks, remove the empty ones.
 -- Returns found, removed, photos still pending (nil when this Lightroom cannot detect).
 function Retouch.finish(catalog, photos, progress)

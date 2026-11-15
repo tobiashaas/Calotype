@@ -263,3 +263,11 @@ components:
                 type: object
                 additionalProperties: true
                 description: Ready for `photo:applyDevelopSettings()`
+              retouch:
+                type: object
+                additionalProperties:
+                  type: object
+                  additionalProperties: { type: number }
+                description: |
+                  Only when learned: AI masks to add (retouch id → local values), set after
+                  Lightroom computed them. Never via applyDevelopSettings with new masks.

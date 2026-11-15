@@ -54,15 +54,16 @@ class EditResultRepository:
         profile_id: uuid.UUID | None,
         lr_settings: dict[str, Any],
         s3_key: str | None = None,
+        retouch: dict[str, Any] | None = None,
     ) -> None:
         """Write the result of a photo in a job; a re-run of the job replaces it."""
         stmt = insert(EditResult).values(
             id=result_id, job_id=job_id, photo_id=photo_id, profile_id=profile_id,
-            lr_settings=lr_settings, s3_key=s3_key,
+            lr_settings=lr_settings, s3_key=s3_key, retouch=retouch,
         )
         stmt = stmt.on_conflict_do_update(
             constraint="uq_edit_results_job_photo",
             set_={"lr_settings": stmt.excluded.lr_settings, "profile_id": stmt.excluded.profile_id,
-                  "s3_key": stmt.excluded.s3_key},
+                  "s3_key": stmt.excluded.s3_key, "retouch": stmt.excluded.retouch},
         )
         session.execute(stmt)

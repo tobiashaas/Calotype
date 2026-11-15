@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 
 from calotype_edit_serializer.edits import edit_signature, edited_photos, keeps_as_shot
+from calotype_edit_serializer.masks import mask_values, shared_masks
 from calotype_edit_serializer.style import PHOTO_DEPENDENT, apply_style, is_style_key, shared_style, style_settings
 from calotype_edit_serializer.sliders import (
     FormatType,
@@ -18,6 +19,8 @@ __all__ = [
     "edit_signature",
     "edited_photos",
     "keeps_as_shot",
+    "mask_values",
+    "shared_masks",
     "is_style_key",
     "shared_style",
     "style_settings",
