@@ -564,6 +564,19 @@ test("apply without profile and nothing edited: a clear hint", function()
   eq(r.title, "Nothing to learn from", "a clear hint, not the raw server error")
 end)
 
+test("settings with masks reach Lightroom without JSON metatables", function()
+  local decoded = Json.decode('{"MaskGroupBasedCorrections": [{"CorrectionName": "Calotype subject",'
+    .. ' "LocalShadows2012": 0.4, "CorrectionMasks": [{"What": "Mask/Image", "MaskDigest": null}]}],'
+    .. ' "Exposure2012": 0.5}')
+  local s = PhotoData.prepareSettings(decoded)
+  local g = s.MaskGroupBasedCorrections[1]
+  eq(getmetatable(g), nil, "mask group is a plain table")
+  eq(getmetatable(g.CorrectionMasks[1]), nil, "mask is a plain table")
+  eq(g.CorrectionMasks[1].MaskDigest, nil, "JSON null dropped")
+  eq(g.LocalShadows2012, 0.4, "values kept")
+  eq(s.Exposure2012, 0.5, "flat values kept")
+end)
+
 test("cull: decisions become collections, nothing else is touched", function()
   local Commands = require "AutomationCommands"
   fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
