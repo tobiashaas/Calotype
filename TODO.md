@@ -157,6 +157,17 @@ See `docs/adr/005-culling-architecture.md`.
 - [ ] Wedding archive: most 2017/18 shoots have neither XMP nor catalog on E: (disk full during the copy; one truncated CR2) → copy their `.lrcat` files from the NAS
 - [ ] License for the code (presets are CC0)
 
+### Lightroom Classic 16 (November 2026)
+
+Checked against the "What's new" page and Lightroom 16.0's own presets (`Resources/Settings`) on 2026-11-15; process version stays 15.4, Camera Raw 19.
+
+- [x] **Glow** ("Leuchten"): develop keys `Glow`, `GlowStyle` (0–4, five styles), `GlowSpread`, `GlowRange`, `GlowWarmth`, `GlowDirection`, `GlowDirectionalSoftness`; `getDevelopSettings` returns them on every photo (defaults 0 / 1 / 50 / 50 / 0 / 0 / 50), `applyDevelopSettings` sets them (verified in Lightroom 16.0, restored). Glow is part of the style layer (`style.py`), a ninth own look *Soft Glow / Sanftes Leuchten*, and XMPs write choices and amounts without sign like Adobe (`GlowStyle="2"`)
+- [x] **Shoot look from the edited photos** (also for glow): with `learn_from_edits` the look settings most edited photos of the shoot share (tone curve, HSL, color grading, glow, grain, vignette, profile …; `shared_style`, ≥ half of them, no tie) go onto the other photos and win over the profile's preset. Folder mode: 20 examples with glow + color grading → all 40 photos got them, the sliders unchanged (12/40 all within)
+- [ ] **History cleanup** (new: delete history steps, also scheduled): the catalog reader takes "edited" from the last history step — after a cleanup the photo may look unedited. Check what a cleaned-up photo leaves in `Adobe_libraryImageDevelopHistoryStep` and fall back to comparing settings with the untouched state (`edited_photos`)
+- [ ] **Focus points** (Canon / Nikon / Sony): Lightroom shows the AF point; culling could measure sharpness *at the focus point* instead of the whole photo / face (AF info from the RAW maker notes, read by the Bridge)
+- [ ] **Projection** (Upright, faces at the frame edges): no key in the presets and none on an untouched photo — find the key on a photo where it is set, then consider it for straighten
+- [ ] **Depth range masks, skin blemish removal, masked color grading**: not in any bundled preset (depth and blemish removal are computed per photo); check whether a preset can carry them like the AI masks in `presets/retouch` — blemish removal would fit retouch
+
 ### Backlog / Nice-to-have
 - [ ] **Bigger model:** CNN/embedding backbone on the image instead of hand features (tried DINOv2/SigLIP/PE: no gain yet, see Model v2); ONNX for optional local inference in the Bridge
 - [ ] More sliders: Texture, Clarity, Dehaze, tone curve, HSL (today only via the profile's fixed look)

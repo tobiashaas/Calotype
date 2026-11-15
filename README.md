@@ -20,7 +20,7 @@ folders.
 | **Culling** | Sorts a shoot into *Keep / Check / Sort out* with a reason per photo ("best of its series", "eyes closed" …). Learns from the stars and flags you already gave, otherwise explainable starter rules. Results are collections — your stars, flags and edits are never changed. |
 | **Retouch** | Adds Lightroom's own AI masks (subject, background, skin, eyes, teeth, sky) with gentle adjustments. Masks that find nothing are removed, your own masks stay, the original is kept as a snapshot. |
 | **Straighten** | Levels photos with clear reference lines (walls, door frames, horizon) with the largest crop, like Lightroom does. Photos you cropped yourself keep their crop. |
-| **Looks** | Eight own looks as Lightroom / Camera Raw presets (CC0), alone or as a profile's style. Installed automatically. |
+| **Looks** | Nine own looks as Lightroom / Camera Raw presets (CC0), alone or as a profile's style. Installed automatically. |
 | **Folder mode** | All of it without Lightroom on RAW + XMP folders: `calotype-folder train / apply / cull`, optionally into a separate output folder so the source stays untouched. |
 
 The Lightroom plugin speaks German and English.

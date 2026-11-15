@@ -77,3 +77,15 @@ def test_without_a_profile_only_the_edited_sliders_are_set():
     with pytest.raises(ValueError, match="no edited photos"):
         calibrate_to_shoot({p: {} for p in none_edited[0]}, none_edited[3], none_edited[1],
                            none_edited[0], "raw", uuid4(), with_model=False)
+
+
+def test_the_shoots_look_comes_from_the_edited_photos():
+    from calotype_inference_worker.cli import examples_look
+
+    ids, settings, predictions, vectors = _job([0.5, 0.7, 0.6], untouched=2)
+    for p in ids[:3]:
+        settings[p].update({"Glow": 45, "GlowStyle": 2, "ColorGradeMidtoneHue": 30})
+    targets = calibrate_to_shoot(predictions, vectors, settings, ids, "raw", uuid4())
+    look = examples_look(predictions, targets, settings)
+    assert look == {"Glow": 45, "GlowStyle": 2, "ColorGradeMidtoneHue": 30}
+    assert examples_look(predictions, list(predictions), settings) == {}   # no examples, no look

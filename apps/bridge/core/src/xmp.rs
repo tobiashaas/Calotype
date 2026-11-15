@@ -284,6 +284,23 @@ fn unescape(s: &str) -> String {
         .replace("&amp;", "&")
 }
 
+/// Values Adobe writes without a sign: choices (styles) and amounts that cannot be negative.
+fn is_unsigned(key: &str) -> bool {
+    key.ends_with("Style")
+        || matches!(
+            key,
+            "Glow"
+                | "GlowSpread"
+                | "GlowRange"
+                | "GlowDirectionalSoftness"
+                | "GrainAmount"
+                | "GrainSize"
+                | "GrainFrequency"
+                | "ColorGradeBlending"
+        )
+        || (key.starts_with("ColorGrade") && (key.ends_with("Hue") || key.ends_with("Sat")))
+}
+
 /// Adobe-style number formatting: sign on sliders, two decimals for exposure.
 fn format_value(key: &str, value: &Value) -> String {
     match value {
@@ -295,7 +312,7 @@ fn format_value(key: &str, value: &Value) -> String {
                 format!("{}", f.round() as i64)
             } else if f.fract() == 0.0 {
                 let i = f as i64;
-                if i > 0 {
+                if i > 0 && !is_unsigned(key) {
                     format!("+{i}")
                 } else {
                     format!("{i}")
@@ -611,6 +628,15 @@ mod tests {
             "top-level curve is read as a flat point list"
         );
         assert!(has_develop_settings(&s));
+    }
+
+    #[test]
+    fn choices_and_amounts_are_written_without_sign() {
+        assert_eq!(format_value("GlowStyle", &json!(2)), "2");
+        assert_eq!(format_value("Glow", &json!(40)), "40");
+        assert_eq!(format_value("ColorGradeMidtoneHue", &json!(35)), "35");
+        assert_eq!(format_value("GlowWarmth", &json!(10)), "+10");
+        assert_eq!(format_value("Contrast2012", &json!(8)), "+8");
     }
 
     #[test]

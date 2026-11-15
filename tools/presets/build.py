@@ -110,6 +110,23 @@ LOOKS: list[dict] = [
         },
     },
     {
+        # Glow* needs Lightroom Classic 16 / Camera Raw 19 (Nov 2026); older versions keep
+        # the rest of the look and ignore the glow.
+        "name": "Soft Glow",
+        "name_de": "Sanftes Leuchten",
+        "about_de": "Warmes, weiches Leuchten in den Lichtern, sanfter Kontrast, ruhige Farben. Abendlicht, Lichterketten, Hochzeitsfeiern.",
+        "about": "Warm, soft glow in the highlights, gentle contrast, calm colors. Evening light, string lights, wedding parties.",
+        "curve": [(0, 12), (64, 68), (128, 134), (192, 198), (255, 248)],
+        "settings": {
+            "Clarity2012": -6, "Texture": -4, "Vibrance": 4, "Saturation": -5,
+            "SaturationAdjustmentGreen": -15, "LuminanceAdjustmentOrange": 4,
+            "ColorGradeHighlightHue": 40, "ColorGradeHighlightSat": 10, "ColorGradeBlending": 60,
+            "Glow": 35, "GlowStyle": 1, "GlowSpread": 60, "GlowRange": 45, "GlowWarmth": 15,
+            "GlowDirection": 0, "GlowDirectionalSoftness": 50,
+            "PostCropVignetteAmount": -6,
+        },
+    },
+    {
         "name": "Film B&W",
         "name_de": "Film S/W",
         "about_de": "Kräftiges Schwarz-Weiß mit tiefen Schwarztönen, leuchtender Haut und Korn.",

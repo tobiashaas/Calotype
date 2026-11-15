@@ -1,7 +1,7 @@
 """Style layer: a profile's base preset adds the look on top of the per-photo prediction.
 
 The model predicts what depends on the individual photo (exposure, white balance, tone).
-A preset carries what makes the *look*: tone curve, HSL, color grading, texture, grain…
+A preset carries what makes the *look*: tone curve, HSL, color grading, texture, grain, glow…
 Combining both gives "your exposure and white balance per photo, in this style".
 
 Precedence:
@@ -14,7 +14,8 @@ Precedence:
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections import Counter
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 # Never taken from a preset: these depend on the individual photo.
@@ -26,7 +27,7 @@ PHOTO_DEPENDENT = frozenset({
 _STYLE_PREFIXES = (
     "ToneCurve", "Parametric", "HueAdjustment", "SaturationAdjustment", "LuminanceAdjustment",
     "ColorGrade", "SplitToning", "GrainAmount", "GrainSize", "GrainFrequency",
-    "PostCropVignette",
+    "PostCropVignette", "Glow",   # Glow*: Lightroom 16 (Nov 2026), effect "Glow"
 )
 _STYLE_KEYS = frozenset({
     "Texture", "Clarity2012", "Dehaze", "Vibrance", "Saturation", "ConvertToGrayscale",
@@ -57,6 +58,32 @@ def style_settings(preset: Mapping[str, Any] | None) -> dict[str, Any]:
         ) and len(v) % 2 == 0:
             out[k] = [float(x) for x in v]  # flat point list x0, y0, x1, y1 … (0–255)
     return out
+
+
+def shared_style(settings: Sequence[Mapping[str, Any]], min_share: float = 0.5) -> dict[str, Any]:
+    """The look the photographer gave a whole shoot: per look setting, the value most of the
+    edited photos share (at least ``min_share`` of them, and no tie).
+
+    Vibrance and saturation are left out — they are predicted per photo. Settings missing
+    from a photo count as a value of their own, so a look used on few photos is not spread.
+    """
+    looks = [style_settings(s) for s in settings]
+    if not looks:
+        return {}
+    out: dict[str, Any] = {}
+    for key in sorted({k for look in looks for k in look} - _PREDICTED):
+        counts = Counter(_hashable(look.get(key)) for look in looks)
+        (value, n), *rest = counts.most_common(2) + [(None, 0)]
+        if value is not None and n >= min_share * len(looks) and n > rest[0][1]:
+            out[key] = next(look[key] for look in looks if _hashable(look.get(key)) == value)
+    return out
+
+
+_PREDICTED = frozenset({"Vibrance", "Saturation"})
+
+
+def _hashable(v: Any) -> Any:
+    return tuple(v) if isinstance(v, list) else v
 
 
 def apply_style(predicted: Mapping[str, Any], preset: Mapping[str, Any] | None) -> dict[str, Any]:

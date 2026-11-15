@@ -213,6 +213,46 @@
   }
  },
  {
+  "name": "Soft Glow",
+  "name_de": "Sanftes Leuchten",
+  "file": "soft-glow.xmp",
+  "about": "Warm, soft glow in the highlights, gentle contrast, calm colors. Evening light, string lights, wedding parties.",
+  "about_de": "Warmes, weiches Leuchten in den Lichtern, sanfter Kontrast, ruhige Farben. Abendlicht, Lichterketten, Hochzeitsfeiern.",
+  "bw": false,
+  "settings": {
+   "Clarity2012": -6,
+   "Texture": -4,
+   "Vibrance": 4,
+   "Saturation": -5,
+   "SaturationAdjustmentGreen": -15,
+   "LuminanceAdjustmentOrange": 4,
+   "ColorGradeHighlightHue": 40,
+   "ColorGradeHighlightSat": 10,
+   "ColorGradeBlending": 60,
+   "Glow": 35,
+   "GlowStyle": 1,
+   "GlowSpread": 60,
+   "GlowRange": 45,
+   "GlowWarmth": 15,
+   "GlowDirection": 0,
+   "GlowDirectionalSoftness": 50,
+   "PostCropVignetteAmount": -6,
+   "ToneCurvePV2012": [
+    0.0,
+    12.0,
+    64.0,
+    68.0,
+    128.0,
+    134.0,
+    192.0,
+    198.0,
+    255.0,
+    248.0
+   ],
+   "ConvertToGrayscale": false
+  }
+ },
+ {
   "name": "Film B&W",
   "name_de": "Film S/W",
   "file": "film-bw.xmp",

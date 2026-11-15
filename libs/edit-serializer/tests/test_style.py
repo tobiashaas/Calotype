@@ -48,3 +48,30 @@ def test_no_preset_changes_nothing():
 def test_broken_curve_is_dropped():
     assert "ToneCurvePV2012" not in style_settings({"ToneCurvePV2012": [0, 0, 255]})
     assert "ToneCurvePV2012" not in style_settings({"ToneCurvePV2012": ["a", "b"]})
+
+
+def test_glow_is_part_of_the_look():
+    from calotype_edit_serializer import style_settings
+
+    look = style_settings({"Glow": 60, "GlowStyle": 4, "GlowWarmth": 20, "Exposure2012": 1.0})
+    assert look == {"Glow": 60, "GlowStyle": 4, "GlowWarmth": 20}
+
+
+def test_shared_style_takes_what_most_edited_photos_share():
+    from calotype_edit_serializer import shared_style
+
+    curve = [0, 0, 128, 140, 255, 255]
+    edits = [{"Glow": 40, "ToneCurvePV2012": curve, "Vibrance": 10, "Exposure2012": 0.3, "GrainAmount": 0}
+             for _ in range(3)]
+    edits.append({"Glow": 0, "ToneCurvePV2012": [0, 0, 255, 255], "Vibrance": 30, "GrainAmount": 25})
+    out = shared_style(edits)
+    assert out == {"Glow": 40, "ToneCurvePV2012": curve, "GrainAmount": 0}  # no vibrance, no exposure
+
+
+def test_shared_style_spreads_no_look_used_on_few_photos():
+    from calotype_edit_serializer import shared_style
+
+    edits = [{"Glow": 60}, {}, {}, {"Glow": 20}, {"Glow": 20}, {}]
+    assert shared_style(edits) == {}               # 3 of 6 have no glow: no majority value
+    assert shared_style([{"Glow": 60}, {"Glow": 20}]) == {}   # tie
+    assert shared_style([]) == {}

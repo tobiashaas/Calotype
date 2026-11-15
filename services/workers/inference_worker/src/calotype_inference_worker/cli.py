@@ -14,7 +14,14 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.orm import sessionmaker
 
-from calotype_edit_serializer import apply_style, edited_photos, from_lightroom, keeps_as_shot, serialize_for_lightroom
+from calotype_edit_serializer import (
+    apply_style,
+    edited_photos,
+    from_lightroom,
+    keeps_as_shot,
+    serialize_for_lightroom,
+    shared_style,
+)
 from calotype_domain.jobs import JobStatus
 from calotype_inference_pipeline import CURRENT_FEATURE_VERSION, artifact_feature_version, run_inference
 from calotype_inference_pipeline.shoot import calibrate
@@ -123,6 +130,13 @@ def calibrate_to_shoot(
     return rest
 
 
+def examples_look(predictions: dict[UUID, dict], targets: list[UUID], settings: dict[UUID, dict]) -> dict:
+    """The look settings (tone curve, HSL, color grading, glow …) the edited photos of the
+    shoot share — the examples are the photos with features that are no target."""
+    wanted = set(targets)
+    return shared_style([settings[p] for p in predictions if p not in wanted])
+
+
 def process_one(redis: Redis, factory: sessionmaker) -> bool:
     envelope, raw = consumer.blpop_envelope(redis, QUEUE_INFERENCE, timeout_seconds=5)
     if envelope is None and raw is None:
@@ -196,14 +210,20 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
                 predictions[photo_id] = run_inference(model_bytes, vectors[photo_id]) if model_bytes else {}
 
         targets = list(predictions)
+        look: dict = {}
         if learn_from_edits:
             targets = calibrate_to_shoot(predictions, vectors, settings, photo_ids, format_type, job_uuid, times,
                                          with_model=model_bytes is not None)
+            # The shoot's own look wins over the profile's preset: it is what this shoot got.
+            look = examples_look(predictions, targets, settings)
+            log.info("shoot look from the edited photos: %d settings (%s) job_id=%s",
+                     len(look), ", ".join(sorted(k for k in look if look[k]))[:300], job_uuid)
 
         for photo_id in targets:
             with session_scope(factory) as session:
                 JobRepository.touch(session, job_uuid)
                 lr_settings = apply_style(serialize_for_lightroom(predictions[photo_id], format_type), base_preset)
+                lr_settings.update(look)
                 if straighten:
                     photo = PhotoRepository.get_by_id(session, photo_id)
                     lr_settings.update(straighten_settings(photo.analysis if photo else None))
