@@ -30,6 +30,7 @@ pub const COMMANDS: &[&str] = &[
     "remove_cull_set",
     "retouch_state",
     "remove_retouch",
+    "mask_probe",
 ];
 
 #[derive(Debug, Clone, Serialize, PartialEq)]

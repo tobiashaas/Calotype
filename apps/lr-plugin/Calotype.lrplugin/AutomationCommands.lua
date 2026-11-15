@@ -214,7 +214,7 @@ function Commands.retouch_state(catalog, args)
   local out = Json.object({})
   for _, photo in ipairs(photos) do
     local groups = (photo:getDevelopSettings() or {}).MaskGroupBasedCorrections or {}
-    local ours = {}
+    local found = {}
     for _, g in ipairs(groups) do
       if ours(g) then
         local digests, errors = 0, 0
@@ -222,14 +222,14 @@ function Commands.retouch_state(catalog, args)
           if m.MaskDigest then digests = digests + 1 end
           if (tonumber(m.ErrorReason or 0) or 0) ~= 0 then errors = errors + 1 end
         end
-        ours[#ours + 1] = Json.object({ name = g.CorrectionName, masks = #(g.CorrectionMasks or {}),
+        found[#found + 1] = Json.object({ name = g.CorrectionName, masks = #(g.CorrectionMasks or {}),
           computed = digests, nothing_found = errors })
       end
     end
     local snaps = {}
     local ok, list = pcall(function() return photo:getDevelopSnapshots() end)
     for _, s in ipairs(ok and list or {}) do snaps[#snaps + 1] = s.name end
-    out[photo:getRawMetadata("uuid")] = Json.object({ masks = ours, all_masks = #groups, snapshots = snaps })
+    out[photo:getRawMetadata("uuid")] = Json.object({ masks = found, all_masks = #groups, snapshots = snaps })
   end
   return out
 end
@@ -258,6 +258,84 @@ function Commands.remove_retouch(catalog, args)
     end
   end
   return Json.object({ removed = removed })
+end
+
+-- Our subject correction on a photo: its values and whether Lightroom computed the mask.
+local function subjectState(photo)
+  for _, g in ipairs((photo:getDevelopSettings() or {}).MaskGroupBasedCorrections or {}) do
+    if ours(g) then
+      local computed = 0
+      for _, m in ipairs(g.CorrectionMasks or {}) do
+        if m.MaskDigest then computed = computed + 1 end
+      end
+      return Json.object({ name = g.CorrectionName, exposure = g.LocalExposure2012,
+        shadows = g.LocalShadows2012, masks = #(g.CorrectionMasks or {}), computed = computed })
+    end
+  end
+  return Json.object({ none = true })
+end
+
+local function removeOurs(catalog, photo)
+  catalog:withWriteAccessDo("Calotype automation: mask probe cleanup", function()
+    local groups = (photo:getDevelopSettings() or {}).MaskGroupBasedCorrections or {}
+    local keep = {}
+    for _, g in ipairs(groups) do if not ours(g) then keep[#keep + 1] = g end end
+    photo:applyDevelopSettings({ MaskGroupBasedCorrections = keep })
+  end, { timeout = 30 })
+end
+
+--- Probe (test only): can a plugin set its own strength on an AI mask? On one photo our
+-- installed subject preset (the retouch path) is applied and computed, then only its correction
+-- values are changed with applyDevelopSettings. Every step is logged (a hang shows where); our
+-- mask is removed again afterwards, the photographer's own masks stay.
+-- Verified in Lightroom 16.0: the values arrive and the mask stays computed. Not this way: a
+-- preset made at runtime (LrApplication.addDevelopPresetForPlugin) holding only the mask also
+-- set the photo's white balance to 1500 K / -150 when applied.
+function Commands.mask_probe(catalog, args)
+  local Log = require "Log"
+  local Retouch = require "Retouch"
+  local photo = catalog:findPhotoByUuid(args.uuid or "")
+  if not photo then error("unknown photo " .. tostring(args.uuid)) end
+  local out = Json.object({ steps = {} })
+  local function step(name, fn)
+    Log.info("mask_probe: %s ...", name)
+    local ok, err = pcall(fn)
+    local state = subjectState(photo)
+    Log.info("mask_probe: %s ok=%s %s", name, tostring(ok), ok and "" or tostring(err))
+    out.steps[#out.steps + 1] = Json.object({ step = name, ok = ok, error = not ok and tostring(err) or nil,
+      state = state })
+    return ok
+  end
+  local function compute()
+    -- Lightroom may take the preset over a moment after the write transaction.
+    for _ = 1, 20 do
+      if not subjectState(photo).none then break end
+      LrTasks.sleep(0.25)
+    end
+    if subjectState(photo).none then error("no mask of ours on the photo — nothing to compute") end
+    photo:updateAISettings()
+  end
+  local base = Retouch.findPresets().subject
+  if not base then error("subject preset not installed") end
+
+  if step("apply preset", function()
+    catalog:withWriteAccessDo("Calotype automation: mask probe", function()
+      photo:applyDevelopPreset(base, _PLUGIN)
+    end, { timeout = 30 })
+  end) then
+    step("compute mask", compute)
+    step("change values", function()
+      catalog:withWriteAccessDo("Calotype automation: mask probe values", function()
+        local groups = (photo:getDevelopSettings() or {}).MaskGroupBasedCorrections or {}
+        for _, g in ipairs(groups) do
+          if ours(g) then g.LocalExposure2012, g.LocalShadows2012 = 0.22, 0.44 end
+        end
+        photo:applyDevelopSettings({ MaskGroupBasedCorrections = groups })
+      end, { timeout = 30 })
+    end)
+  end
+  step("cleanup", function() removeOurs(catalog, photo) end)
+  return out
 end
 
 --- Remove a culling collection set made by Commands.cull (test cleanup). Only sets directly

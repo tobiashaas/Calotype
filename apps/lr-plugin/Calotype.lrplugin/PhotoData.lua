@@ -82,12 +82,23 @@ function PhotoData.collect(photo)
   return body, formatType
 end
 
+-- Plain copy without Json.null and metatables: applyDevelopSettings deep-copies nested tables
+-- (masks) and fails on decoded JSON objects ("deepCopy does not support metatables").
+local function plainCopy(v)
+  if type(v) ~= "table" then return v end
+  local out = {}
+  for k, x in pairs(v) do
+    if x ~= Json.null then out[k] = plainCopy(x) end
+  end
+  return out
+end
+
 --- Lightroom needs WhiteBalance = "Custom" for explicit temperature/tint values.
 function PhotoData.prepareSettings(settings)
   local out = {}
   for k, v in pairs(settings) do
     if v == "True" then v = true elseif v == "False" then v = false end -- XMP booleans
-    if v ~= Json.null then out[k] = v end
+    if v ~= Json.null then out[k] = plainCopy(v) end
   end
   if out.Temperature or out.Tint or out.IncrementalTemperature or out.IncrementalTint then
     out.WhiteBalance = "Custom"
