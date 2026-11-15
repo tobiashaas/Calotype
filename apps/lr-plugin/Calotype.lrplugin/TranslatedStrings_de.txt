@@ -110,6 +110,8 @@
 "$$$/Calotype/Retouch/Missing=Retusche-Presets nicht gefunden. Starte einmal die Bridge und danach Lightroom neu, damit es sie lädt."
 "$$$/Calotype/Retouch/Detecting=Lightroom erkennt die Masken"
 "$$$/Calotype/Retouch/Manual=Zum Fertigstellen der Masken: Foto > Entwicklungseinstellungen > KI-Einstellungen aktualisieren."
+"$$$/Calotype/Retouch/Strengths=Calotype: gelernte Maskenstärken"
+"$$$/Calotype/Retouch/Learned=Maskenstärken aus deinen Bearbeitungen gelernt: ^1."
 "$$$/Calotype/Retouch/Done=Retusche: ^1 Masken gesetzt, ^2 ohne Fundstelle wieder entfernt."
 "$$$/Calotype/Retouch/Pending=^1 Fotos brauchen noch Foto > Entwicklungseinstellungen > KI-Einstellungen aktualisieren."
 "$$$/Calotype/Retouch/Snapshot/Hint=Das Original bleibt als Schnappschuss „^1“ erhalten."

@@ -13,7 +13,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.orm import Session, sessionmaker
 
-from calotype_edit_serializer import from_lightroom
+from calotype_edit_serializer import from_lightroom, shared_masks
 from calotype_domain.jobs import JobStatus
 from calotype_domain.profiles import ProfileStatus
 from calotype_inference_pipeline import (
@@ -126,6 +126,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         # Features are computed here when missing — freshly uploaded photos have none yet.
         feature_vectors: list[list[float]] = []
         targets: list[dict[str, float]] = []
+        used_settings: list[dict] = []
         skipped: list[str] = []
         for photo_id in photo_ids:
             with session_scope(factory) as session:
@@ -145,6 +146,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
                     continue
                 feature_vectors.append(vector)
                 targets.append(row)
+                used_settings.append(dict(photo.lr_develop_settings or {}))
 
         if skipped:
             log.warning("skipped %d training photos: %s", len(skipped), "; ".join(skipped[:20]))
@@ -165,7 +167,11 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         # Update profile: artifact key + status ready
         with session_scope(factory) as session:
             if profile_id:
-                ProfileRepository.set_artifact(session, profile_id, model_artifact_key=artifact_key)
+                # Mask strengths the training photos share (subject shadows, sky …).
+                retouch = shared_masks(used_settings)
+                log.info("learned mask strengths %s profile_id=%s", retouch, profile_id)
+                ProfileRepository.set_artifact(session, profile_id, model_artifact_key=artifact_key,
+                                               retouch=retouch)
                 ProfileRepository.set_status(session, profile_id, ProfileStatus.READY)
             JobRepository.set_status(session, job_uuid, JobStatus.COMPLETED)
 

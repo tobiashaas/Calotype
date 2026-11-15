@@ -82,7 +82,10 @@ async fn fake_results(State(fake): State<Fake>) -> Json<Value> {
     Json(Value::Array(
         photo_ids
             .iter()
-            .map(|id| json!({"job_id": "remote-job-1", "photo_id": id, "lr_settings": {"Exposure2012": 0.35}}))
+            .map(|id| {
+                json!({"job_id": "remote-job-1", "photo_id": id, "lr_settings": {"Exposure2012": 0.35},
+                       "retouch": {"subject": {"LocalShadows2012": 0.16}}})
+            })
             .collect(),
     ))
 }
@@ -263,7 +266,8 @@ async fn edit_job_roundtrip_with_retry() {
     assert_eq!(job["profile_id"], profile);
     assert_eq!(
         job["results"],
-        json!([{"lr_catalog_uuid": "lr-1", "lr_settings": {"Exposure2012": 0.35}}])
+        json!([{"lr_catalog_uuid": "lr-1", "lr_settings": {"Exposure2012": 0.35},
+                "retouch": {"subject": {"LocalShadows2012": 0.16}}}])
     );
 
     // What the server received.

@@ -62,6 +62,8 @@ class Profile(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     base_preset: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # Migration 014: learned mask strengths, {retouch id: {Local… key: value}}.
+    retouch: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     model_artifact_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     lr_output_keys: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
 
@@ -123,6 +125,8 @@ class EditResult(Base):
     lr_settings: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=func.cast("{}", JSONB)
     )
+    # Migration 014: AI masks to add with these values, {retouch id: {Local… key: value}}.
+    retouch: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

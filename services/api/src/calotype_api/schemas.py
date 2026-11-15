@@ -139,3 +139,5 @@ class EditResultResponse(BaseModel):
     photo_id: UUID
     lr_settings: dict[str, Any]
     s3_key: str | None = None
+    # Learned mask strengths: AI masks to add with these local values ({retouch id: {key: value}}).
+    retouch: dict[str, dict[str, float]] | None = None

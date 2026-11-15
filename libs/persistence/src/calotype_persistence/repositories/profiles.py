@@ -67,11 +67,13 @@ class ProfileRepository:
         *,
         model_artifact_key: str,
         lr_output_keys: list[str] | None = None,
+        retouch: dict[str, Any] | None = None,
     ) -> Profile | None:
         profile = session.get(Profile, profile_id)
         if profile is None:
             return None
         profile.model_artifact_key = model_artifact_key
+        profile.retouch = retouch or None
         if lr_output_keys is not None:
             profile.lr_output_keys = lr_output_keys
         session.flush()

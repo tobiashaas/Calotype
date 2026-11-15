@@ -75,6 +75,9 @@ pub struct JobSnapshot {
 pub struct EditResult {
     pub photo_id: String,
     pub lr_settings: Value,
+    /// Learned mask strengths: AI masks to add with these local values (older servers: none).
+    #[serde(default)]
+    pub retouch: Option<Value>,
 }
 
 pub struct ApiClient {

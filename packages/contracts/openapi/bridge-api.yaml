@@ -454,6 +454,19 @@ components:
         s3_key:
           type: string
           nullable: true
+        retouch:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: object
+            additionalProperties: { type: number }
+          description: |
+            Learned mask strengths: Lightroom AI masks to add (keys = retouch ids subject, sky,
+            background, skin, eyes, teeth) with the local values the photographer uses on them
+            (`LocalShadows2012` … as -1…1). Learned from the profile's training photos or, with
+            `learn_from_edits`, the selection's edited photos. Null when nothing was learned.
+          example:
+            subject: { LocalShadows2012: 0.16, LocalHighlights2012: -0.18 }
     JobEnvelopeV1:
       type: object
       description: Redis queue payload (JSON Schema job-envelope-v1.schema.json)

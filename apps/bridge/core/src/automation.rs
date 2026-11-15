@@ -31,6 +31,7 @@ pub const COMMANDS: &[&str] = &[
     "retouch_state",
     "remove_retouch",
     "mask_probe",
+    "set_mask_strength",
 ];
 
 #[derive(Debug, Clone, Serialize, PartialEq)]

@@ -175,13 +175,21 @@ function Actions.apply(catalog, photos, profile, progress, options)
 
   progress:setCaption(LOC "$$$/Calotype/Apply/Writing=Writing develop settings")
   local retouchIds = options.retouch or {}
-  local presets = #retouchIds > 0 and Retouch.findPresets() or {}
+  -- Learned mask strengths (from the profile or the shoot's edited photos) add their masks too.
+  local learnedKinds, anyRetouch = {}, #retouchIds > 0
+  for _, r in ipairs(final.results or {}) do
+    if type(r.retouch) == "table" then
+      for id in pairs(r.retouch) do learnedKinds[id] = true; anyRetouch = true end
+    end
+  end
+  local presets = anyRetouch and Retouch.findPresets() or {}
   local missingPresets = 0
-  for _, id in ipairs(retouchIds) do
+  for _, id in ipairs(Retouch.idsFor(retouchIds, learnedKinds)) do
     if not presets[id] then missingPresets = missingPresets + 1 end
   end
   local applied, appliedUuids, straightened, keptCrop, masksAdded, edited = 0, {}, 0, 0, 0, {}
-  if #retouchIds > 0 then
+  local learnedFor = {}   -- photo → learned strengths, set once Lightroom detected the masks
+  if anyRetouch then
     -- Own transaction: Lightroom applies settings at the end of a transaction, so removing our
     -- earlier masks in the same one as adding the new would drop the new masks again.
     catalog:withWriteAccessDo(LOC "$$$/Calotype/Retouch/Prepare=Calotype: prepare retouch", function()
@@ -205,7 +213,9 @@ function Actions.apply(catalog, photos, profile, progress, options)
           end
         end
         photo:applyDevelopSettings(PhotoData.prepareSettings(settings))
-        if #retouchIds > 0 then masksAdded = masksAdded + Retouch.apply(photo, presets, retouchIds) end
+        local ids = Retouch.idsFor(retouchIds, r.retouch)
+        if #ids > 0 then masksAdded = masksAdded + Retouch.apply(photo, presets, ids) end
+        if type(r.retouch) == "table" then learnedFor[#learnedFor + 1] = { photo, r.retouch } end
         edited[#edited + 1] = photo
         applied = applied + 1
         appliedUuids[#appliedUuids + 1] = r.lr_catalog_uuid
@@ -215,7 +225,7 @@ function Actions.apply(catalog, photos, profile, progress, options)
   Log.info("edit job %s: applied %d of %d", job.job_id, applied, #reg.uuids)
 
   local notes = {}
-  local masks = { added = masksAdded, found = 0, removed = 0, pending = 0 }
+  local masks = { added = masksAdded, found = 0, removed = 0, pending = 0, learned = 0 }
   if missingPresets > 0 then
     notes[#notes + 1] = LOC "$$$/Calotype/Retouch/Missing=Retouch presets not found. Start the Bridge once, then restart Lightroom so it loads them."
   end
@@ -232,6 +242,16 @@ function Actions.apply(catalog, photos, profile, progress, options)
         notes[#notes + 1] = LOC("$$$/Calotype/Retouch/Pending=^1 photos still need Photo > Develop Settings > Update AI Settings.",
           #pending)
       end
+    end
+    if #learnedFor > 0 then
+      -- Separate transaction after the detection: only values of existing masks change.
+      catalog:withWriteAccessDo(LOC "$$$/Calotype/Retouch/Strengths=Calotype: learned mask strengths", function()
+        for _, pr in ipairs(learnedFor) do
+          masks.learned = masks.learned + Retouch.setStrengths(pr[1], pr[2])
+        end
+      end, { timeout = 60 })
+      notes[#notes + 1] = LOC("$$$/Calotype/Retouch/Learned=Mask strengths learned from your edits: ^1.",
+        Retouch.titles(learnedKinds))
     end
     notes[#notes + 1] = LOC("$$$/Calotype/Retouch/Snapshot/Hint=The original is kept as the snapshot \"^1\".", Retouch.SNAPSHOT)
   end

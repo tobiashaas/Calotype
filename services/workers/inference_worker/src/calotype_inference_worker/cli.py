@@ -20,6 +20,7 @@ from calotype_edit_serializer import (
     from_lightroom,
     keeps_as_shot,
     serialize_for_lightroom,
+    shared_masks,
     shared_style,
 )
 from calotype_domain.jobs import JobStatus
@@ -137,6 +138,12 @@ def examples_look(predictions: dict[UUID, dict], targets: list[UUID], settings: 
     return shared_style([settings[p] for p in predictions if p not in wanted])
 
 
+def examples_masks(predictions: dict[UUID, dict], targets: list[UUID], settings: dict[UUID, dict]) -> dict:
+    """The mask strengths (subject, sky …) the edited photos of the shoot share."""
+    wanted = set(targets)
+    return shared_masks([settings[p] for p in predictions if p not in wanted])
+
+
 def process_one(redis: Redis, factory: sessionmaker) -> bool:
     envelope, raw = consumer.blpop_envelope(redis, QUEUE_INFERENCE, timeout_seconds=5)
     if envelope is None and raw is None:
@@ -173,6 +180,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
                 format_type = profile.format_type
                 # Style layer: the profile's preset adds the look on top of each prediction.
                 base_preset = dict(profile.base_preset or {})
+                retouch = dict(profile.retouch or {})
 
             # No model → fail the job. Zero predictions would reset the user's photos.
             if not artifact_key:
@@ -186,6 +194,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
             # No profile: the selection's edited photos are the only source of the look.
             format_type = envelope.payload["format_type"]
             base_preset = {}
+            retouch = {}
             feature_version = CURRENT_FEATURE_VERSION
         else:
             raise ValueError("missing profile_id in payload (without one, learn_from_edits and format_type)")
@@ -218,6 +227,11 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
             look = examples_look(predictions, targets, settings)
             log.info("shoot look from the edited photos: %d settings (%s) job_id=%s",
                      len(look), ", ".join(sorted(k for k in look if look[k]))[:300], job_uuid)
+            # Same for the masks: with examples, their mask setup replaces the profile's (a
+            # shoot without sky masks in its examples gets none from the profile either).
+            if targets != list(predictions):
+                retouch = examples_masks(predictions, targets, settings)
+                log.info("mask strengths from the edited photos: %s job_id=%s", retouch, job_uuid)
 
         for photo_id in targets:
             with session_scope(factory) as session:
@@ -235,6 +249,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
                     photo_id=photo_id,
                     profile_id=profile_id,
                     lr_settings=lr_settings,
+                    retouch=retouch or None,
                 )
             log.info("inference done photo_id=%s job_id=%s", photo_id, job_uuid)
 

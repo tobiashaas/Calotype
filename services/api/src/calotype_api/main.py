@@ -341,6 +341,7 @@ def get_job_result(job_id: UUID, session: Session = Depends(get_session)):
             photo_id=r.photo_id,
             lr_settings=r.lr_settings,
             s3_key=r.s3_key,
+            retouch=r.retouch,
         )
         for r in results
     ]
