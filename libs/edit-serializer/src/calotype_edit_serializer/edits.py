@@ -17,6 +17,17 @@ from calotype_edit_serializer.sliders import FormatType, _as_float, slider_specs
 _AS_SHOT = {None, "", "As Shot", "AsShot", "Wie Aufnahme"}
 
 
+def keeps_as_shot(settings: Mapping[str, Any], format_type: FormatType) -> bool:
+    """RAW photo whose white balance is still the camera's: its Kelvin belongs to this photo
+    only, so it must not be copied to other photos. A sidecar without ``WhiteBalance`` but
+    with a Kelvin value has its own white balance (Lightroom reads it as custom)."""
+    if format_type != "raw":
+        return False
+    if "WhiteBalance" not in settings:
+        return settings.get("Temperature") is None
+    return settings["WhiteBalance"] in _AS_SHOT
+
+
 def edit_signature(settings: Mapping[str, Any], format_type: FormatType) -> tuple:
     """The slider state that tells edited from untouched photos (as-shot Kelvin ignored)."""
     white_balance = settings.get("WhiteBalance")

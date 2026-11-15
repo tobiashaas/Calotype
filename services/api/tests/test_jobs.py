@@ -132,3 +132,19 @@ def test_cull_job_is_queued_and_result_waits_for_completion(client, mock_publish
 def test_cull_job_rejects_unknown_photos(client):
     r = client.post("/v1/jobs/cull", json={"schema_version": "cull-request-v1", "photo_ids": [str(uuid.uuid4())]})
     assert r.status_code == 422 and "unknown photo_ids" in r.json()["detail"]
+
+
+def test_edit_job_without_profile_needs_learning_and_format(client):
+    base = {"schema_version": "edit-request-v1", "photo_ids": [str(uuid.uuid4())]}
+    assert client.post("/v1/jobs/edit", json=base).status_code == 422
+    assert client.post("/v1/jobs/edit", json={**base, "learn_from_edits": True}).status_code == 422
+
+
+def test_edit_job_without_profile_learns_from_edits(client, mock_publisher):
+    photo_id = _upload(client)
+    body = {"schema_version": "edit-request-v1", "photo_ids": [photo_id],
+            "learn_from_edits": True, "format_type": "raw"}
+    resp = client.post("/v1/jobs/edit", json=body)
+    assert resp.status_code == 202
+    payload = mock_publisher.enqueue.call_args[0][0].payload
+    assert payload["profile_id"] is None and payload["format_type"] == "raw"

@@ -32,3 +32,13 @@ def test_no_shared_state_means_no_examples():
 def test_jpeg_uses_relative_white_balance():
     photos = [{}, {"IncrementalTemperature": 0}, {"IncrementalTemperature": 12}]
     assert edited_photos(photos, "jpeg_tiff") == [False, False, True]
+
+
+def test_keeps_as_shot_only_for_raw_on_camera_white_balance():
+    from calotype_edit_serializer import keeps_as_shot
+
+    assert keeps_as_shot({"WhiteBalance": "As Shot", "Temperature": 5100}, "raw")
+    assert keeps_as_shot({}, "raw")
+    assert not keeps_as_shot({"Temperature": 4519}, "raw")   # explicit Kelvin: its own
+    assert not keeps_as_shot({"WhiteBalance": "Custom", "Temperature": 5100}, "raw")
+    assert not keeps_as_shot({"WhiteBalance": "As Shot"}, "jpeg_tiff")

@@ -204,15 +204,16 @@ def create_edit_job(
                 raise HTTPException(status_code=409, detail="idempotency key conflicts with another job kind")
             return JobAcceptedResponse(job_id=existing.id, kind="edit")
 
-    # Validate profile exists and is ready.
-    profile = ProfileRepository.get_by_id(session, body.profile_id)
-    if profile is None:
-        raise HTTPException(status_code=422, detail="profile not found")
-    if profile.status != ProfileStatus.READY.value:
-        raise HTTPException(
-            status_code=422,
-            detail=f"profile is not ready (current status: {profile.status})",
-        )
+    # Validate profile exists and is ready (without one, the look comes from the edits only).
+    if body.profile_id is not None:
+        profile = ProfileRepository.get_by_id(session, body.profile_id)
+        if profile is None:
+            raise HTTPException(status_code=422, detail="profile not found")
+        if profile.status != ProfileStatus.READY.value:
+            raise HTTPException(
+                status_code=422,
+                detail=f"profile is not ready (current status: {profile.status})",
+            )
 
     # Validate all photo_ids exist.
     missing = [

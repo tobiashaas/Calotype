@@ -211,11 +211,13 @@ components:
     BridgeEditV1:
       type: object
       additionalProperties: false
-      required: [schema_version, profile_id, lr_catalog_uuids]
+      description: Without profile_id the look comes only from the selection's edited photos; then learn_from_edits and format_type are required.
+      required: [schema_version, lr_catalog_uuids]
       properties:
         schema_version: { type: string, enum: [bridge-edit-v1] }
         correlation_id: { type: string, nullable: true }
-        profile_id: { type: string, format: uuid }
+        profile_id: { type: string, format: uuid, nullable: true }
+        format_type: { type: string, enum: [raw, jpeg_tiff], nullable: true, description: Only without profile_id. }
         collection_name: { type: string, nullable: true }
         straighten: { type: boolean, default: false, description: Level photos with clear reference lines. }
         learn_from_edits: { type: boolean, default: false, description: Already edited photos of the selection set the shoot's look and get no result. }

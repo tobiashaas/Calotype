@@ -177,7 +177,12 @@ struct EditReq {
     schema_version: String,
     #[serde(default)]
     correlation_id: Option<String>,
-    profile_id: uuid::Uuid,
+    /// None: the look comes only from the selection's edited photos (needs
+    /// `learn_from_edits` and `format_type`).
+    #[serde(default)]
+    profile_id: Option<uuid::Uuid>,
+    #[serde(default)]
+    format_type: Option<String>,
     #[serde(default)]
     collection_name: Option<String>,
     #[serde(default)]
@@ -269,13 +274,21 @@ async fn queue_edit(State(state): State<Shared>, Json(body): Json<Value>) -> Res
     if let Err(resp) = expect_schema(&req.schema_version, "bridge-edit-v1") {
         return resp;
     }
+    let format_ok = matches!(req.format_type.as_deref(), Some("raw" | "jpeg_tiff"));
+    if req.profile_id.is_none() && !(req.learn_from_edits && format_ok) {
+        return error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "without profile_id, learn_from_edits and format_type ('raw' or 'jpeg_tiff') are required",
+        );
+    }
     let uuids = match checked_uuids(&state, req.lr_catalog_uuids) {
         Ok(u) => u,
         Err(resp) => return resp,
     };
     let request = json!({
         "correlation_id": req.correlation_id,
-        "profile_id": req.profile_id.to_string(),
+        "profile_id": req.profile_id.map(|p| p.to_string()),
+        "format_type": if req.profile_id.is_none() { req.format_type } else { None },
         "collection_name": req.collection_name,
         "straighten": req.straighten,
         "learn_from_edits": req.learn_from_edits,

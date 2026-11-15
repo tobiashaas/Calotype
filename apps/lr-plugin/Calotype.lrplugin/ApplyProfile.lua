@@ -14,11 +14,16 @@ local LrView = import "LrView"
 local Actions = require "Actions"
 local Retouch = require "Retouch"
 
+local OWN_EDITS = "own-edits"
+
 local function askForProfile(context, items, count)
   local f = LrView.osFactory()
   local props = LrBinding.makePropertyTable(context)
-  props.profileId = items[1].value
   local prefs = LrPrefs.prefsForPlugin()
+  props.profileId = items[1].value
+  for _, item in ipairs(items) do
+    if item.value == prefs.lastProfileId then props.profileId = item.value end
+  end
   props.straighten = prefs.straighten == true
   props.learnFromEdits = prefs.learnFromEdits == true
   for _, item in ipairs(Retouch.ITEMS) do props["retouch_" .. item.id] = prefs["retouch_" .. item.id] == true end
@@ -40,6 +45,7 @@ local function askForProfile(context, items, count)
       f:checkbox {
         value = LrView.bind "learnFromEdits",
         title = LOC "$$$/Calotype/Apply/LearnFromEdits=Learn this shoot's look from the photos in the selection you already edited",
+        enabled = LrBinding.keyIsNot("profileId", OWN_EDITS),
       },
       f:static_text {
         title = LOC "$$$/Calotype/Apply/LearnFromEditsHint=Edit about 20 typical photos first; they stay as they are.",
@@ -55,6 +61,7 @@ local function askForProfile(context, items, count)
   }
   if answer ~= "ok" then return nil end
   prefs.straighten = props.straighten
+  prefs.lastProfileId = props.profileId
   prefs.learnFromEdits = props.learnFromEdits
   local retouch = {}
   for _, item in ipairs(Retouch.ITEMS) do
@@ -64,7 +71,7 @@ local function askForProfile(context, items, count)
   for _, item in ipairs(items) do
     if item.value == props.profileId then
       return item.profile, { straighten = props.straighten, retouch = retouch,
-        learnFromEdits = props.learnFromEdits }
+        learnFromEdits = props.learnFromEdits or item.value == OWN_EDITS }
     end
   end
   return nil
@@ -85,11 +92,12 @@ LrFunctionContext.postAsyncTaskWithContext("Calotype.apply", function(context)
     LrDialogs.message("Calotype", err, "critical")
     return
   end
-  if #items == 0 then
-    LrDialogs.message(LOC "$$$/Calotype/Apply/NoProfileTitle=No profile is ready yet",
-      LOC "$$$/Calotype/Apply/NoProfile=Train one first with \"Train profile from selected photos...\".", "info")
-    return
-  end
+  -- Always offered, also without any trained profile: the look of the photos already edited.
+  items[#items + 1] = {
+    title = LOC "$$$/Calotype/Apply/OwnEditsItem=No profile: only from the photos I already edited",
+    value = OWN_EDITS,
+    profile = Actions.ownEditsProfile(photos),
+  }
 
   local profile, options = askForProfile(context, items, #photos)
   if not profile then return end

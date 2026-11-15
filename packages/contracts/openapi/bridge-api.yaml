@@ -291,9 +291,9 @@ components:
           additionalProperties: true
     EditJobRequestV1:
       type: object
+      description: Without profile_id the look comes only from the selection's edited photos; then learn_from_edits and format_type are required.
       required:
         - schema_version
-        - profile_id
         - photo_ids
       properties:
         schema_version:
@@ -304,6 +304,10 @@ components:
         profile_id:
           type: string
           format: uuid
+        format_type:
+          type: string
+          enum: [raw, jpeg_tiff]
+          description: Only without profile_id — how to read the photos' white balance.
         collection_name:
           type: string
         straighten:

@@ -112,10 +112,11 @@ class EditResult(Base):
         ForeignKey("photos.id", ondelete="CASCADE"),
         nullable=False,
     )
-    profile_id: Mapped[uuid.UUID] = mapped_column(
+    # Migration 013: None when the job learned only from the selection's edited photos.
+    profile_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("profiles.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
 
     s3_key: Mapped[str | None] = mapped_column(String(512), nullable=True)

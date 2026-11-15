@@ -68,6 +68,7 @@ calotype-folder apply  <folder> --profile X --straighten
 
 # Edit ~20 typical photos of the shoot yourself first: they set the look, the rest follows
 calotype-folder apply  <folder> --profile X --learn-from-edits
+calotype-folder apply  <folder> --learn-from-edits             # no profile: your edits alone
 
 # Culling: color label green / yellow / red + calotype:Cull / calotype:CullReason in the sidecar
 calotype-folder cull   <folder> [--out <output>]

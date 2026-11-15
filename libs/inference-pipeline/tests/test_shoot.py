@@ -54,3 +54,15 @@ def test_few_examples_use_their_mean_and_missing_sliders_keep_the_model():
 def test_needs_examples():
     with pytest.raises(ValueError):
         calibrate([], [], [], [{"exposure": 0.0}], [[0.0]])
+
+
+def test_without_a_profile_the_examples_alone_set_the_look():
+    X = _shoot(60, seed=1)
+    exposure = 0.5 + 0.4 * X[:, 0]
+    truth = [{"exposure": float(e), "contrast": 10.0} for e in exposure]
+    truth[0].pop("contrast")   # a slider one example lacks gets no value at all
+    out, methods = calibrate(truth[:30], None, X[:30], None, X[30:])
+    assert len(out) == 30 and all("contrast" not in o for o in out)
+    assert methods == {"exposure": "ridge"}
+    out, _ = calibrate(truth[1:4], None, X[1:4], None, X[30:])   # few examples: their mean
+    assert all(o["contrast"] == pytest.approx(10) for o in out)

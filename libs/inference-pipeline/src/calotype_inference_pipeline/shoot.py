@@ -53,16 +53,19 @@ def _predict(method: str, truth, model_ref, X_ref, model_new, X_new, t_ref=None,
     if method == "series":
         return truth[np.argmin(np.abs(t_new[:, None] - t_ref[None, :]), axis=1)]
     if method == "mean":
-        return np.full(len(model_new), mean)
+        return np.full(len(X_new), mean)
     if method == "model":
         return mean + _beta(model_ref, truth) * (model_new - model_ref.mean())
     return mean + _ridge(X_ref, truth)(X_new)
 
 
 def _choose(truth, model_ref, X_ref, tolerance: float, t_ref=None) -> str:
-    """Method with the most held-out references within tolerance; ties keep the simpler one."""
+    """Method with the most held-out references within tolerance; ties keep the simpler one.
+
+    model_ref None: no profile, so no ``model`` candidate.
+    """
     k = len(truth)
-    hits = {"mean": 0, "model": 0, "ridge": 0}
+    hits = {"mean": 0, "ridge": 0} if model_ref is None else {"mean": 0, "model": 0, "ridge": 0}
     if t_ref is not None:
         hits["series"] = 0
     # Folds are random, not consecutive: with times, a consecutive fold would hide the
@@ -71,8 +74,8 @@ def _choose(truth, model_ref, X_ref, tolerance: float, t_ref=None) -> str:
     for fold in np.array_split(order, min(FOLDS, k)):
         train = np.setdiff1d(np.arange(k), fold)
         for method in hits:
-            pred = _predict(method, truth[train], model_ref[train], X_ref[train],
-                            model_ref[fold], X_ref[fold],
+            pred = _predict(method, truth[train], None if model_ref is None else model_ref[train],
+                            X_ref[train], None if model_ref is None else model_ref[fold], X_ref[fold],
                             None if t_ref is None else t_ref[train],
                             None if t_ref is None else t_ref[fold])
             hits[method] += int(np.sum(np.abs(pred - truth[fold]) <= tolerance))
@@ -81,9 +84,9 @@ def _choose(truth, model_ref, X_ref, tolerance: float, t_ref=None) -> str:
 
 def calibrate(
     references: Sequence[Mapping[str, float]],
-    reference_model: Sequence[Mapping[str, float]],
+    reference_model: Sequence[Mapping[str, float]] | None,
     reference_features: Sequence[Sequence[float]],
-    model: Sequence[Mapping[str, float]],
+    model: Sequence[Mapping[str, float]] | None,
     features: Sequence[Sequence[float]],
     reference_times: Sequence[float] | None = None,
     times: Sequence[float] | None = None,
@@ -94,7 +97,8 @@ def calibrate(
     profile's predictions for the edited / the other photos; *_features: their feature vectors.
     Sliders missing from a reference (e.g. RAW temperature without a value) keep the model's
     prediction. reference_times / times: capture times in seconds (both or neither) — enable
-    the ``series`` method.
+    the ``series`` method. reference_model and model None: no profile — the look comes from
+    the references alone, and sliders they lack get no value at all.
     """
     if not references:
         raise ValueError("calibration needs at least one edited photo")
@@ -103,14 +107,15 @@ def calibrate(
     with_times = reference_times is not None and times is not None
     t_ref = np.asarray(reference_times, dtype=float) if with_times else None
     t_new = np.asarray(times, dtype=float) if with_times else None
-    out = [dict(m) for m in model]
+    with_model = reference_model is not None and model is not None
+    out = [dict(m) for m in model] if with_model else [{} for _ in range(len(X_new))]
     methods: dict[str, str] = {}
-    params = [p for p in TOLERANCE if all(p in r for r in references)
-              and all(p in m for m in reference_model) and all(p in m for m in model)]
+    params = [p for p in TOLERANCE if all(p in r for r in references) and (not with_model or (
+        all(p in m for m in reference_model) and all(p in m for m in model)))]
     for p in params:
         truth = np.array([r[p] for r in references], dtype=float)
-        m_ref = np.array([m[p] for m in reference_model], dtype=float)
-        m_new = np.array([m[p] for m in model], dtype=float)
+        m_ref = np.array([m[p] for m in reference_model], dtype=float) if with_model else None
+        m_new = np.array([m[p] for m in model], dtype=float) if with_model else None
         method = "mean" if len(truth) < MIN_FOR_CHOICE else _choose(truth, m_ref, X_ref, TOLERANCE[p], t_ref)
         methods[p] = method
         if not out:

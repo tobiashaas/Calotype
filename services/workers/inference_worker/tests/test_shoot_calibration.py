@@ -61,3 +61,19 @@ def test_series_follows_the_closest_edited_photo_in_time():
     assert targets == ids[10:]
     assert predictions[ids[10]]["exposure"] == 0.2
     assert predictions[ids[11]]["exposure"] == 1.2
+
+
+def test_without_a_profile_only_the_edited_sliders_are_set():
+    import pytest
+
+    ids, settings, predictions, vectors = _job([0.5, 0.7], untouched=3)
+    empty = {p: {} for p in predictions}
+    targets = calibrate_to_shoot(empty, vectors, settings, ids, "raw", uuid4(), with_model=False)
+    assert targets == ids[2:]
+    for p in targets:
+        assert empty[p]["exposure"] == 0.6 and empty[p]["contrast"] == 10
+        assert "temp" not in empty[p]   # RAW as shot: no Kelvin to copy, so none is invented
+    none_edited = _job([], untouched=3)
+    with pytest.raises(ValueError, match="no edited photos"):
+        calibrate_to_shoot({p: {} for p in none_edited[0]}, none_edited[3], none_edited[1],
+                           none_edited[0], "raw", uuid4(), with_model=False)

@@ -14,9 +14,9 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.orm import sessionmaker
 
-from calotype_edit_serializer import apply_style, edited_photos, from_lightroom, serialize_for_lightroom
+from calotype_edit_serializer import apply_style, edited_photos, from_lightroom, keeps_as_shot, serialize_for_lightroom
 from calotype_domain.jobs import JobStatus
-from calotype_inference_pipeline import artifact_feature_version, run_inference
+from calotype_inference_pipeline import CURRENT_FEATURE_VERSION, artifact_feature_version, run_inference
 from calotype_inference_pipeline.shoot import calibrate
 from calotype_inference_pipeline.straighten import MIN_LINES, crop_settings
 from calotype_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
@@ -78,6 +78,7 @@ def calibrate_to_shoot(
     format_type: str,
     job_uuid: UUID,
     times: dict[UUID, float | None] | None = None,
+    with_model: bool = True,
 ) -> list[UUID]:
     """Learn the shoot's look from the photos already edited in the selection.
 
@@ -85,21 +86,32 @@ def calibrate_to_shoot(
     edit); the edited photos are examples only and keep the photographer's settings. Without
     edited photos (or nothing left to edit) every prediction stays as the profile made it.
     With capture times for all photos, the closest edited photo in time is one more candidate
-    (series of the same scene).
+    (series of the same scene). with_model False: there is no profile (``predictions`` hold
+    empty dicts), so the edited photos are the only source of the look — none is an error.
     """
     edited = dict(zip(photo_ids, edited_photos([settings[p] for p in photo_ids], format_type)))
     refs = [p for p in predictions if edited[p]]
     rest = [p for p in predictions if not edited[p]]
+    if not with_model and not refs:
+        raise ValueError("no edited photos in the selection to learn the look from")
     if not refs or not rest:
         log.info("no shoot calibration (examples=%d, to edit=%d) job_id=%s", len(refs), len(rest), job_uuid)
         return list(predictions)
     times = times or {}
     timed = all(times.get(p) is not None for p in refs + rest)
+    references = [from_lightroom(settings[p], format_type) for p in refs]
+    if not with_model:
+        # Without a profile, a RAW example still on the camera's white balance has no Kelvin
+        # to pass on: the other photos then keep their own (no temp/tint in the result).
+        for p, ref in zip(refs, references):
+            if keeps_as_shot(settings[p], format_type):
+                ref.pop("temp", None)
+                ref.pop("tint", None)
     calibrated, methods = calibrate(
-        [from_lightroom(settings[p], format_type) for p in refs],
-        [predictions[p] for p in refs],
+        references,
+        [predictions[p] for p in refs] if with_model else None,
         [vectors[p] for p in refs],
-        [predictions[p] for p in rest],
+        [predictions[p] for p in rest] if with_model else None,
         [vectors[p] for p in rest],
         [times[p] for p in refs] if timed else None,
         [times[p] for p in rest] if timed else None,
@@ -134,28 +146,35 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         with session_scope(factory) as session:
             JobRepository.set_status(session, job_uuid, JobStatus.RUNNING)
 
-        if not profile_id_str:
-            raise ValueError("missing profile_id in payload")
-        profile_id = UUID(profile_id_str)
+        profile_id: UUID | None = None
+        model_bytes: bytes | None = None
+        if profile_id_str:
+            profile_id = UUID(profile_id_str)
+            # Load profile + model artifact
+            with session_scope(factory) as session:
+                profile = ProfileRepository.get_by_id(session, profile_id)
+                if profile is None:
+                    raise ValueError(f"profile {profile_id} not found")
+                artifact_key = profile.model_artifact_key
+                format_type = profile.format_type
+                # Style layer: the profile's preset adds the look on top of each prediction.
+                base_preset = dict(profile.base_preset or {})
 
-        # Load profile + model artifact
-        with session_scope(factory) as session:
-            profile = ProfileRepository.get_by_id(session, profile_id)
-            if profile is None:
-                raise ValueError(f"profile {profile_id} not found")
-            artifact_key = profile.model_artifact_key
-            format_type = profile.format_type
-            # Style layer: the profile's preset adds the look on top of each prediction.
-            base_preset = dict(profile.base_preset or {})
-
-        # No model → fail the job. Zero predictions would reset the user's photos.
-        if not artifact_key:
-            raise ValueError(f"profile {profile_id} has no model artifact")
-        s3 = _s3_client()
-        bucket = os.environ.get("S3_BUCKET", "calotype-photos")
-        model_bytes = s3.get_object(Bucket=bucket, Key=artifact_key)["Body"].read()
-        # The model was trained on one feature version; use exactly that one.
-        feature_version = artifact_feature_version(model_bytes)
+            # No model → fail the job. Zero predictions would reset the user's photos.
+            if not artifact_key:
+                raise ValueError(f"profile {profile_id} has no model artifact")
+            s3 = _s3_client()
+            bucket = os.environ.get("S3_BUCKET", "calotype-photos")
+            model_bytes = s3.get_object(Bucket=bucket, Key=artifact_key)["Body"].read()
+            # The model was trained on one feature version; use exactly that one.
+            feature_version = artifact_feature_version(model_bytes)
+        elif learn_from_edits and envelope.payload.get("format_type") in ("raw", "jpeg_tiff"):
+            # No profile: the selection's edited photos are the only source of the look.
+            format_type = envelope.payload["format_type"]
+            base_preset = {}
+            feature_version = CURRENT_FEATURE_VERSION
+        else:
+            raise ValueError("missing profile_id in payload (without one, learn_from_edits and format_type)")
 
         # Model prediction per photo; photos without features (no usable preview) get no result.
         predictions: dict[UUID, dict[str, float]] = {}
@@ -174,11 +193,12 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
                                 feature_version, photo_id, job_uuid)
                     continue
                 vectors[photo_id] = list(fv.vector)
-                predictions[photo_id] = run_inference(model_bytes, vectors[photo_id])
+                predictions[photo_id] = run_inference(model_bytes, vectors[photo_id]) if model_bytes else {}
 
         targets = list(predictions)
         if learn_from_edits:
-            targets = calibrate_to_shoot(predictions, vectors, settings, photo_ids, format_type, job_uuid, times)
+            targets = calibrate_to_shoot(predictions, vectors, settings, photo_ids, format_type, job_uuid, times,
+                                         with_model=model_bytes is not None)
 
         for photo_id in targets:
             with session_scope(factory) as session:

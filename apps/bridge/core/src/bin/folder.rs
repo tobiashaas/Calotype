@@ -3,6 +3,7 @@
 //!     calotype-folder train  <DIR>... --name "Business Warm" [--genre business] [--color color]
 //!                            [--recursive]
 //!     calotype-folder apply  <DIR> --profile "Business Warm" [--force] [--out <DIR>]
+//!     calotype-folder apply  <DIR> --learn-from-edits            (no profile: your edits only)
 //!     calotype-folder profiles
 //!
 //! train: edited RAWs (RAW + XMP with develop settings) are the training material. Several
@@ -19,7 +20,8 @@
 //!              catalog) — the RAW folder stays untouched.
 //! apply --straighten: also level photos with clear reference lines (own crops stay).
 //! apply --learn-from-edits: the RAWs of the folder you already edited set the shoot's look;
-//!        the others are edited from it (those edits stay untouched).
+//!        the others are edited from it (those edits stay untouched). Without --profile the
+//!        look comes from those edits alone.
 //! cull: keep / check / sort out as color label (green / yellow / red) + reason in the sidecar;
 //!       sidecars with stars or a red/purple label teach the scorer.
 //! --out <dir>: write sidecars there instead of next to the RAWs (read-only cards,
@@ -84,9 +86,10 @@ enum Command {
     /// Apply a profile to the RAWs in a folder and write XMP sidecars.
     Apply {
         dir: PathBuf,
-        /// Profile id or exact name.
-        #[arg(long)]
-        profile: String,
+        /// Profile id or exact name. Optional with --learn-from-edits: then the RAWs you
+        /// already edited here are the only source of the look.
+        #[arg(long, required_unless_present = "learn_from_edits")]
+        profile: Option<String>,
         /// Also overwrite develop settings in sidecars that are already edited.
         #[arg(long)]
         force: bool,
@@ -561,22 +564,32 @@ async fn find_profile(bridge: &Bridge, wanted: &str) -> Result<Value> {
     }
 }
 
+/// Profile name in the sidecars of a job that learned only from the photographer's edits.
+const OWN_EDITS: &str = "own edits";
+
 #[allow(clippy::too_many_arguments)]
 async fn apply(
     bridge: &Bridge,
     dir: &Path,
-    wanted: &str,
+    wanted: Option<&str>,
     force: bool,
     files_from: Option<&Path>,
     out: Option<&Path>,
     straighten: bool,
     learn_from_edits: bool,
 ) -> Result<()> {
-    let profile = find_profile(bridge, wanted).await?;
-    if profile["format_type"] != "raw" {
-        bail!("folder mode writes RAW sidecars; this profile is for JPEG/TIFF");
-    }
-    let name = profile["name"].as_str().unwrap_or(wanted).to_string();
+    // No profile: the folder's edited RAWs alone set the look (written as "own edits").
+    let (profile_id, name) = match wanted {
+        Some(wanted) => {
+            let profile = find_profile(bridge, wanted).await?;
+            if profile["format_type"] != "raw" {
+                bail!("folder mode writes RAW sidecars; this profile is for JPEG/TIFF");
+            }
+            let name = profile["name"].as_str().unwrap_or(wanted).to_string();
+            (Some(profile["profile_id"].clone()), name)
+        }
+        None => (None, OWN_EDITS.to_string()),
+    };
     let scanned = scan_selected(
         dir,
         Selection {
@@ -606,6 +619,9 @@ async fn apply(
     if todo.is_empty() {
         return Ok(());
     }
+    if profile_id.is_none() && examples.is_empty() {
+        bail!("no edited RAWs here to learn the look from — edit a few first, or pass --profile");
+    }
     let by_id = bridge.register(todo, false).await?;
     let mut uuids: Vec<&String> = by_id.keys().collect();
     let example_ids = bridge.register(examples, true).await?;
@@ -615,7 +631,8 @@ async fn apply(
             "/v1/jobs/edit",
             &json!({
                 "schema_version": "bridge-edit-v1",
-                "profile_id": profile["profile_id"],
+                "profile_id": profile_id,
+                "format_type": if profile_id.is_none() { Some("raw") } else { None },
                 "lr_catalog_uuids": uuids,
                 "straighten": straighten,
                 "learn_from_edits": learn_from_edits,
@@ -718,7 +735,7 @@ async fn main() -> Result<()> {
             apply(
                 &bridge,
                 &dir,
-                &profile,
+                profile.as_deref(),
                 force,
                 files_from.as_deref(),
                 out.as_deref(),

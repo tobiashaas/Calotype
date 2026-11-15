@@ -6,7 +6,6 @@
   "additionalProperties": true,
   "required": [
     "schema_version",
-    "profile_id",
     "photo_ids"
   ],
   "properties": {
@@ -18,7 +17,15 @@
     },
     "profile_id": {
       "type": "string",
-      "format": "uuid"
+      "format": "uuid",
+      "description": "Profile whose model predicts the edits. Without it the look comes only from the selection's edited photos."
+    },
+    "format_type": {
+      "enum": [
+        "raw",
+        "jpeg_tiff"
+      ],
+      "description": "Only without profile_id: how to read the photos' white balance."
     },
     "collection_name": {
       "type": "string"
@@ -42,5 +49,23 @@
       }
     }
   },
-  "description": "Servers are tolerant readers: unknown optional fields are ignored, so newer clients keep working with older servers. New required fields need a new schema version."
+  "description": "Servers are tolerant readers: unknown optional fields are ignored, so newer clients keep working with older servers. New required fields need a new schema version.",
+  "if": {
+    "not": {
+      "required": [
+        "profile_id"
+      ]
+    }
+  },
+  "then": {
+    "required": [
+      "learn_from_edits",
+      "format_type"
+    ],
+    "properties": {
+      "learn_from_edits": {
+        "const": true
+      }
+    }
+  }
 }
