@@ -7,6 +7,7 @@ Pure transformation, no dependencies.
 |---|---|---|
 | Lightroom → internal | `from_lightroom(settings, format_type)` | Train worker: training targets from `photo:getDevelopSettings()` |
 | internal → Lightroom | `to_lightroom(params, format_type)` / `serialize_for_lightroom` | Inference worker: values for `photo:applyDevelopSettings()` |
+| edited or untouched? | `edited_photos(settings_list, format_type)` | Shoot calibration: photos whose sliders differ from the selection's untouched state (Lightroom defaults if present, else the most common state, e.g. an import preset; as-shot Kelvin ignored) |
 
 `to_lightroom` clamps every value to the slider range and rounds to Lightroom's
 precision (exposure 2 decimal places, otherwise whole numbers).

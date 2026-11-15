@@ -1,10 +1,17 @@
 //! Folder mode without Lightroom. Talks to the running Bridge like the plugin does.
 //!
-//!     calotype-folder train  <DIR> --name "Business Warm" [--genre business] [--color color]
+//!     calotype-folder train  <DIR>... --name "Business Warm" [--genre business] [--color color]
+//!                            [--recursive]
 //!     calotype-folder apply  <DIR> --profile "Business Warm" [--force] [--out <DIR>]
+//!     calotype-folder apply  <DIR> --learn-from-edits            (no profile: your edits only)
 //!     calotype-folder profiles
 //!
-//! train: edited RAWs (RAW + XMP with develop settings) are the training material.
+//! train: edited RAWs (RAW + XMP with develop settings) are the training material. Several
+//!        folders can be given; --recursive also reads every folder below them (an archive
+//!        with one folder per shoot), skipping Lightroom previews and NAS/macOS metadata.
+//! train --catalogs: take the edits from Lightroom catalogs (`.lrcat`) next to or above the
+//!        photos, read-only — for shoots whose edits never made it into XMP sidecars. Photos
+//!        the catalog lists as only imported (also with an import preset) are left out.
 //! apply: unedited RAWs get a new XMP sidecar; import the folder into Lightroom afterwards.
 //! train --style <preset.xmp>: a Lightroom preset as the profile's style layer — the model
 //!              predicts exposure/white balance/tone per photo, the preset adds the look.
@@ -12,6 +19,9 @@
 //! train --sidecars <dir>: read the XMPs from another folder (e.g. edits exported from a
 //!              catalog) — the RAW folder stays untouched.
 //! apply --straighten: also level photos with clear reference lines (own crops stay).
+//! apply --learn-from-edits: the RAWs of the folder you already edited set the shoot's look;
+//!        the others are edited from it (those edits stay untouched). Without --profile the
+//!        look comes from those edits alone.
 //! cull: keep / check / sort out as color label (green / yellow / red) + reason in the sidecar;
 //!       sidecars with stars or a red/purple label teach the scorer.
 //! --out <dir>: write sidecars there instead of next to the RAWs (read-only cards,
@@ -44,7 +54,19 @@ struct Cli {
 enum Command {
     /// Train a profile from edited RAWs (those with an XMP sidecar holding develop settings).
     Train {
-        dir: PathBuf,
+        /// One or more folders with RAW + XMP.
+        #[arg(required = true)]
+        dirs: Vec<PathBuf>,
+        /// Also read every folder below the given ones (skips Lightroom previews, NAS metadata).
+        #[arg(long)]
+        recursive: bool,
+        /// Take edits and ratings from Lightroom catalogs (.lrcat) next to or above the photos
+        /// (read-only); they win over XMP sidecars.
+        #[arg(long)]
+        catalogs: bool,
+        /// Only count what would be trained; nothing is uploaded.
+        #[arg(long)]
+        dry_run: bool,
         #[arg(long)]
         name: String,
         #[arg(long, default_value = "other")]
@@ -64,9 +86,10 @@ enum Command {
     /// Apply a profile to the RAWs in a folder and write XMP sidecars.
     Apply {
         dir: PathBuf,
-        /// Profile id or exact name.
-        #[arg(long)]
-        profile: String,
+        /// Profile id or exact name. Optional with --learn-from-edits: then the RAWs you
+        /// already edited here are the only source of the look.
+        #[arg(long, required_unless_present = "learn_from_edits")]
+        profile: Option<String>,
         /// Also overwrite develop settings in sidecars that are already edited.
         #[arg(long)]
         force: bool,
@@ -79,6 +102,9 @@ enum Command {
         /// Also level photos with clear reference lines (sidecars with an own crop keep it).
         #[arg(long)]
         straighten: bool,
+        /// Learn the shoot's look from the RAWs here you already edited (they stay untouched).
+        #[arg(long)]
+        learn_from_edits: bool,
     },
     /// Sort RAWs into keep / check / sort out: color label (green / yellow / red) and the
     /// reason in the sidecar. Stars and edits stay; sidecars with stars or a red/purple label
@@ -180,6 +206,10 @@ impl Bridge {
                     "file_path": path.display().to_string(),
                     "lr_develop_settings": settings,
                     "lr_metadata": photo.decisions,
+                    // Capture time: lets the shoot calibration follow series of the same scene.
+                    "exif_snapshot": json!({
+                        "date_time_original": calotype_bridge_core::preview::capture_time(&photo.path),
+                    }),
                 }),
             )
             .await
@@ -320,6 +350,11 @@ const CROP_KEYS: &[&str] = &[
     "HasCrop",
 ];
 
+/// Sidecar written by an earlier `apply`: our own prediction, not an example of the look.
+fn written_by_calotype(photo: &FolderPhoto) -> bool {
+    std::fs::read_to_string(&photo.sidecar).is_ok_and(|x| x.contains("calotype:Profile=\""))
+}
+
 /// The sidecar already holds a crop or straighten of its own: keep it.
 fn has_own_crop(settings: &Map<String, Value>) -> bool {
     let num = |k: &str, default: f64| {
@@ -376,9 +411,54 @@ fn scan_selected(dir: &Path, selection: Selection) -> Result<Vec<FolderPhoto>> {
     Ok(selected)
 }
 
+/// The folders to read: the given ones, with `recursive` also everything below them.
+fn expand_dirs(dirs: &[PathBuf], recursive: bool) -> Result<Vec<PathBuf>> {
+    let mut out = Vec::new();
+    for dir in dirs {
+        if recursive {
+            out.extend(folder::photo_dirs(dir)?);
+        } else {
+            out.push(dir.clone());
+        }
+    }
+    out.dedup();
+    Ok(out)
+}
+
+/// Lightroom catalogs in the given folders and every folder above them.
+fn find_catalogs(
+    dirs: &[PathBuf],
+) -> Result<Vec<(PathBuf, calotype_bridge_core::catalog::Catalog)>> {
+    let mut places: Vec<PathBuf> = Vec::new();
+    for dir in dirs {
+        let dir = std::path::absolute(dir).unwrap_or_else(|_| dir.clone());
+        for a in dir.ancestors() {
+            places.push(a.to_path_buf());
+        }
+    }
+    places.sort();
+    places.dedup();
+    let mut out = Vec::new();
+    for place in places {
+        for file in folder::catalogs_in(&place) {
+            match calotype_bridge_core::catalog::Catalog::open(&file) {
+                Ok(c) => {
+                    println!("catalog {}: {} photos", file.display(), c.len());
+                    out.push((place.clone(), c));
+                }
+                Err(e) => println!("catalog {} skipped: {e:#}", file.display()),
+            }
+        }
+    }
+    Ok(out)
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn train(
     bridge: &Bridge,
-    dir: &Path,
+    dirs: &[PathBuf],
+    catalogs: bool,
+    dry_run: bool,
     name: &str,
     genre: &str,
     color: &str,
@@ -402,14 +482,41 @@ async fn train(
         }
         None => None,
     };
-    let (edited, other): (Vec<_>, Vec<_>) = scan_selected(dir, selection)?
-        .into_iter()
-        .partition(FolderPhoto::is_edited);
+    if dirs.len() > 1 && selection.sidecars.is_some() {
+        bail!("--sidecars works with one folder only");
+    }
+    let mut photos = Vec::new();
+    for dir in dirs {
+        let found = scan_selected(dir, selection)?;
+        if dirs.len() > 1 && !found.is_empty() {
+            let edited = found.iter().filter(|p| p.is_edited()).count();
+            println!("{}: {edited} edited of {} RAWs", dir.display(), found.len());
+        }
+        photos.extend(found);
+    }
+    if catalogs {
+        let found = find_catalogs(dirs)?;
+        for p in &mut photos {
+            if let Ok(abs) = std::path::absolute(&p.path) {
+                p.path = abs;
+            }
+        }
+        let (known, edited) = folder::apply_catalogs(&mut photos, &found);
+        println!(
+            "{known} of {} RAWs found in a catalog, {edited} of them edited there",
+            photos.len()
+        );
+    }
+    let (edited, other): (Vec<_>, Vec<_>) = photos.into_iter().partition(FolderPhoto::is_edited);
     println!(
         "{} edited RAWs for training, {} without develop settings ignored",
         edited.len(),
         other.len()
     );
+    if dry_run {
+        println!("dry run: nothing uploaded");
+        return Ok(());
+    }
     if edited.len() < 3 {
         bail!("need at least 3 edited RAWs (RAW + XMP with develop settings)");
     }
@@ -457,30 +564,47 @@ async fn find_profile(bridge: &Bridge, wanted: &str) -> Result<Value> {
     }
 }
 
+/// Profile name in the sidecars of a job that learned only from the photographer's edits.
+const OWN_EDITS: &str = "own edits";
+
+#[allow(clippy::too_many_arguments)]
 async fn apply(
     bridge: &Bridge,
     dir: &Path,
-    wanted: &str,
+    wanted: Option<&str>,
     force: bool,
     files_from: Option<&Path>,
     out: Option<&Path>,
     straighten: bool,
+    learn_from_edits: bool,
 ) -> Result<()> {
-    let profile = find_profile(bridge, wanted).await?;
-    if profile["format_type"] != "raw" {
-        bail!("folder mode writes RAW sidecars; this profile is for JPEG/TIFF");
-    }
-    let name = profile["name"].as_str().unwrap_or(wanted).to_string();
-    // With --out nothing next to the RAWs is overwritten, so existing edits do not block.
-    let (todo, edited): (Vec<_>, Vec<_>) = scan_selected(
+    // No profile: the folder's edited RAWs alone set the look (written as "own edits").
+    let (profile_id, name) = match wanted {
+        Some(wanted) => {
+            let profile = find_profile(bridge, wanted).await?;
+            if profile["format_type"] != "raw" {
+                bail!("folder mode writes RAW sidecars; this profile is for JPEG/TIFF");
+            }
+            let name = profile["name"].as_str().unwrap_or(wanted).to_string();
+            (Some(profile["profile_id"].clone()), name)
+        }
+        None => (None, OWN_EDITS.to_string()),
+    };
+    let scanned = scan_selected(
         dir,
         Selection {
             files_from,
             sidecars: None,
         },
-    )?
-    .into_iter()
-    .partition(|p| force || out.is_some() || !p.is_edited());
+    )?;
+    // --learn-from-edits: the photographer's own edits are examples (never overwritten).
+    let (examples, scanned): (Vec<_>, Vec<_>) = scanned
+        .into_iter()
+        .partition(|p| learn_from_edits && p.is_edited() && !written_by_calotype(p));
+    // With --out nothing next to the RAWs is overwritten, so existing edits do not block.
+    let (todo, edited): (Vec<_>, Vec<_>) = scanned
+        .into_iter()
+        .partition(|p| force || out.is_some() || !p.is_edited());
     if let Some(out) = out {
         std::fs::create_dir_all(out)?;
     }
@@ -489,18 +613,29 @@ async fn apply(
         todo.len(),
         edited.len()
     );
+    if learn_from_edits {
+        println!("{} edited RAWs set the shoot's look", examples.len());
+    }
     if todo.is_empty() {
         return Ok(());
     }
+    if profile_id.is_none() && examples.is_empty() {
+        bail!("no edited RAWs here to learn the look from — edit a few first, or pass --profile");
+    }
     let by_id = bridge.register(todo, false).await?;
+    let mut uuids: Vec<&String> = by_id.keys().collect();
+    let example_ids = bridge.register(examples, true).await?;
+    uuids.extend(example_ids.keys());
     let job = bridge
         .post(
             "/v1/jobs/edit",
             &json!({
                 "schema_version": "bridge-edit-v1",
-                "profile_id": profile["profile_id"],
-                "lr_catalog_uuids": by_id.keys().collect::<Vec<_>>(),
+                "profile_id": profile_id,
+                "format_type": if profile_id.is_none() { Some("raw") } else { None },
+                "lr_catalog_uuids": uuids,
                 "straighten": straighten,
+                "learn_from_edits": learn_from_edits,
             }),
         )
         .await?;
@@ -561,7 +696,10 @@ async fn main() -> Result<()> {
     let bridge = Bridge::connect()?;
     match cli.command {
         Command::Train {
-            dir,
+            dirs,
+            recursive,
+            catalogs,
+            dry_run,
             name,
             genre,
             color,
@@ -571,7 +709,9 @@ async fn main() -> Result<()> {
         } => {
             train(
                 &bridge,
-                &dir,
+                &expand_dirs(&dirs, recursive)?,
+                catalogs,
+                dry_run,
                 &name,
                 &genre,
                 &color,
@@ -590,15 +730,17 @@ async fn main() -> Result<()> {
             files_from,
             out,
             straighten,
+            learn_from_edits,
         } => {
             apply(
                 &bridge,
                 &dir,
-                &profile,
+                profile.as_deref(),
                 force,
                 files_from.as_deref(),
                 out.as_deref(),
                 straighten,
+                learn_from_edits,
             )
             .await
         }

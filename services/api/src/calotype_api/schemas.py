@@ -53,11 +53,23 @@ class EditJobRequestV1(TolerantRequest):
 
     schema_version: EditSchema
     correlation_id: str | None = None
-    profile_id: UUID
+    # Without a profile the look comes only from the selection's edited photos: then
+    # learn_from_edits must be on and format_type says how to read white balance.
+    profile_id: UUID | None = None
+    format_type: Literal["raw", "jpeg_tiff"] | None = None
     collection_name: str | None = None
     photo_ids: Annotated[list[UUID], Field(min_length=1)]
     # Optional: level photos that have clear reference lines (crop keys in the result).
     straighten: bool = False
+    # Optional: photos of the selection the photographer already edited set the shoot's look;
+    # they are examples only and get no result.
+    learn_from_edits: bool = False
+
+    @model_validator(mode="after")
+    def _profile_or_edits(self) -> "EditJobRequestV1":
+        if self.profile_id is None and not (self.learn_from_edits and self.format_type):
+            raise ValueError("without profile_id, learn_from_edits and format_type are required")
+        return self
 
 
 class CullJobRequestV1(TolerantRequest):

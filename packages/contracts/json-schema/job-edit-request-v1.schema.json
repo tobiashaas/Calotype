@@ -6,7 +6,6 @@
   "additionalProperties": true,
   "required": [
     "schema_version",
-    "profile_id",
     "photo_ids"
   ],
   "properties": {
@@ -18,7 +17,15 @@
     },
     "profile_id": {
       "type": "string",
-      "format": "uuid"
+      "format": "uuid",
+      "description": "Profile whose model predicts the edits. Without it the look comes only from the selection's edited photos."
+    },
+    "format_type": {
+      "enum": [
+        "raw",
+        "jpeg_tiff"
+      ],
+      "description": "Only without profile_id: how to read the photos' white balance."
     },
     "collection_name": {
       "type": "string"
@@ -27,6 +34,11 @@
       "type": "boolean",
       "default": false,
       "description": "Level photos with clear reference lines; the result then carries Lightroom crop keys."
+    },
+    "learn_from_edits": {
+      "type": "boolean",
+      "default": false,
+      "description": "Photos among photo_ids that the photographer already edited (their develop settings differ from the selection's untouched state) set the shoot's look. They are examples only and get no result."
     },
     "photo_ids": {
       "type": "array",
@@ -37,5 +49,23 @@
       }
     }
   },
-  "description": "Servers are tolerant readers: unknown optional fields are ignored, so newer clients keep working with older servers. New required fields need a new schema version."
+  "description": "Servers are tolerant readers: unknown optional fields are ignored, so newer clients keep working with older servers. New required fields need a new schema version.",
+  "if": {
+    "not": {
+      "required": [
+        "profile_id"
+      ]
+    }
+  },
+  "then": {
+    "required": [
+      "learn_from_edits",
+      "format_type"
+    ],
+    "properties": {
+      "learn_from_edits": {
+        "const": true
+      }
+    }
+  }
 }

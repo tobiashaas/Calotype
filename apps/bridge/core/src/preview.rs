@@ -120,19 +120,59 @@ fn decode_oriented(
     Ok((img, orientation))
 }
 
-/// Orientation recorded by the RAW container, if we know where to look.
-fn raw_container_orientation(bytes: &[u8]) -> Option<Orientation> {
-    let tiff = if tiff_byte_order(bytes).is_some() {
-        bytes // CR2, NEF, ARW, DNG, … are TIFF files
+/// The TIFF structure holding the RAW's IFD0, if we know where to look.
+fn raw_tiff(bytes: &[u8]) -> Option<&[u8]> {
+    if tiff_byte_order(bytes).is_some() {
+        Some(bytes) // CR2, NEF, ARW, DNG, … are TIFF files
     } else if bytes.get(4..8) == Some(b"ftyp") {
         // CR3 (ISO base media): the `CMT1` box holds a TIFF IFD0 with the EXIF basics.
         let head = &bytes[..bytes.len().min(1 << 20)];
         let pos = head.windows(4).position(|w| w == b"CMT1")?;
-        &bytes[pos + 4..]
+        Some(&bytes[pos + 4..])
     } else {
+        None
+    }
+}
+
+/// Orientation recorded by the RAW container, if we know where to look.
+fn raw_container_orientation(bytes: &[u8]) -> Option<Orientation> {
+    let t = raw_tiff(bytes)?;
+    let (entry, _) = ifd0_entry(t, 0x0112)?;
+    Orientation::from_exif(u8::try_from(tiff_u16(t, entry + 8)?).ok()?)
+}
+
+/// Capture time from the RAW's IFD0 `DateTime` (cameras write the shutter time there) as
+/// `YYYY-MM-DDTHH:MM:SS`, like Lightroom's `dateTimeOriginalISO8601`. Reads the first MiB.
+pub fn capture_time(path: &Path) -> Option<String> {
+    use std::io::Read;
+    let mut head = Vec::with_capacity(1 << 20);
+    std::fs::File::open(path)
+        .ok()?
+        .take(1 << 20)
+        .read_to_end(&mut head)
+        .ok()?;
+    capture_time_from(&head)
+}
+
+fn capture_time_from(bytes: &[u8]) -> Option<String> {
+    let t = raw_tiff(bytes)?;
+    let (entry, _) = ifd0_entry(t, 0x0132)?;
+    let offset = tiff_u32(t, entry + 8)? as usize;
+    let raw = std::str::from_utf8(t.get(offset..offset + 19)?).ok()?;
+    let b = raw.as_bytes();
+    let digits = [0..4, 5..7, 8..10, 11..13, 14..16, 17..19]
+        .iter()
+        .all(|r| b[r.clone()].iter().all(u8::is_ascii_digit));
+    if !digits || &raw[0..4] == "0000" {
         return None;
-    };
-    Orientation::from_exif(tiff_orientation(tiff)?)
+    }
+    Some(format!(
+        "{}-{}-{}T{}",
+        &raw[0..4],
+        &raw[5..7],
+        &raw[8..10],
+        &raw[11..19]
+    ))
 }
 
 /// `Some(true)` for little-endian ("II*\0"), `Some(false)` for big-endian ("MM\0*").
@@ -144,34 +184,33 @@ fn tiff_byte_order(t: &[u8]) -> Option<bool> {
     }
 }
 
-/// Orientation tag (0x0112) from IFD0 of a TIFF structure.
-fn tiff_orientation(t: &[u8]) -> Option<u8> {
-    let le = tiff_byte_order(t)?;
-    let u16_at = |o: usize| {
-        t.get(o..o + 2).map(|b| {
-            if le {
-                u16::from_le_bytes([b[0], b[1]])
-            } else {
-                u16::from_be_bytes([b[0], b[1]])
-            }
-        })
-    };
-    let u32_at = |o: usize| {
-        t.get(o..o + 4).map(|b| {
-            let b = [b[0], b[1], b[2], b[3]];
-            if le {
-                u32::from_le_bytes(b)
-            } else {
-                u32::from_be_bytes(b)
-            }
-        })
-    };
-    let ifd = u32_at(4)? as usize;
-    let entries = usize::from(u16_at(ifd)?);
+fn tiff_u16(t: &[u8], o: usize) -> Option<u16> {
+    let b = t.get(o..o + 2)?;
+    Some(if tiff_byte_order(t)? {
+        u16::from_le_bytes([b[0], b[1]])
+    } else {
+        u16::from_be_bytes([b[0], b[1]])
+    })
+}
+
+fn tiff_u32(t: &[u8], o: usize) -> Option<u32> {
+    let b = t.get(o..o + 4)?;
+    let b = [b[0], b[1], b[2], b[3]];
+    Some(if tiff_byte_order(t)? {
+        u32::from_le_bytes(b)
+    } else {
+        u32::from_be_bytes(b)
+    })
+}
+
+/// Position of the IFD0 entry with `tag` in a TIFF structure, and its value count.
+fn ifd0_entry(t: &[u8], tag: u16) -> Option<(usize, u32)> {
+    let ifd = tiff_u32(t, 4)? as usize;
+    let entries = usize::from(tiff_u16(t, ifd)?);
     for i in 0..entries.min(512) {
         let entry = ifd + 2 + i * 12;
-        if u16_at(entry)? == 0x0112 {
-            return u8::try_from(u16_at(entry + 8)?).ok();
+        if tiff_u16(t, entry)? == tag {
+            return Some((entry, tiff_u32(t, entry + 4)?));
         }
     }
     None
@@ -393,6 +432,46 @@ pub(crate) mod tests {
         );
 
         assert_eq!(raw_container_orientation(b"FUJIFILMCCD-RAW "), None);
+    }
+
+    /// Big-endian TIFF with IFD0 = one `DateTime` entry pointing at the string after it.
+    fn tiff_with_datetime(value: &[u8; 20]) -> Vec<u8> {
+        let mut t = b"MM *".to_vec();
+        t.extend(8u32.to_be_bytes());
+        t.extend(1u16.to_be_bytes());
+        t.extend(0x0132u16.to_be_bytes());
+        t.extend(2u16.to_be_bytes()); // ASCII
+        t.extend(20u32.to_be_bytes());
+        t.extend(26u32.to_be_bytes()); // value offset: right after the IFD
+        t.extend(0u32.to_be_bytes());
+        t.extend(value);
+        t
+    }
+
+    #[test]
+    fn reads_capture_time_from_tiff_raw_and_cr3() {
+        let raw = tiff_with_datetime(b"2022:03:19 14:05:33 ");
+        assert_eq!(
+            capture_time_from(&raw).as_deref(),
+            Some("2022-03-19T14:05:33")
+        );
+        let mut cr3 = b"   ftypcrx    crx isom".to_vec();
+        cr3.extend(b"   0CMT1");
+        cr3.extend(&raw);
+        assert_eq!(
+            capture_time_from(&cr3).as_deref(),
+            Some("2022-03-19T14:05:33")
+        );
+        // Cameras without a clock write zeros or spaces: no time rather than a wrong one.
+        assert_eq!(
+            capture_time_from(&tiff_with_datetime(b"0000:00:00 00:00:00 ")),
+            None
+        );
+        assert_eq!(
+            capture_time_from(&tiff_with_datetime(b"    :  :     :  :   ")),
+            None
+        );
+        assert_eq!(capture_time_from(&tiff_with_orientation(1)), None);
     }
 
     #[test]

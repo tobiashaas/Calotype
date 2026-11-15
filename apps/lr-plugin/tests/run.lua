@@ -502,6 +502,68 @@ test("apply with straighten: crop for uncropped photos, own crops stay", functio
   eq(r.kept_crop, 1, "count kept")
 end)
 
+test("apply learning from edits: flag sent, edited photos stay as they are", function()
+  local Commands = require "AutomationCommands"
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  local mine = { Exposure2012 = 0.8, Contrast2012 = 20 }
+  local photos = { fakePhoto("a", "RAW"), fakePhoto("b", "RAW", mine) }
+  local catalog = fakeCatalog(photos)
+  respond(200, { { profile_id = "p1", name = "Test", genre = "event", format_type = "raw", status = "ready", version = 1 } })
+  respond(202, { status = "pending" })
+  respond(202, { status = "pending" })
+  respond(202, { job_id = "j3", status = "waiting_for_photos" })
+  respond(200, { job_id = "j3", status = "completed", results = {
+    { lr_catalog_uuid = "a", lr_settings = { Exposure2012 = 0.8, Contrast2012 = 20 } },
+  } })
+  local ok, r = Commands.run(catalog, { command = "apply",
+    args = { profile = "Test", uuids = { "a", "b" }, learn_from_edits = true } })
+  eq(ok, true, "apply ok: " .. tostring(r.error))
+  eq(Json.decode(fake.requests[#fake.requests - 1].body).learn_from_edits, true, "flag sent")
+  eq(photos[1].applied.Exposure2012, 0.8, "untouched photo edited")
+  eq(photos[2].applied, nil, "example photo untouched")
+  eq(r.applied, 1, "one applied")
+end)
+
+test("apply without profile: only the edited photos set the look", function()
+  local Commands = require "AutomationCommands"
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  local mine = { Exposure2012 = 0.8, Contrast2012 = 20 }
+  local photos = { fakePhoto("a", "RAW"), fakePhoto("b", "RAW", mine) }
+  local catalog = fakeCatalog(photos)
+  respond(200, {})                                   -- no trained profile at all
+  respond(202, { status = "pending" })
+  respond(202, { status = "pending" })
+  respond(202, { job_id = "j3", status = "waiting_for_photos" })
+  respond(200, { job_id = "j3", status = "completed", results = {
+    { lr_catalog_uuid = "a", lr_settings = { Exposure2012 = 0.8, Contrast2012 = 20 } },
+  } })
+  local ok, r = Commands.run(catalog, { command = "apply",
+    args = { uuids = { "a", "b" }, learn_from_edits = true } })
+  eq(ok, true, "apply ok: " .. tostring(r.error))
+  local sent = Json.decode(fake.requests[#fake.requests - 1].body)
+  eq(sent.profile_id, nil, "no profile sent")
+  eq(sent.format_type, "raw", "file type sent")
+  eq(sent.learn_from_edits, true, "learns from edits")
+  eq(photos[1].applied.Exposure2012, 0.8, "untouched photo edited")
+  eq(photos[2].applied, nil, "example photo untouched")
+end)
+
+test("apply without profile and nothing edited: a clear hint", function()
+  local Commands = require "AutomationCommands"
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  local photos = { fakePhoto("a", "RAW") }
+  local catalog = fakeCatalog(photos)
+  respond(200, {})
+  respond(202, { status = "pending" })
+  respond(202, { job_id = "j3", status = "waiting_for_photos" })
+  respond(200, { job_id = "j3", status = "failed",
+    last_error = "ValueError: no edited photos in the selection to learn the look from" })
+  local ok, r = Commands.run(catalog, { command = "apply", args = { uuids = { "a" }, learn_from_edits = true } })
+  eq(ok, true, "returns a result: " .. tostring(r.error))
+  eq(r.ok, false, "not applied")
+  eq(r.title, "Nothing to learn from", "a clear hint, not the raw server error")
+end)
+
 test("cull: decisions become collections, nothing else is touched", function()
   local Commands = require "AutomationCommands"
   fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })

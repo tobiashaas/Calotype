@@ -28,7 +28,7 @@ class EditResultRepository:
         result_id: uuid.UUID,
         job_id: uuid.UUID,
         photo_id: uuid.UUID,
-        profile_id: uuid.UUID,
+        profile_id: uuid.UUID | None,
         lr_settings: dict[str, Any],
         s3_key: str | None = None,
     ) -> EditResult:
@@ -51,7 +51,7 @@ class EditResultRepository:
         result_id: uuid.UUID,
         job_id: uuid.UUID,
         photo_id: uuid.UUID,
-        profile_id: uuid.UUID,
+        profile_id: uuid.UUID | None,
         lr_settings: dict[str, Any],
         s3_key: str | None = None,
     ) -> None:

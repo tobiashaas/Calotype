@@ -44,6 +44,16 @@ function Actions.readyProfiles()
   return items
 end
 
+--- Stand-in for "no profile": the look comes only from the photos of the selection the
+-- photographer already edited. File type: RAW if the selection has RAWs, else JPEG/TIFF.
+function Actions.ownEditsProfile(photos)
+  local formatType = "jpeg_tiff"
+  for _, photo in ipairs(photos) do
+    if PhotoData.formatType(photo:getRawMetadata("fileFormat")) == "raw" then formatType = "raw" break end
+  end
+  return { name = LOC "$$$/Calotype/Apply/OwnEdits=your edits", format_type = formatType, own_edits = true }
+end
+
 --- Train a profile from `photos` (their current develop settings are the target).
 -- choice = { name, genre, colorType }.
 function Actions.train(photos, choice, progress)
@@ -105,9 +115,12 @@ local function hasOwnCrop(photo)
 end
 
 --- Apply `profile` to `photos`. options.straighten: also level photos with clear lines;
--- options.retouch: ids of Lightroom AI-mask retouches to add (see Retouch.lua).
+-- options.retouch: ids of Lightroom AI-mask retouches to add (see Retouch.lua);
+-- options.learnFromEdits: photos of the selection already edited set the shoot's look and
+-- stay as they are. A profile from Actions.ownEditsProfile always learns from the edits.
 function Actions.apply(catalog, photos, profile, progress, options)
   options = options or {}
+  if profile.own_edits then options.learnFromEdits = true end
   -- Only photos of the profile's file type: RAW white balance (Kelvin) and JPEG
   -- white balance (relative) are different sliders.
   local matching, wrongType = {}, 0
@@ -132,9 +145,11 @@ function Actions.apply(catalog, photos, profile, progress, options)
 
   local job, jobErr = BridgeClient.queueEdit {
     schema_version = "bridge-edit-v1",
-    profile_id = profile.profile_id,
+    profile_id = profile.profile_id,              -- nil for "your edits" only
+    format_type = profile.own_edits and profile.format_type or nil,
     lr_catalog_uuids = reg.uuids,
     straighten = options.straighten or nil,   -- only sent when asked (older Bridges)
+    learn_from_edits = options.learnFromEdits or nil,
   }
   if not job then return result(false, "Calotype", jobErr) end
   Log.info("edit job %s queued with %d photos", job.job_id, #reg.uuids)
@@ -147,6 +162,11 @@ function Actions.apply(catalog, photos, profile, progress, options)
         "info", { canceled = true, job_id = job.job_id })
     end
     return result(false, "Calotype", waitErr, nil, { job_id = job.job_id })
+  end
+  if final.status ~= "completed" and tostring(final.last_error):find("no edited photos", 1, true) then
+    return result(false, LOC "$$$/Calotype/Apply/NoExamplesTitle=Nothing to learn from",
+      LOC "$$$/Calotype/Apply/NoExamples=None of the selected photos is edited yet. Edit a few typical photos of the shoot, select them together with the rest and try again.",
+      "warning", { job_id = job.job_id })
   end
   if final.status ~= "completed" then
     return result(false, LOC "$$$/Calotype/Apply/FailedTitle=Editing failed",
@@ -215,7 +235,10 @@ function Actions.apply(catalog, photos, profile, progress, options)
     end
     notes[#notes + 1] = LOC("$$$/Calotype/Retouch/Snapshot/Hint=The original is kept as the snapshot \"^1\".", Retouch.SNAPSHOT)
   end
-  if applied < #reg.uuids then
+  if applied < #reg.uuids and options.learnFromEdits then
+    notes[#notes + 1] = LOC("$$$/Calotype/Apply/Examples=^1 photos stayed as they are: your edited photos set the look (or a photo had no usable preview).",
+      #reg.uuids - applied)
+  elseif applied < #reg.uuids then
     notes[#notes + 1] = LOC("$$$/Calotype/Apply/NoResult=^1 photos got no result (no usable preview).", #reg.uuids - applied)
   end
   if straightened > 0 then

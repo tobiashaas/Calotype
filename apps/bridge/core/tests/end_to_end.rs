@@ -514,3 +514,42 @@ async fn cull_job_round_trip_maps_decisions_to_catalog_uuids() {
     assert_eq!(f.jobs[0].1["schema_version"], "cull-request-v1");
     assert_eq!(f.jobs[0].1["photo_ids"], json!(["remote-lr-a"]));
 }
+
+#[tokio::test]
+async fn edit_job_without_profile_learns_from_edits_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let fake: Fake = Arc::new(Mutex::new(FakeApi::default()));
+    let api = spawn_fake_api(fake.clone()).await;
+    let st = state(&api, dir.path());
+    let jpg = dir.path().join("a.jpg");
+    write_jpeg(&jpg, 1600, 1200);
+    call(
+        &st,
+        "POST",
+        "/v1/photos",
+        Some(TOKEN),
+        Some(photo_body("lr-a", &jpg)),
+    )
+    .await;
+
+    let base = json!({"schema_version": "bridge-edit-v1", "lr_catalog_uuids": ["lr-a"]});
+    let mut no_format = base.clone();
+    no_format["learn_from_edits"] = json!(true);
+    for body in [base.clone(), no_format.clone()] {
+        let (s, err) = call(&st, "POST", "/v1/jobs/edit", Some(TOKEN), Some(body)).await;
+        assert_eq!(s, StatusCode::UNPROCESSABLE_ENTITY, "{err}");
+    }
+    let mut ok = no_format;
+    ok["format_type"] = json!("raw");
+    let (s, _) = call(&st, "POST", "/v1/jobs/edit", Some(TOKEN), Some(ok)).await;
+    assert_eq!(s, StatusCode::ACCEPTED);
+    for _ in 0..3 {
+        st.db().retry_all_now().unwrap();
+        outbox::tick(&st).await;
+    }
+    let f = fake.lock().unwrap();
+    let sent = &f.jobs[0].1;
+    assert_eq!(sent["format_type"], "raw");
+    assert_eq!(sent["learn_from_edits"], true);
+    assert!(sent.get("profile_id").is_none());
+}

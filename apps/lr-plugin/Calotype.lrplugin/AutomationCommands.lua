@@ -165,11 +165,14 @@ function Commands.apply(catalog, args)
       profile = item.profile
     end
   end
-  if not profile then error("no ready profile " .. tostring(args.profile)) end
   local photos, missing = photosByUuid(catalog, args.uuids)
+  -- No profile + learn_from_edits: the look of the selection's edited photos only.
+  if args.profile == nil and args.learn_from_edits == true then profile = Actions.ownEditsProfile(photos) end
+  if not profile then error("no ready profile " .. tostring(args.profile)) end
   local progress = progressScope(profile.name)
   local ok, r = pcall(Actions.apply, catalog, photos, profile, progress,
-    { straighten = args.straighten == true, retouch = args.retouch })
+    { straighten = args.straighten == true, retouch = args.retouch,
+      learnFromEdits = args.learn_from_edits == true })
   progress:done()
   if not ok then error(r) end
   local out = plain(r)

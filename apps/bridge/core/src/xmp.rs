@@ -224,7 +224,7 @@ pub fn has_develop_settings(settings: &Map<String, Value>) -> bool {
     .any(|k| settings.contains_key(*k))
 }
 
-fn parse_value(raw: &str) -> Value {
+pub(crate) fn parse_value(raw: &str) -> Value {
     let trimmed = raw.trim();
     let numeric = trimmed.strip_prefix('+').unwrap_or(trimmed);
     if let Ok(i) = numeric.parse::<i64>() {
