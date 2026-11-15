@@ -301,6 +301,10 @@ struct CullReq {
     schema_version: String,
     #[serde(default)]
     correlation_id: Option<String>,
+    /// The open catalog (`catalog:getPath()`): Lightroom's assisted-culling scores are read
+    /// from it and become culling features.
+    #[serde(default)]
+    catalog_path: Option<String>,
     lr_catalog_uuids: Vec<String>,
 }
 
@@ -316,6 +320,31 @@ async fn queue_cull(State(state): State<Shared>, Json(body): Json<Value>) -> Res
         Ok(u) => u,
         Err(resp) => return resp,
     };
+    if let Some(path) = req.catalog_path.filter(|p| !p.trim().is_empty()) {
+        let wanted = uuids.clone();
+        let read = tokio::task::spawn_blocking(move || {
+            crate::catalog::culling_scores(std::path::Path::new(&path), &wanted)
+        })
+        .await;
+        match read {
+            Ok(Ok(scores)) => {
+                tracing::info!(
+                    scored = scores.len(),
+                    photos = uuids.len(),
+                    "Lightroom culling scores"
+                );
+                let db = state.db();
+                for (uuid, s) in &scores {
+                    if let Err(e) = db.set_culling_scores(uuid, s) {
+                        return internal(e);
+                    }
+                }
+            }
+            // Without the scores culling still works on its own features.
+            Ok(Err(e)) => tracing::warn!("cannot read Lightroom culling scores: {e:#}"),
+            Err(e) => tracing::warn!("cannot read Lightroom culling scores: {e}"),
+        }
+    }
     let request = json!({ "correlation_id": req.correlation_id });
     accept_job(&state, "cull", request, &uuids)
 }

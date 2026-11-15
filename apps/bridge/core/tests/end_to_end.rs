@@ -553,3 +553,57 @@ async fn edit_job_without_profile_learns_from_edits_only() {
     assert_eq!(sent["learn_from_edits"], true);
     assert!(sent.get("profile_id").is_none());
 }
+
+#[tokio::test]
+async fn cull_job_reads_lightroom_culling_scores_from_the_catalog() {
+    let dir = tempfile::tempdir().unwrap();
+    let fake: Fake = Arc::new(Mutex::new(FakeApi::default()));
+    let api = spawn_fake_api(fake.clone()).await;
+    let st = state(&api, dir.path());
+    let jpg = dir.path().join("a.jpg");
+    write_jpeg(&jpg, 1600, 1200);
+    call(
+        &st,
+        "POST",
+        "/v1/photos",
+        Some(TOKEN),
+        Some(photo_body("lr-a", &jpg)),
+    )
+    .await;
+
+    let catalog = dir.path().join("Lightroom Catalog.lrcat");
+    rusqlite::Connection::open(&catalog)
+        .unwrap()
+        .execute_batch(
+            "CREATE TABLE Adobe_images (id_local INTEGER PRIMARY KEY, id_global TEXT);
+             CREATE TABLE AgLibraryImageCullingScore (id_local INTEGER PRIMARY KEY, image INTEGER,
+                 subjectSharpnessScore REAL, eyeSharpnessScore REAL, eyesOpenState INTEGER,
+                 cleanupBadExposureTopProb REAL, cleanupMisfireTopProb REAL);
+             INSERT INTO Adobe_images VALUES (1, 'lr-a');
+             INSERT INTO AgLibraryImageCullingScore VALUES (1, 1, 0.8, 0.6, 1, 0.05, 0.01);",
+        )
+        .unwrap();
+    let body = json!({"schema_version": "bridge-cull-v1", "lr_catalog_uuids": ["lr-a"],
+                      "catalog_path": catalog.to_string_lossy()});
+    let (s, _) = call(&st, "POST", "/v1/jobs/cull", Some(TOKEN), Some(body)).await;
+    assert_eq!(s, StatusCode::ACCEPTED);
+    for _ in 0..3 {
+        st.db().retry_all_now().unwrap();
+        outbox::tick(&st).await;
+    }
+    let meta = fake.lock().unwrap().uploads.last().unwrap()["lr_metadata"].clone();
+    assert_eq!(meta["lr_culling"]["subject_sharpness"], 0.8);
+    assert_eq!(meta["rating"], 4, "the photographer's decisions stay");
+    // Registering again (next cull) without scores keeps them: no second upload.
+    let uploads = fake.lock().unwrap().uploads.len();
+    call(
+        &st,
+        "POST",
+        "/v1/photos",
+        Some(TOKEN),
+        Some(photo_body("lr-a", &jpg)),
+    )
+    .await;
+    outbox::tick(&st).await;
+    assert_eq!(fake.lock().unwrap().uploads.len(), uploads);
+}

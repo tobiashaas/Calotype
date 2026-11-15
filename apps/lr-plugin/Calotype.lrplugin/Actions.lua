@@ -288,7 +288,9 @@ function Actions.cull(catalog, photos, progress, options)
     if regErr == "canceled" then return result(false, "Calotype", regErr, "info", { canceled = true }) end
     return result(false, "Calotype", regErr)
   end
-  local job, jobErr = BridgeClient.queueCull { schema_version = "bridge-cull-v1", lr_catalog_uuids = reg.uuids }
+  -- catalog_path: the Bridge reads Lightroom's assisted-culling scores from it (if any).
+  local job, jobErr = BridgeClient.queueCull { schema_version = "bridge-cull-v1", lr_catalog_uuids = reg.uuids,
+    catalog_path = catalog.getPath and catalog:getPath() or nil }
   if not job then return result(false, "Calotype", jobErr) end
   Log.info("cull job %s queued with %d photos", job.job_id, #reg.uuids)
 

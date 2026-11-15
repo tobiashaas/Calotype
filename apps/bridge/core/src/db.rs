@@ -7,7 +7,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::Result;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Map, Value};
+
+/// Key in `lr_metadata` for Lightroom's assisted-culling scores (read from the catalog).
+pub const CULLING_KEY: &str = "lr_culling";
 
 const SCHEMA_VERSION: i64 = 3;
 
@@ -178,7 +181,20 @@ impl Db {
         settings: &Value,
         metadata: &Value,
     ) -> Result<PhotoRow> {
-        if let Some(existing) = self.photo(uuid)? {
+        let existing = self.photo(uuid)?;
+        // Lightroom's culling scores come from the catalog, not from the plugin: a
+        // re-registration without them keeps the ones read before (no needless re-upload).
+        let mut metadata = metadata.clone();
+        if let (Some(old), Some(new)) = (
+            existing
+                .as_ref()
+                .and_then(|e| e.lr_metadata.get(CULLING_KEY)),
+            metadata.as_object_mut(),
+        ) {
+            new.entry(CULLING_KEY).or_insert_with(|| old.clone());
+        }
+        let metadata = &metadata;
+        if let Some(existing) = existing {
             let unchanged = existing.exif_snapshot == *exif
                 && existing.lr_develop_settings == *settings
                 && existing.lr_metadata == *metadata;
@@ -211,6 +227,28 @@ impl Db {
             ],
         )?;
         Ok(self.photo(uuid)?.expect("row exists after upsert"))
+    }
+
+    /// Store Lightroom's assisted-culling scores with the photo (`lr_metadata.lr_culling`);
+    /// changed scores send the photo to the server again. Unknown photos are ignored.
+    pub fn set_culling_scores(&self, uuid: &str, scores: &Map<String, Value>) -> Result<()> {
+        let Some(p) = self.photo(uuid)? else {
+            return Ok(());
+        };
+        let mut metadata = p.lr_metadata.clone();
+        if let Some(m) = metadata.as_object_mut() {
+            m.insert(CULLING_KEY.into(), Value::Object(scores.clone()));
+        } else {
+            metadata = json!({ CULLING_KEY: scores });
+        }
+        self.upsert_photo(
+            uuid,
+            &p.file_path,
+            &p.exif_snapshot,
+            &p.lr_develop_settings,
+            &metadata,
+        )?;
+        Ok(())
     }
 
     pub fn photo(&self, uuid: &str) -> Result<Option<PhotoRow>> {
