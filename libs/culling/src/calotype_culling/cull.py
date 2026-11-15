@@ -47,16 +47,21 @@ def decision_from_metadata(meta: dict | None) -> bool | None:
     return None
 
 
-def cull(photos: list[PhotoFeatures], decisions: list[bool | None]) -> list[CullResult]:
+def cull(photos: list[PhotoFeatures], decisions: list[bool | None],
+         lightroom: list[dict | None] | None = None) -> list[CullResult]:
+    """lightroom: per photo Lightroom's assisted-culling scores (`lr_metadata.lr_culling`) or
+    None — extra features for the learned scorer when nearly all photos have them."""
     if len(photos) != len(decisions):
         raise ValueError("one decision (or None) per photo")
+    if lightroom is not None and len(lightroom) != len(photos):
+        raise ValueError("one Lightroom score set (or None) per photo")
     decided = [i for i, d in enumerate(decisions) if d is not None]
     keeps = sum(1 for i in decided if decisions[i])
     if keeps >= MIN_PER_CLASS and len(decided) - keeps >= MIN_PER_CLASS:
         # Fit on the decided photos, but with series/ranks computed over the whole shoot.
-        scorer = LearnedScorer.fit_subset(photos, decided, [bool(decisions[i]) for i in decided])
-        prob = scorer.keep_probability(photos)
-        reasons = scorer.explain(photos)
+        scorer = LearnedScorer.fit_subset(photos, decided, [bool(decisions[i]) for i in decided], lightroom)
+        prob = scorer.keep_probability(photos, lightroom)
+        reasons = scorer.explain(photos, lightroom=lightroom)
         return [
             CullResult(p.name, "keep" if pr >= KEEP_ABOVE else "reject" if pr < REJECT_BELOW else "uncertain",
                        round(float(pr), 3), r, "learned")

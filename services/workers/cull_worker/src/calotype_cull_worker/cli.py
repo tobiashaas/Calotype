@@ -77,6 +77,7 @@ def process_one(redis: Redis, factory: sessionmaker, faces: FaceAnalyzer) -> boo
 
         feats: list[PhotoFeatures] = []
         decisions: list[bool | None] = []
+        lightroom: list[dict | None] = []
         kept_ids: list[UUID] = []
         for photo_id in photo_ids:
             with session_scope(factory) as session:
@@ -97,9 +98,14 @@ def process_one(redis: Redis, factory: sessionmaker, faces: FaceAnalyzer) -> boo
                     PhotoRepository.merge_analysis(session, photo_id, {FEATURES_KEY: f.to_dict()})
                 feats.append(f)
                 decisions.append(decision_from_metadata(photo.lr_metadata))
+                # Lightroom's assisted-culling scores, read from the catalog by the Bridge.
+                lightroom.append((photo.lr_metadata or {}).get("lr_culling"))
                 kept_ids.append(photo_id)
 
-        results = cull(feats, decisions) if feats else []
+        scored = sum(1 for s in lightroom if s)
+        if scored:
+            log.info("Lightroom culling scores for %d of %d photos job_id=%s", scored, len(lightroom), job_uuid)
+        results = cull(feats, decisions, lightroom if scored else None) if feats else []
         with session_scope(factory) as session:
             for photo_id, r in zip(kept_ids, results):
                 CullResultRepository.upsert(session, job_id=job_uuid, photo_id=photo_id, bucket=r.bucket,

@@ -52,3 +52,29 @@ def test_features_survive_a_round_trip():
     p = _photo(3, 120.0, 0.2)
     q = PhotoFeatures.from_dict(json.loads(json.dumps(p.to_dict())))
     assert (q.name, q.dhash, q.faces[0].eyes_closed, q.subject_sharpness) == (p.name, p.dhash, 0.2, p.subject_sharpness)
+
+
+def test_lightroom_scores_are_learned_when_they_explain_the_decisions():
+    # Our own features cannot tell the photos apart; Lightroom's aesthetic score can.
+    photos = [_photo(i, sharp=120, eyes_closed=0.05) for i in range(40)]
+    keep = [i % 3 != 0 for i in range(40)]
+    lightroom = [{"aesthetic": 0.8 if k else 0.2, "eye_sharpness": 0.5 + 0.01 * (i % 7)}
+                 for i, k in enumerate(keep)]
+    decisions = [k if i < 30 else None for i, k in enumerate(keep)]
+    res = cull(photos, decisions, lightroom)
+    new = res[30:]
+    assert all((r.bucket == "keep") == k for r, k in zip(new, keep[30:]))
+    assert "Lightroom: appealing" in new[1].reason or "Lightroom: less appealing" in new[0].reason
+
+
+def test_lightroom_scores_on_too_few_photos_are_ignored():
+    from calotype_culling.learned import lightroom_matrix
+
+    scores = [{"aesthetic": 0.5 + 0.01 * i} for i in range(8)] + [None, None]
+    assert lightroom_matrix(scores) == ([], None)          # 8 of 10 < 90 %
+    names, X = lightroom_matrix([{"aesthetic": 0.4, "face": 0.3}, {"aesthetic": 0.6, "face": 0.3}])
+    assert names == ["aesthetic"] and X.shape == (2, 1)    # a constant score says nothing
+    names, X = lightroom_matrix([{"aesthetic": v} for v in (0.2, 0.4, 0.9)] + [{}] * 0)
+    assert X[:, 0].tolist() == [0.2, 0.4, 0.9]
+    photos = [_photo(i, sharp=100 + i, eyes_closed=0.05) for i in range(6)]
+    assert {r.method for r in cull(photos, [None] * 6, [{"aesthetic": 0.5}] * 6)} == {"rules"}

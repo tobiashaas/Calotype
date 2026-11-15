@@ -57,6 +57,56 @@ LABELS = {
 }
 
 
+# Lightroom's assisted culling (Lightroom Classic 15+), read from the catalog by the Bridge
+# (`lr_metadata.lr_culling`). Used as extra features when nearly every photo of the job has
+# them: the weights come from the photographer's decisions like for our own features.
+LIGHTROOM_FEATURES = [
+    "subject_sharpness", "eye_sharpness", "eyes_open_state", "bad_exposure", "misfire",
+    "aesthetic", "combined", "face", "frame", "severe_blur", "over_exposure", "under_exposure",
+    "ground_shot",
+]
+LIGHTROOM_LABELS = {
+    "subject_sharpness": ("Lightroom: sharp subject", "Lightroom: soft subject"),
+    "eye_sharpness": ("Lightroom: sharp eyes", "Lightroom: soft eyes"),
+    "eyes_open_state": ("Lightroom: eyes open", "Lightroom: eyes not open"),
+    "bad_exposure": ("Lightroom: exposure problem", "Lightroom: exposure fine"),
+    "misfire": ("Lightroom: accidental shot", "Lightroom: intended shot"),
+    "aesthetic": ("Lightroom: appealing", "Lightroom: less appealing"),
+    "combined": ("Lightroom: good frame overall", "Lightroom: weaker frame overall"),
+    "face": ("Lightroom: good faces", "Lightroom: weaker faces"),
+    "frame": ("Lightroom: good frame", "Lightroom: weaker frame"),
+    "severe_blur": ("Lightroom: badly blurred", "Lightroom: not blurred"),
+    "over_exposure": ("Lightroom: overexposed", "Lightroom: not overexposed"),
+    "under_exposure": ("Lightroom: underexposed", "Lightroom: not underexposed"),
+    "ground_shot": ("Lightroom: shot of the ground", "Lightroom: not a shot of the ground"),
+}
+# Share of the job's photos that must carry a score before it is used (the rest get the median).
+LIGHTROOM_MIN_SHARE = 0.9
+
+
+def lightroom_matrix(scores: list[dict | None] | None) -> tuple[list[str], np.ndarray | None]:
+    """Lightroom's scores as extra feature columns: (names, one row per photo) or ([], None).
+
+    A score counts when at least LIGHTROOM_MIN_SHARE of the photos have it and it varies;
+    photos without it get the median of the others.
+    """
+    if not scores:
+        return [], None
+    n = len(scores)
+    names, cols = [], []
+    for name in LIGHTROOM_FEATURES:
+        values = [s.get(name) if isinstance(s, dict) else None for s in scores]
+        known = [float(v) for v in values if isinstance(v, (int, float)) and np.isfinite(v)]
+        if len(known) < LIGHTROOM_MIN_SHARE * n or len(set(known)) < 2:
+            continue
+        median = float(np.median(known))
+        names.append(name)
+        cols.append([float(v) if isinstance(v, (int, float)) and np.isfinite(v) else median for v in values])
+    if not names:
+        return [], None
+    return names, np.array(cols, dtype=float).T
+
+
 def _rank(values: np.ndarray) -> np.ndarray:
     n = len(values)
     if n < 2:
@@ -109,42 +159,73 @@ def feature_matrix(photos: list[PhotoFeatures]) -> np.ndarray:
 class LearnedScorer:
     scaler: StandardScaler
     model: LogisticRegression
+    # Lightroom score columns appended after FEATURES (see lightroom_matrix), in this order.
+    lightroom: tuple[str, ...] = ()
+
+    @staticmethod
+    def _matrix(photos: list[PhotoFeatures], extra: np.ndarray | None) -> np.ndarray:
+        X = feature_matrix(photos)
+        return X if extra is None else np.hstack([X, extra])
 
     @classmethod
     def fit(cls, photos: list[PhotoFeatures], keep: list[bool]) -> LearnedScorer:
-        X = feature_matrix(photos)
-        scaler = StandardScaler().fit(X)
-        model = LogisticRegression(C=1.0, max_iter=2000, class_weight="balanced")
-        model.fit(scaler.transform(X), np.asarray(keep, dtype=int))
-        return cls(scaler, model)
+        return cls.fit_subset(photos, list(range(len(photos))), keep)
 
     @classmethod
-    def fit_subset(cls, photos: list[PhotoFeatures], rows: list[int], keep: list[bool]) -> LearnedScorer:
-        """Fit on some photos of a shoot; series and ranks still come from the whole shoot."""
-        X = feature_matrix(photos)[rows]
+    def fit_subset(cls, photos: list[PhotoFeatures], rows: list[int], keep: list[bool],
+                   lightroom: list[dict | None] | None = None) -> LearnedScorer:
+        """Fit on some photos of a shoot; series and ranks still come from the whole shoot.
+
+        lightroom: per photo Lightroom's assisted-culling scores (or None) — extra features.
+        """
+        names, extra = lightroom_matrix(lightroom)
+        X = cls._matrix(photos, extra)[rows]
         scaler = StandardScaler().fit(X)
         model = LogisticRegression(C=1.0, max_iter=2000, class_weight="balanced")
         model.fit(scaler.transform(X), np.asarray(keep, dtype=int))
-        return cls(scaler, model)
+        return cls(scaler, model, tuple(names))
 
-    def keep_probability(self, photos: list[PhotoFeatures]) -> np.ndarray:
-        return self.model.predict_proba(self.scaler.transform(feature_matrix(photos)))[:, 1]
+    def _features(self, photos: list[PhotoFeatures], lightroom: list[dict | None] | None) -> np.ndarray:
+        if not self.lightroom:
+            return feature_matrix(photos)
+        names, extra = lightroom_matrix(lightroom)
+        # Same columns as when fitted; a score now missing for too many photos counts as its median.
+        cols = []
+        for name in self.lightroom:
+            if extra is not None and name in names:
+                cols.append(extra[:, names.index(name)])
+            else:
+                cols.append(np.full(len(photos), self.scaler.mean_[len(FEATURES) + self.lightroom.index(name)]))
+        return np.hstack([feature_matrix(photos), np.array(cols).T])
+
+    def keep_probability(self, photos: list[PhotoFeatures],
+                         lightroom: list[dict | None] | None = None) -> np.ndarray:
+        return self.model.predict_proba(self.scaler.transform(self._features(photos, lightroom)))[:, 1]
+
+    @property
+    def _names(self) -> list[str]:
+        return FEATURES + [f"lr_{n}" for n in self.lightroom]
+
+    def _label(self, name: str) -> tuple[str, str]:
+        return LIGHTROOM_LABELS[name[3:]] if name.startswith("lr_") else LABELS[name]
 
     def weights(self) -> list[tuple[str, float]]:
         """Learned weight per feature (on standardized features), strongest first."""
-        pairs = zip(FEATURES, self.model.coef_[0])
-        return sorted(((LABELS[f][0], float(w)) for f, w in pairs), key=lambda x: -abs(x[1]))
+        pairs = zip(self._names, self.model.coef_[0])
+        return sorted(((self._label(f)[0], float(w)) for f, w in pairs), key=lambda x: -abs(x[1]))
 
-    def explain(self, photos: list[PhotoFeatures], top: int = 3) -> list[str]:
+    def explain(self, photos: list[PhotoFeatures], top: int = 3,
+                lightroom: list[dict | None] | None = None) -> list[str]:
         """Per photo: the features that moved the decision most, as readable text."""
-        Z = self.scaler.transform(feature_matrix(photos))
+        Z = self.scaler.transform(self._features(photos, lightroom))
         contrib = Z * self.model.coef_[0]
+        names = self._names
         out = []
         for z, row in zip(Z, contrib):
             idx = np.argsort(-np.abs(row))[:top]
             parts = []
             for j in idx:
-                high, low = LABELS[FEATURES[j]]
+                high, low = self._label(names[j])
                 parts.append(f"{'+' if row[j] > 0 else '−'} {high if z[j] > 0 else low}")
             out.append("; ".join(parts))
         return out

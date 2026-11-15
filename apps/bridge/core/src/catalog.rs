@@ -84,6 +84,10 @@ impl Catalog {
 
 /// `file:` URI with `immutable=1`: SQLite then never writes, locks or creates a journal.
 fn sqlite_uri(path: &Path) -> String {
+    sqlite_uri_with(path, "mode=ro&immutable=1")
+}
+
+fn sqlite_uri_with(path: &Path, query: &str) -> String {
     let mut p = path.to_string_lossy().replace('\\', "/");
     if !p.starts_with('/') {
         p.insert(0, '/'); // Windows: file:/E:/...
@@ -99,8 +103,138 @@ fn sqlite_uri(path: &Path) -> String {
             _ => out.push(c),
         }
     }
-    out.push_str("?mode=ro&immutable=1");
+    out.push('?');
+    out.push_str(query);
     out
+}
+
+/// Scores of Lightroom's assisted culling (Lightroom Classic 15+): (table, column, our name).
+/// Only numbers the photographer did not set — `userSelect` (the selection itself) is left out.
+const LR_SCORES: &[(&str, &str, &str)] = &[
+    (
+        "AgLibraryImageCullingScore",
+        "subjectSharpnessScore",
+        "subject_sharpness",
+    ),
+    (
+        "AgLibraryImageCullingScore",
+        "eyeSharpnessScore",
+        "eye_sharpness",
+    ),
+    (
+        "AgLibraryImageCullingScore",
+        "eyesOpenState",
+        "eyes_open_state",
+    ),
+    (
+        "AgLibraryImageCullingScore",
+        "cleanupBadExposureTopProb",
+        "bad_exposure",
+    ),
+    (
+        "AgLibraryImageCullingScore",
+        "cleanupMisfireTopProb",
+        "misfire",
+    ),
+    (
+        "AgLibraryImageBestFrameScore",
+        "aestheticScore",
+        "aesthetic",
+    ),
+    ("AgLibraryImageBestFrameScore", "combinedScore", "combined"),
+    ("AgLibraryImageBestFrameScore", "faceScore", "face"),
+    ("AgLibraryImageBestFrameScore", "frameScore", "frame"),
+    (
+        "AgLibraryImageUndesiredScores",
+        "severe_blur_prob",
+        "severe_blur",
+    ),
+    (
+        "AgLibraryImageUndesiredScores",
+        "over_exposure_prob",
+        "over_exposure",
+    ),
+    (
+        "AgLibraryImageUndesiredScores",
+        "under_exposure_prob",
+        "under_exposure",
+    ),
+    (
+        "AgLibraryImageUndesiredScores",
+        "accidental_ground_shot_prob",
+        "ground_shot",
+    ),
+];
+
+/// Lightroom's assisted-culling scores per photo (catalog UUID → our name → number), for the
+/// photos in `uuids`. Photos Lightroom has not scored are missing; catalogs from before
+/// Lightroom 15 give an empty map.
+///
+/// Read through SQLite's normal read-only mode, not `immutable`: Lightroom keeps the open
+/// catalog in WAL mode, and fresh scores are in the `-wal` file until a checkpoint. Falls back
+/// to `immutable` where that cannot be opened (read-only media).
+pub fn culling_scores(
+    path: &Path,
+    uuids: &[String],
+) -> Result<HashMap<String, Map<String, Value>>> {
+    let open = |query: &str| -> rusqlite::Result<Connection> {
+        let c = Connection::open_with_flags(
+            sqlite_uri_with(path, query),
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
+        )?;
+        c.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))?;
+        Ok(c)
+    };
+    let conn = open("mode=ro")
+        .or_else(|_| open("mode=ro&immutable=1"))
+        .with_context(|| format!("cannot open catalog {}", path.display()))?;
+    let wanted: std::collections::HashSet<&str> = uuids.iter().map(String::as_str).collect();
+    let mut out: HashMap<String, Map<String, Value>> = HashMap::new();
+    let mut tables: Vec<&str> = LR_SCORES.iter().map(|(t, _, _)| *t).collect();
+    tables.dedup();
+    for table in tables {
+        let exists: bool = conn.query_row(
+            "SELECT count(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [table],
+            |r| r.get(0),
+        )?;
+        if !exists {
+            continue;
+        }
+        let cols: Vec<(&str, &str)> = LR_SCORES
+            .iter()
+            .filter(|(t, _, _)| *t == table)
+            .map(|(_, c, n)| (*c, *n))
+            .collect();
+        let select: Vec<String> = cols.iter().map(|(c, _)| format!("t.\"{c}\"")).collect();
+        // Newest row last, so it wins when Lightroom scored a photo twice.
+        let sql = format!(
+            "SELECT i.id_global, {} FROM \"{table}\" t JOIN Adobe_images i ON i.id_local = t.image
+             ORDER BY t.id_local",
+            select.join(", ")
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let mut rows = stmt.query([])?;
+        while let Some(row) = rows.next()? {
+            let uuid: String = row.get(0)?;
+            if !wanted.contains(uuid.as_str()) {
+                continue;
+            }
+            let scores = out.entry(uuid).or_default();
+            for (i, (_, name)) in cols.iter().enumerate() {
+                let value = match row.get_ref(i + 1)? {
+                    rusqlite::types::ValueRef::Integer(v) => Some(v as f64),
+                    rusqlite::types::ValueRef::Real(v) => Some(v),
+                    _ => None,
+                };
+                if let Some(v) = value.filter(|v| v.is_finite()) {
+                    scores.insert((*name).into(), Value::from(v));
+                }
+            }
+        }
+    }
+    out.retain(|_, s| !s.is_empty());
+    Ok(out)
 }
 
 fn read_photos(conn: &Connection) -> Result<Vec<CatalogPhoto>> {
@@ -431,6 +565,45 @@ mod tests {
             "#,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn assisted_culling_scores_are_read_per_photo() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("live.lrcat");
+        let c = Connection::open(&path).unwrap();
+        c.execute_batch(
+            r#"
+            PRAGMA journal_mode = WAL;
+            CREATE TABLE Adobe_images (id_local INTEGER PRIMARY KEY, id_global TEXT);
+            CREATE TABLE AgLibraryImageCullingScore (id_local INTEGER PRIMARY KEY, image INTEGER,
+                subjectSharpnessScore REAL, eyeSharpnessScore REAL, eyesOpenState INTEGER,
+                cleanupBadExposureTopProb REAL, cleanupMisfireTopProb REAL, userSelect INTEGER);
+            CREATE TABLE AgLibraryImageBestFrameScore (id_local INTEGER PRIMARY KEY, image INTEGER,
+                aestheticScore REAL, combinedScore REAL, faceScore REAL, frameScore REAL, modelVersion TEXT);
+            INSERT INTO Adobe_images VALUES (1, 'U1'), (2, 'U2'), (3, 'U3');
+            INSERT INTO AgLibraryImageCullingScore VALUES (10, 1, 0.9, 0.7, 1, 0.1, NULL, 1),
+                                                          (11, 2, 0.2, NULL, 0, 0.6, 0.3, 0);
+            INSERT INTO AgLibraryImageBestFrameScore VALUES (20, 1, 0.5, 0.6, 0.4, 0.8, 'v1'),
+                                                            (21, 1, 0.55, 0.65, 0.45, 0.85, 'v2');
+            "#,
+        )
+        .unwrap();
+        // Like Lightroom, the writer keeps the catalog open: the scores sit in the -wal file.
+        let scores = culling_scores(&path, &["U1".into(), "U2".into(), "U3".into()]).unwrap();
+        drop(c);
+        assert_eq!(scores.len(), 2, "U3 has no scores");
+        let u1 = &scores["U1"];
+        assert_eq!(u1["subject_sharpness"], Value::from(0.9));
+        assert_eq!(u1["eyes_open_state"], Value::from(1.0));
+        assert_eq!(u1["aesthetic"], Value::from(0.55), "newest row wins");
+        assert!(!u1.contains_key("misfire") && !u1.contains_key("userSelect"));
+        assert_eq!(scores["U2"]["misfire"], Value::from(0.3));
+        assert!(!scores["U2"].contains_key("aesthetic"));
+        // A catalog from before assisted culling: nothing, no error.
+        let old = dir.path().join("old.lrcat");
+        fake_catalog(&old);
+        assert!(culling_scores(&old, &["U1".into()]).unwrap().is_empty());
     }
 
     #[test]
