@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 
 from calotype_edit_serializer.edits import edit_signature, edited_photos, keeps_as_shot
-from calotype_edit_serializer.style import PHOTO_DEPENDENT, apply_style, is_style_key, style_settings
+from calotype_edit_serializer.style import PHOTO_DEPENDENT, apply_style, is_style_key, shared_style, style_settings
 from calotype_edit_serializer.sliders import (
     FormatType,
     SliderSpec,
@@ -19,6 +19,7 @@ __all__ = [
     "edited_photos",
     "keeps_as_shot",
     "is_style_key",
+    "shared_style",
     "style_settings",
     "FormatType",
     "SliderSpec",

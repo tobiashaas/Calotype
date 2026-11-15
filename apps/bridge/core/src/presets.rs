@@ -37,6 +37,10 @@ pub const PRESETS: &[(&str, &str)] = &[
         include_str!("../../../../presets/golden-evening.xmp"),
     ),
     (
+        "soft-glow.xmp",
+        include_str!("../../../../presets/soft-glow.xmp"),
+    ),
+    (
         "soft-bw.xmp",
         include_str!("../../../../presets/soft-bw.xmp"),
     ),

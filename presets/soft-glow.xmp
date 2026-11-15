@@ -1,0 +1,98 @@
+<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Calotype">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    crs:PresetType="Normal"
+    crs:Cluster=""
+    crs:UUID="AA3198C18E5B50E4A999657610BBA471"
+    crs:SupportsAmount="False"
+    crs:SupportsColor="True"
+    crs:SupportsMonochrome="True"
+    crs:SupportsHighDynamicRange="True"
+    crs:SupportsNormalDynamicRange="True"
+    crs:SupportsSceneReferred="True"
+    crs:SupportsOutputReferred="True"
+    crs:CameraModelRestriction=""
+    crs:Copyright="CC0 — Calotype contributors"
+    crs:ContactInfo=""
+    crs:Version="15.4"
+    crs:ProcessVersion="15.4"
+    crs:HasSettings="True"
+    crs:ToneCurveName2012="Custom"
+    crs:Clarity2012="-6"
+    crs:Texture="-4"
+    crs:Vibrance="4"
+    crs:Saturation="-5"
+    crs:SaturationAdjustmentGreen="-15"
+    crs:LuminanceAdjustmentOrange="4"
+    crs:ColorGradeHighlightHue="40"
+    crs:ColorGradeHighlightSat="10"
+    crs:ColorGradeBlending="60"
+    crs:Glow="35"
+    crs:GlowStyle="1"
+    crs:GlowSpread="60"
+    crs:GlowRange="45"
+    crs:GlowWarmth="15"
+    crs:GlowDirection="0"
+    crs:GlowDirectionalSoftness="50"
+    crs:PostCropVignetteAmount="-6"
+    crs:ConvertToGrayscale="False">
+   <crs:Name>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default">Soft Glow</rdf:li>
+     <rdf:li xml:lang="de-DE">Sanftes Leuchten</rdf:li>
+    </rdf:Alt>
+   </crs:Name>
+   <crs:ShortName>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default"></rdf:li>
+    </rdf:Alt>
+   </crs:ShortName>
+   <crs:SortName>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default"></rdf:li>
+    </rdf:Alt>
+   </crs:SortName>
+   <crs:Group>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default">Calotype</rdf:li>
+    </rdf:Alt>
+   </crs:Group>
+   <crs:Description>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default">Warm, soft glow in the highlights, gentle contrast, calm colors. Evening light, string lights, wedding parties.</rdf:li>
+     <rdf:li xml:lang="de-DE">Warmes, weiches Leuchten in den Lichtern, sanfter Kontrast, ruhige Farben. Abendlicht, Lichterketten, Hochzeitsfeiern.</rdf:li>
+    </rdf:Alt>
+   </crs:Description>
+   <crs:ToneCurvePV2012>
+    <rdf:Seq>
+     <rdf:li>0, 12</rdf:li>
+     <rdf:li>64, 68</rdf:li>
+     <rdf:li>128, 134</rdf:li>
+     <rdf:li>192, 198</rdf:li>
+     <rdf:li>255, 248</rdf:li>
+    </rdf:Seq>
+   </crs:ToneCurvePV2012>
+   <crs:ToneCurvePV2012Red>
+    <rdf:Seq>
+     <rdf:li>0, 0</rdf:li>
+     <rdf:li>255, 255</rdf:li>
+    </rdf:Seq>
+   </crs:ToneCurvePV2012Red>
+   <crs:ToneCurvePV2012Green>
+    <rdf:Seq>
+     <rdf:li>0, 0</rdf:li>
+     <rdf:li>255, 255</rdf:li>
+    </rdf:Seq>
+   </crs:ToneCurvePV2012Green>
+   <crs:ToneCurvePV2012Blue>
+    <rdf:Seq>
+     <rdf:li>0, 0</rdf:li>
+     <rdf:li>255, 255</rdf:li>
+    </rdf:Seq>
+   </crs:ToneCurvePV2012Blue>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>
