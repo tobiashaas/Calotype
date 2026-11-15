@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Generator
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
