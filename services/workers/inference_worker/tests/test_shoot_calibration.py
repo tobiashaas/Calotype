@@ -116,3 +116,13 @@ def test_a_look_chosen_for_the_job_replaces_the_profiles():
     chosen = job_preset({"base_preset": {"GrainAmount": 30, "Exposure2012": 2.0}}, profile)
     out = apply_style({"Exposure2012": 0.4}, chosen)
     assert out["GrainAmount"] == 30 and out["Exposure2012"] == 0.4   # exposure stays per photo
+
+
+def test_only_a_look_chosen_for_the_job_brings_its_tone_sliders():
+    from calotype_inference_worker.cli import styled
+
+    predicted = {"Exposure2012": 0.4, "Contrast2012": 10}
+    preset = {"Contrast2012": 80, "GrainAmount": 20}
+    assert styled(predicted, preset, chosen=False)["Contrast2012"] == 10   # profile preset: look only
+    assert styled(predicted, preset, chosen=True)["Contrast2012"] == 80    # chosen: like by hand
+    assert styled(predicted, preset, chosen=True)["GrainAmount"] == 20

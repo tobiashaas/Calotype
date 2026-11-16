@@ -758,6 +758,30 @@ test("look presets: the photographer's presets listed, their look sent with appl
   assert(not okBad and tostring(err.error):find("no develop preset", 1, true), "unknown look refused: " .. tostring(err.error))
 end)
 
+test("virtual copies: one per selected photo, mapped back to the original", function()
+  local Commands = require "AutomationCommands"
+  local a, b = fakePhoto("a", "RAW"), fakePhoto("b", "RAW")
+  local catalog = fakeCatalog({ a, b })
+  local selected, named
+  catalog.setSelectedPhotos = function(_, _, list) selected = list end
+  catalog.createVirtualCopies = function(_, name)
+    named = name
+    local out = {}
+    for _, p in ipairs(selected) do
+      local id = p:getRawMetadata("uuid")
+      out[#out + 1] = { getRawMetadata = function(_, k)
+        return ({ uuid = id .. "-bw", masterPhoto = p })[k] end }
+    end
+    return out
+  end
+  local ok, r = Commands.run(catalog, { command = "virtual_copies", args = { uuids = { "a", "b", "x" }, name = "SW" } })
+  assert(ok, "ran: " .. tostring(r and r.error))
+  eq(named, "SW", "copy name")
+  eq(r.copies.a, "a-bw", "copy of a")
+  eq(r.copies.b, "b-bw", "copy of b")
+  eq(r.missing[1], "x", "unknown photo reported")
+end)
+
 test("automation init runs in a Lightroom-like plugin environment", function()
   fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t", automation = false })
   local started

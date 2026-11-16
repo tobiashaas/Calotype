@@ -33,6 +33,7 @@ pub const COMMANDS: &[&str] = &[
     "mask_probe",
     "set_mask_strength",
     "look_presets",
+    "virtual_copies",
 ];
 
 #[derive(Debug, Clone, Serialize, PartialEq)]

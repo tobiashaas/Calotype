@@ -75,3 +75,22 @@ def test_shared_style_spreads_no_look_used_on_few_photos():
     assert shared_style(edits) == {}               # 3 of 6 have no glow: no majority value
     assert shared_style([{"Glow": 60}, {"Glow": 20}]) == {}   # tie
     assert shared_style([]) == {}
+
+
+def test_a_chosen_preset_brings_its_tone_sliders_and_keeps_exposure_and_white_balance():
+    from calotype_edit_serializer import apply_preset
+
+    predicted = {"Exposure2012": 0.4, "Temperature": 5000, "Tint": 8, "Contrast2012": 10, "Highlights2012": -20}
+    preset = {"Exposure2012": 1.5, "Contrast2012": 96, "Highlights2012": -69, "Whites2012": -58,
+              "WhiteBalance": "Custom", "Temperature": 7259, "Tint": 3, "Saturation": -32,
+              "SplitToningHighlightHue": 45, "MaskGroupBasedCorrections": [{"x": 1}]}
+    out = apply_preset(predicted, preset)
+    assert (out["Contrast2012"], out["Highlights2012"], out["Whites2012"]) == (96, -69, -58)
+    assert out["Saturation"] == -32 and out["SplitToningHighlightHue"] == 45
+    assert out["Exposure2012"] == 0.4 and out["Tint"] == 8          # per photo
+    assert "MaskGroupBasedCorrections" not in out
+    # 44 mired warmer than daylight → the predicted 5000 K becomes about 6400 K
+    assert 6350 <= out["Temperature"] <= 6450
+    # As Shot preset or none: white balance untouched
+    assert apply_preset(predicted, {"WhiteBalance": "As Shot", "Contrast2012": 5})["Temperature"] == 5000
+    assert apply_preset(predicted, None) == predicted

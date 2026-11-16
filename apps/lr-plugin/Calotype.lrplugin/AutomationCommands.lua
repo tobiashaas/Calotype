@@ -396,6 +396,27 @@ function Commands.remove_cull_set(catalog, args)
   return Json.object({ removed = removed })
 end
 
+--- Virtual copies of these photos named args.name (e.g. a black & white variant to try a
+-- second look on); returns { copies = { original uuid → copy uuid } }. Lightroom copies the
+-- selected photos, so the selection is set first.
+function Commands.virtual_copies(catalog, args)
+  local photos, missing = photosByUuid(catalog, args.uuids)
+  if #photos == 0 then return Json.object({ copies = Json.object({}), missing = missing }) end
+  catalog:setSelectedPhotos(photos[1], photos)
+  local ok, copies = pcall(function() return catalog:createVirtualCopies(args.name) end)
+  if not ok then   -- some Lightroom versions want it inside write access
+    catalog:withWriteAccessDo("Calotype automation: virtual copies", function()
+      copies = catalog:createVirtualCopies(args.name)
+    end, { timeout = 120 })
+  end
+  local out = Json.object({})
+  for _, copy in ipairs(copies or {}) do
+    local master = copy:getRawMetadata("masterPhoto")
+    out[master and master:getRawMetadata("uuid") or "?"] = copy:getRawMetadata("uuid")
+  end
+  return Json.object({ copies = out, missing = missing })
+end
+
 --- Run one command; returns ok, result (result = { error = message } on failure).
 function Commands.run(catalog, command)
   local handler = Commands[command.command]

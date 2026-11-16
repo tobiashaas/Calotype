@@ -15,6 +15,7 @@ from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.orm import sessionmaker
 
 from calotype_edit_serializer import (
+    apply_preset,
     apply_style,
     edited_photos,
     from_lightroom,
@@ -145,6 +146,12 @@ def job_preset(payload: dict, profile_preset: dict) -> dict:
     return dict(chosen) if isinstance(chosen, dict) and chosen else profile_preset
 
 
+def styled(predicted: dict, preset: dict, chosen: bool) -> dict:
+    """A profile's preset adds only its look; a preset chosen for the job is used as by hand —
+    its tone sliders too, exposure and white balance per photo (``apply_preset``)."""
+    return apply_preset(predicted, preset) if chosen else apply_style(predicted, preset)
+
+
 def examples_masks(predictions: dict[UUID, dict], targets: list[UUID], settings: dict[UUID, dict]) -> dict:
     """The mask strengths (subject, sky …) the edited photos of the shoot share."""
     wanted = set(targets)
@@ -208,6 +215,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         if envelope.payload.get("base_preset"):
             log.info("look chosen for the job job_id=%s", job_uuid)
         base_preset = job_preset(envelope.payload, base_preset)
+        chosen_look = bool(envelope.payload.get("base_preset"))
 
         # Model prediction per photo; photos without features (no usable preview) get no result.
         predictions: dict[UUID, dict[str, float]] = {}
@@ -246,7 +254,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         for photo_id in targets:
             with session_scope(factory) as session:
                 JobRepository.touch(session, job_uuid)
-                lr_settings = apply_style(serialize_for_lightroom(predictions[photo_id], format_type), base_preset)
+                lr_settings = styled(serialize_for_lightroom(predictions[photo_id], format_type), base_preset, chosen_look)
                 lr_settings.update(look)
                 if straighten:
                     photo = PhotoRepository.get_by_id(session, photo_id)

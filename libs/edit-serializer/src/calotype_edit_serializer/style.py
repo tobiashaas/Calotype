@@ -94,3 +94,33 @@ def apply_style(predicted: Mapping[str, Any], preset: Mapping[str, Any] | None) 
         if k in predicted:
             merged[k] = predicted[k]
     return merged
+
+
+# Tone sliders: many presets carry their whole look in them (strong contrast, pulled highlights).
+TONE_SLIDERS = ("Contrast2012", "Highlights2012", "Shadows2012", "Whites2012", "Blacks2012")
+# The white balance a preset with a fixed Kelvin value is assumed to be made for (daylight).
+NEUTRAL_KELVIN = 5500.0
+
+
+def apply_preset(predicted: Mapping[str, Any], preset: Mapping[str, Any] | None) -> dict[str, Any]:
+    """A preset the photographer chose for the job, used as by hand: the look *and* the tone
+    sliders come from the preset; exposure and white balance stay per photo.
+
+    A preset with a fixed Kelvin value (``WhiteBalance`` "Custom") is warmer or cooler than
+    daylight; the predicted Kelvin is shifted by that much (in mired, as Lightroom's slider is
+    perceptually even there), so a warm preset stays warm without one Kelvin value for every
+    light. Tint stays predicted — a preset's absolute tint says nothing about the camera's.
+    """
+    merged = apply_style(predicted, preset)
+    if not preset:
+        return merged
+    for k in TONE_SLIDERS:
+        v = preset.get(k)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            merged[k] = v
+    kelvin, temp = preset.get("Temperature"), predicted.get("Temperature")
+    if (preset.get("WhiteBalance") == "Custom" and isinstance(kelvin, (int, float)) and kelvin > 0
+            and isinstance(temp, (int, float)) and temp > 0):
+        mired = 1e6 / temp - (1e6 / NEUTRAL_KELVIN - 1e6 / kelvin)
+        merged["Temperature"] = round(min(50000.0, max(2000.0, 1e6 / max(mired, 20.0))))
+    return merged
