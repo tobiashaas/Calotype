@@ -11,6 +11,7 @@ local LrView = import "LrView"
 
 local Actions = require "Actions"
 local BridgeClient = require "BridgeClient"
+local LookPresets = require "LookPresets"
 
 local GENRES = {
   { title = LOC "$$$/Calotype/Genre/Portrait=Portrait", value = "portrait" },
@@ -30,6 +31,9 @@ local function askForProfile(context, count)
   props.name = ""
   props.genre = "portrait"
   props.colorType = "color"
+  props.look = ""
+  local looks = { { title = LOC "$$$/Calotype/Look/None=None (only what the photos show)", value = "" } }
+  for _, item in ipairs(LookPresets.items()) do looks[#looks + 1] = item end
 
   local contents = f:column {
     bind_to_object = props,
@@ -57,6 +61,14 @@ local function askForProfile(context, count)
         },
       },
     },
+    f:row {
+      f:static_text { title = LOC "$$$/Calotype/Look/Label=Look:", alignment = "right", width = share "label" },
+      f:popup_menu { value = bind "look", items = looks, width_in_chars = 36 },
+    },
+    f:static_text {
+      title = LOC "$$$/Calotype/Look/TrainHint=Optional: one of your presets as the profile's look. Exposure and white balance are still learned per photo.",
+      width_in_chars = 52, height_in_lines = 2,
+    },
   }
 
   local answer = LrDialogs.presentModalDialog {
@@ -70,7 +82,7 @@ local function askForProfile(context, count)
     LrDialogs.message(LOC "$$$/Calotype/Train/NoName=Please enter a profile name.", nil, "warning")
     return nil
   end
-  return { name = name, genre = props.genre, colorType = props.colorType }
+  return { name = name, genre = props.genre, colorType = props.colorType, basePreset = LookPresets.settings(props.look) }
 end
 
 LrFunctionContext.postAsyncTaskWithContext("Calotype.train", function(context)

@@ -40,6 +40,11 @@
       "default": false,
       "description": "Photos among photo_ids that the photographer already edited (their develop settings differ from the selection's untouched state) set the shoot's look. They are examples only and get no result."
     },
+    "base_preset": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "A look (develop settings of one of the photographer's presets) that replaces the profile's base preset. Only its look settings are used; exposure and white balance stay predicted per photo."
+    },
     "photo_ids": {
       "type": "array",
       "minItems": 1,

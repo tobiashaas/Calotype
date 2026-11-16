@@ -104,3 +104,15 @@ def test_the_shoots_mask_strengths_come_from_the_edited_photos():
         {"CorrectionAmount": 1, "CorrectionMasks": [subject], "LocalShadows2012": -0.9}]
     targets = calibrate_to_shoot(predictions, vectors, settings, ids, "raw", uuid4())
     assert examples_masks(predictions, targets, settings) == {"subject": {"LocalShadows2012": 0.2}}
+
+
+def test_a_look_chosen_for_the_job_replaces_the_profiles():
+    from calotype_edit_serializer import apply_style
+    from calotype_inference_worker.cli import job_preset
+
+    profile = {"GrainAmount": 10}
+    assert job_preset({}, profile) is profile
+    assert job_preset({"base_preset": None}, profile) is profile
+    chosen = job_preset({"base_preset": {"GrainAmount": 30, "Exposure2012": 2.0}}, profile)
+    out = apply_style({"Exposure2012": 0.4}, chosen)
+    assert out["GrainAmount"] == 30 and out["Exposure2012"] == 0.4   # exposure stays per photo

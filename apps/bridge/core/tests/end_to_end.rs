@@ -545,6 +545,7 @@ async fn edit_job_without_profile_learns_from_edits_only() {
     }
     let mut ok = no_format;
     ok["format_type"] = json!("raw");
+    ok["base_preset"] = json!({"ToneCurvePV2012": [0, 10, 255, 245], "GrainAmount": 20});
     let (s, _) = call(&st, "POST", "/v1/jobs/edit", Some(TOKEN), Some(ok)).await;
     assert_eq!(s, StatusCode::ACCEPTED);
     for _ in 0..3 {
@@ -556,6 +557,7 @@ async fn edit_job_without_profile_learns_from_edits_only() {
     assert_eq!(sent["format_type"], "raw");
     assert_eq!(sent["learn_from_edits"], true);
     assert!(sent.get("profile_id").is_none());
+    assert_eq!(sent["base_preset"]["GrainAmount"], 20);
 }
 
 #[tokio::test]

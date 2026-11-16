@@ -55,7 +55,7 @@ function Actions.ownEditsProfile(photos)
 end
 
 --- Train a profile from `photos` (their current develop settings are the target).
--- choice = { name, genre, colorType }.
+-- choice = { name, genre, colorType, basePreset } (basePreset: a look, see LookPresets.lua).
 function Actions.train(photos, choice, progress)
   local reg, regErr = JobWait.registerPhotos(photos, progress)
   if not reg then
@@ -79,6 +79,7 @@ function Actions.train(photos, choice, progress)
     format_type = reg.formats.raw and "raw" or "jpeg_tiff",
     color_type = choice.colorType,
     lr_catalog_uuids = reg.uuids,
+    base_preset = choice.basePreset,
   }
   if not job then return result(false, "Calotype", jobErr) end
   Log.info("train job %s queued with %d photos", job.job_id, #reg.uuids)
@@ -117,7 +118,8 @@ end
 --- Apply `profile` to `photos`. options.straighten: also level photos with clear lines;
 -- options.retouch: ids of Lightroom AI-mask retouches to add (see Retouch.lua);
 -- options.learnFromEdits: photos of the selection already edited set the shoot's look and
--- stay as they are. A profile from Actions.ownEditsProfile always learns from the edits.
+-- stay as they are; options.look: develop settings of a preset whose look replaces the
+-- profile's (LookPresets.settings) — the edited photos' shared look still goes on top. A profile from Actions.ownEditsProfile always learns from the edits.
 function Actions.apply(catalog, photos, profile, progress, options)
   options = options or {}
   if profile.own_edits then options.learnFromEdits = true end
@@ -150,6 +152,7 @@ function Actions.apply(catalog, photos, profile, progress, options)
     lr_catalog_uuids = reg.uuids,
     straighten = options.straighten or nil,   -- only sent when asked (older Bridges)
     learn_from_edits = options.learnFromEdits or nil,
+    base_preset = options.look,                -- only sent when a look was chosen
   }
   if not job then return result(false, "Calotype", jobErr) end
   Log.info("edit job %s queued with %d photos", job.job_id, #reg.uuids)

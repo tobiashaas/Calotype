@@ -190,6 +190,10 @@ struct EditReq {
     /// Already edited photos of the selection set the shoot's look (and get no result).
     #[serde(default)]
     learn_from_edits: bool,
+    /// A look (develop settings of one of the photographer's presets) that replaces the
+    /// profile's; the server keeps only its look settings.
+    #[serde(default)]
+    base_preset: Option<Map<String, Value>>,
     lr_catalog_uuids: Vec<String>,
 }
 
@@ -292,6 +296,7 @@ async fn queue_edit(State(state): State<Shared>, Json(body): Json<Value>) -> Res
         "collection_name": req.collection_name,
         "straighten": req.straighten,
         "learn_from_edits": req.learn_from_edits,
+        "base_preset": req.base_preset,
     });
     accept_job(&state, "edit", request, &uuids)
 }

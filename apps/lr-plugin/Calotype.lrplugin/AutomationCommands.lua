@@ -11,6 +11,7 @@ local LrProgressScope = import "LrProgressScope"
 local LrTasks = import "LrTasks"
 
 local Actions = require "Actions"
+local LookPresets = require "LookPresets"
 local Json = require "Json"
 local PhotoData = require "PhotoData"
 
@@ -169,10 +170,16 @@ function Commands.apply(catalog, args)
   -- No profile + learn_from_edits: the look of the selection's edited photos only.
   if args.profile == nil and args.learn_from_edits == true then profile = Actions.ownEditsProfile(photos) end
   if not profile then error("no ready profile " .. tostring(args.profile)) end
+  -- args.look: name or uuid of an installed develop preset whose look replaces the profile's.
+  local look = nil
+  if args.look then
+    look = LookPresets.settings(args.look)
+    if not look then error("no develop preset " .. tostring(args.look)) end
+  end
   local progress = progressScope(profile.name)
   local ok, r = pcall(Actions.apply, catalog, photos, profile, progress,
     { straighten = args.straighten == true, retouch = args.retouch,
-      learnFromEdits = args.learn_from_edits == true })
+      learnFromEdits = args.learn_from_edits == true, look = look })
   progress:done()
   if not ok then error(r) end
   local out = plain(r)
@@ -180,9 +187,18 @@ function Commands.apply(catalog, args)
   return out
 end
 
+--- Installed develop presets a look can come from; with args.name also that preset's look settings.
+function Commands.look_presets(catalog, args)
+  local out = { presets = LookPresets.items() }
+  if args and args.name then out.settings = LookPresets.settings(args.name) end
+  return out
+end
+
 function Commands.train(catalog, args)
   local photos, missing = photosByUuid(catalog, args.uuids)
-  local choice = { name = args.name, genre = args.genre or "other", colorType = args.color_type or "color" }
+  local choice = { name = args.name, genre = args.genre or "other", colorType = args.color_type or "color",
+    basePreset = args.look and LookPresets.settings(args.look) or nil }
+  if args.look and not choice.basePreset then error("no develop preset " .. tostring(args.look)) end
   local progress = progressScope(tostring(choice.name))
   local ok, r = pcall(Actions.train, photos, choice, progress)
   progress:done()

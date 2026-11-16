@@ -148,3 +148,12 @@ def test_edit_job_without_profile_learns_from_edits(client, mock_publisher):
     assert resp.status_code == 202
     payload = mock_publisher.enqueue.call_args[0][0].payload
     assert payload["profile_id"] is None and payload["format_type"] == "raw"
+
+
+def test_edit_job_carries_a_chosen_look(client, mock_publisher):
+    photo_id = _upload(client)
+    body = {"schema_version": "edit-request-v1", "photo_ids": [photo_id], "learn_from_edits": True,
+            "format_type": "raw", "base_preset": {"GrainAmount": 25, "ToneCurvePV2012": [0, 12, 255, 240]}}
+    assert client.post("/v1/jobs/edit", json=body).status_code == 202
+    payload = mock_publisher.enqueue.call_args[0][0].payload
+    assert payload["base_preset"]["GrainAmount"] == 25

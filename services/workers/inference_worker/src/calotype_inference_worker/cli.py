@@ -138,6 +138,13 @@ def examples_look(predictions: dict[UUID, dict], targets: list[UUID], settings: 
     return shared_style([settings[p] for p in predictions if p not in wanted])
 
 
+def job_preset(payload: dict, profile_preset: dict) -> dict:
+    """The preset whose look goes on top of the predictions: one chosen for this job (one of
+    the photographer's own presets) replaces the profile's."""
+    chosen = payload.get("base_preset")
+    return dict(chosen) if isinstance(chosen, dict) and chosen else profile_preset
+
+
 def examples_masks(predictions: dict[UUID, dict], targets: list[UUID], settings: dict[UUID, dict]) -> dict:
     """The mask strengths (subject, sky …) the edited photos of the shoot share."""
     wanted = set(targets)
@@ -198,6 +205,9 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
             feature_version = CURRENT_FEATURE_VERSION
         else:
             raise ValueError("missing profile_id in payload (without one, learn_from_edits and format_type)")
+        if envelope.payload.get("base_preset"):
+            log.info("look chosen for the job job_id=%s", job_uuid)
+        base_preset = job_preset(envelope.payload, base_preset)
 
         # Model prediction per photo; photos without features (no usable preview) get no result.
         predictions: dict[UUID, dict[str, float]] = {}

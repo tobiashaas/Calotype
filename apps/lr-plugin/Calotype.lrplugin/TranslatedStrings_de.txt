@@ -117,3 +117,8 @@
 "$$$/Calotype/Retouch/Snapshot/Hint=Das Original bleibt als Schnappschuss „^1“ erhalten."
 "$$$/Calotype/Retouch/Box=Retusche mit Lightroom-KI-Masken"
 "$$$/Calotype/Retouch/Prepare=Calotype: Retusche vorbereiten"
+"$$$/Calotype/Look/FromProfile=Aus dem Profil / deinen bearbeiteten Fotos"
+"$$$/Calotype/Look/Label=Look:"
+"$$$/Calotype/Look/Hint=Eines deiner Presets: sein Look (Kurve, Farben, Körnung …), Belichtung und Weißabgleich pro Foto von Calotype."
+"$$$/Calotype/Look/None=Keiner (nur was die Fotos zeigen)"
+"$$$/Calotype/Look/TrainHint=Optional: eines deiner Presets als Look des Profils. Belichtung und Weißabgleich lernt Calotype weiter pro Foto."

@@ -64,6 +64,9 @@ class EditJobRequestV1(TolerantRequest):
     # Optional: photos of the selection the photographer already edited set the shoot's look;
     # they are examples only and get no result.
     learn_from_edits: bool = False
+    # Optional: a look (develop settings of one of the photographer's presets) that replaces
+    # the profile's base preset; only its look settings are used (style layer).
+    base_preset: dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def _profile_or_edits(self) -> "EditJobRequestV1":

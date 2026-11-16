@@ -712,6 +712,52 @@ end)
 
 -- ------------------------------------------------------------ syntax of UI scripts
 
+test("look presets: the photographer's presets listed, their look sent with apply", function()
+  local LookPresets = require "LookPresets"
+  local Commands = require "AutomationCommands"
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  local function preset(uuid, name, settings)
+    return { getUuid = function() return uuid end, getName = function() return name end,
+             getSetting = function() return settings end }
+  end
+  local jewel = { GrainAmount = 25, ToneCurvePV2012 = { 0, 12, 255, 240 }, ConvertToGrayscale = false,
+                  MaskGroupBasedCorrections = { { CorrectionName = "x" } } }
+  sdk.LrApplication.developPresetFolders = function()
+    return {
+      { getName = function() return "F&R Jewels" end,
+        getDevelopPresets = function() return { preset("u2", "Opal", jewel), preset("u1", "Aventurine", jewel) } end },
+      { getName = function() return "Calotype Retouch" end,
+        getDevelopPresets = function() return { preset("r1", "Lift subject", {}) } end },
+    }
+  end
+  local items = LookPresets.items()
+  eq(#items, 2, "retouch presets are no look")
+  eq(items[1].title, "F&R Jewels / Aventurine", "sorted, with folder")
+  local look, name = LookPresets.settings("u2")
+  eq(name, "Opal", "found by uuid")
+  eq(look.GrainAmount, 25, "plain value")
+  eq(look.ToneCurvePV2012[2], 12, "tone curve kept")
+  eq(look.ConvertToGrayscale, false, "booleans kept")
+  eq(look.MaskGroupBasedCorrections, nil, "masks left out")
+  eq(LookPresets.settings("nope"), nil, "unknown preset")
+
+  local photo = fakePhoto("a", "RAW")
+  local catalog = fakeCatalog({ photo })
+  respond(200, { { profile_id = "p1", name = "Test", genre = "event", format_type = "raw", status = "ready", version = 1 } })
+  respond(202, { status = "pending" })
+  respond(202, { job_id = "j1", status = "waiting_for_photos" })
+  respond(200, { job_id = "j1", status = "completed", results = {
+    { lr_catalog_uuid = "a", lr_settings = { Exposure2012 = 0.3, GrainAmount = 25 } } } })
+  local ok = Commands.run(catalog, { command = "apply", args = { profile = "Test", uuids = { "a" }, look = "Opal" } })
+  assert(ok, "apply ran")
+  local sent = Json.decode(fake.requests[#fake.requests - 1].body)
+  eq(sent.base_preset.GrainAmount, 25, "the look goes with the edit job")
+  eq(sent.base_preset.MaskGroupBasedCorrections, nil, "without masks")
+  respond(200, { { profile_id = "p1", name = "Test", genre = "event", format_type = "raw", status = "ready", version = 1 } })
+  local okBad, err = Commands.run(catalog, { command = "apply", args = { profile = "Test", uuids = { "a" }, look = "nope" } })
+  assert(not okBad and tostring(err.error):find("no develop preset", 1, true), "unknown look refused: " .. tostring(err.error))
+end)
+
 test("automation init runs in a Lightroom-like plugin environment", function()
   fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t", automation = false })
   local started

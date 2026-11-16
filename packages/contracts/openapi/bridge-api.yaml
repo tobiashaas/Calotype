@@ -318,6 +318,10 @@ components:
           type: boolean
           default: false
           description: Photos among photo_ids the photographer already edited set the shoot's look; they get no result.
+        base_preset:
+          type: object
+          additionalProperties: true
+          description: A look (develop settings of one of the photographer's presets) replacing the profile's base preset; only its look settings are used, exposure and white balance stay per photo.
         photo_ids:
           type: array
           minItems: 1
