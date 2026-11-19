@@ -154,6 +154,116 @@ LOOKS: list[dict] = [
             "GrainAmount": 10, "GrainSize": 20, "GrainFrequency": 50,
         },
     },
+    {
+        "name": "Wedding",
+        "name_de": "Hochzeit",
+        "about_de": "Klassischer Hochzeits-Look: Dehaze +30, Klarheit +10, sanft entsättigt (-16), warme Hauttöne und edle Kontrastkurve.",
+        "about": "Classic wedding look: Dehaze +30, Clarity +10, muted saturation (-16), warm skin tones and signature tone curve.",
+        "curve": [(0, 8), (61, 59), (194, 186), (255, 244)],
+        "curve_blue": [(0, 0), (173, 169), (255, 255)],
+        "settings": {
+            "Texture": 0, "Clarity2012": 10, "Dehaze": 30, "Vibrance": 0, "Saturation": -16,
+            "ColorGradeMidtoneHue": 68, "ColorGradeMidtoneSat": 13,
+            "ColorGradeShadowLum": 0, "ColorGradeHighlightLum": 0,
+            "ColorGradeGlobalHue": 0, "ColorGradeGlobalSat": 0,
+            "SaturationAdjustmentGreen": -35,
+            "SaturationAdjustmentPurple": -14,
+            "SaturationAdjustmentMagenta": -20,
+            "SaturationAdjustmentRed": 14,
+            "SaturationAdjustmentYellow": 10,
+        },
+    },
+    {
+        "name": "Wedding Herbst VS",
+        "name_de": "Hochzeit Herbst VS",
+        "about_de": "Herbstliche Hochzeitsstimmung: Dehaze +30, Klarheit +10, sanft entsättigt (-16), warme Töne.",
+        "about": "Autumn wedding mood: Dehaze +30, Clarity +10, muted saturation (-16), warm tones.",
+        "curve": [(0, 8), (61, 59), (194, 186), (255, 244)],
+        "curve_blue": [(0, 0), (173, 169), (255, 255)],
+        "settings": {
+            "Texture": 0, "Clarity2012": 10, "Dehaze": 30, "Vibrance": 0, "Saturation": -16,
+            "ColorGradeMidtoneHue": 68, "ColorGradeMidtoneSat": 13,
+            "ColorGradeShadowLum": 0, "ColorGradeHighlightLum": 0,
+            "ColorGradeGlobalHue": 0, "ColorGradeGlobalSat": 0,
+            "SaturationAdjustmentGreen": -35,
+            "SaturationAdjustmentPurple": -14,
+            "SaturationAdjustmentMagenta": -20,
+            "SaturationAdjustmentRed": 14,
+            "SaturationAdjustmentYellow": 10,
+        },
+    },
+    {
+        "name": "KiTa",
+        "name_de": "KiTa & Familie",
+        "about_de": "Knackig-lebendiger Look für Kindergarten- und Kinderporträts: Textur +30, Klarheit +10, Dunst entfernen +10, Sättigung -16.",
+        "about": "Crisp and lively look for kindergarten and child portraits: Texture +30, Clarity +10, Dehaze +10, Saturation -16.",
+        "curve": [(0, 0), (64, 60), (128, 128), (192, 198), (255, 255)],
+        "settings": {
+            "Texture": 30, "Clarity2012": 10, "Dehaze": 10, "Vibrance": 0, "Saturation": -16,
+        },
+    },
+    {
+        "name": "Peaky Blinders",
+        "name_de": "Peaky Blinders",
+        "about_de": "Düsterer, dramatischer Kontrastlook: Dunst entfernen +62, Klarheit +15, Sättigung -41.",
+        "about": "Moody, dramatic contrast look: Dehaze +62, Clarity +15, Saturation -41.",
+        "curve": [(0, 16), (48, 42), (128, 126), (200, 204), (255, 250)],
+        "settings": {
+            "Texture": 15, "Clarity2012": 15, "Dehaze": 62, "Vibrance": -12, "Saturation": -41,
+        },
+    },
+    {
+        "name": "Vintage Sunbeam",
+        "name_de": "Vintage Sunbeam",
+        "about_de": "Sanfte Vintage-Wärme: weiche Textur und Klarheit, dezente Farbstimmung.",
+        "about": "Soft vintage warmth: gentle texture and clarity softening, subtle warm color mood.",
+        "curve": [(0, 12), (64, 66), (128, 130), (192, 194), (255, 250)],
+        "settings": {
+            "Texture": -4, "Clarity2012": -3, "Dehaze": 0, "Vibrance": -6, "Saturation": -3,
+        },
+    },
+    {
+        "name": "Luminous Dream",
+        "name_de": "Luminous Dream",
+        "about_de": "Leuchtendes, verträumtes Pastellgefühl: Klarheit +5, sanfte Entsättigung (-25).",
+        "about": "Luminous, dreamy pastel feel: Clarity +5, muted desaturated palette (-25).",
+        "curve": [(0, 14), (60, 68), (128, 136), (192, 202), (255, 252)],
+        "settings": {
+            "Texture": 0, "Clarity2012": 5, "Dehaze": 0, "Vibrance": 1, "Saturation": -25,
+        },
+    },
+    {
+        "name": "Eternal Essence",
+        "name_de": "Eternal Essence",
+        "about_de": "Sanfte, zeitlose Porträts: weiche Klarheit (-8), gedämpfte Dynamik, reichhaltige Töne.",
+        "about": "Soft, timeless portraits: smooth clarity (-8), reduced vibrance, rich tones.",
+        "curve": [(0, 8), (64, 62), (128, 128), (192, 196), (255, 252)],
+        "settings": {
+            "Texture": 0, "Clarity2012": -8, "Dehaze": 0, "Vibrance": -16, "Saturation": 11,
+        },
+    },
+    {
+        "name": "Classic Depths BW",
+        "name_de": "Klassische Tiefe SW",
+        "about_de": "Tiefe, strukturierte Schwarzweiß-Ästhetik: Textur +11, Klarheit -12, Dunst entfernen +4.",
+        "about": "Deep, textured monochrome: Texture +11, Clarity -12, Dehaze +4.",
+        "bw": True,
+        "curve": [(0, 4), (48, 40), (128, 126), (200, 206), (255, 252)],
+        "settings": {
+            "Texture": 11, "Clarity2012": -12, "Dehaze": 4, "Vibrance": 0, "Saturation": 0,
+        },
+    },
+    {
+        "name": "Gentle Mist BW",
+        "name_de": "Sanfter Dunst SW",
+        "about_de": "Klares, luftiges Schwarzweiß: Textur +11, Klarheit +10, sanft angehobene Schwarztöne.",
+        "about": "Crisp, airy monochrome: Texture +11, Clarity +10, gently lifted blacks.",
+        "bw": True,
+        "curve": [(0, 18), (64, 70), (128, 134), (192, 200), (255, 250)],
+        "settings": {
+            "Texture": 11, "Clarity2012": 10, "Dehaze": 0, "Vibrance": 0, "Saturation": 0,
+        },
+    },
 ]
 
 
@@ -301,7 +411,8 @@ def preset_xmp(look: dict) -> str:
     lines += _alt("Group", GROUP) + _alt("Description", look["about"], look.get("about_de"))
     lines += seq("ToneCurvePV2012", look["curve"])
     for channel in ("Red", "Green", "Blue"):
-        lines += seq(f"ToneCurvePV2012{channel}", [(0, 0), (255, 255)])
+        ch_curve = look.get(f"curve_{channel.lower()}", [(0, 0), (255, 255)])
+        lines += seq(f"ToneCurvePV2012{channel}", ch_curve)
     lines += ["  </rdf:Description>", " </rdf:RDF>", "</x:xmpmeta>", '<?xpacket end="w"?>', ""]
     return "\n".join(lines)
 
@@ -313,10 +424,12 @@ def main() -> int:
         path = OUT / f"{slug(look['name'])}.xmp"
         path.write_text(preset_xmp(look), encoding="utf-8")
         flat = [float(v) for p in look["curve"] for v in p]
+        settings_dict = {**look["settings"], "ToneCurvePV2012": flat, "ConvertToGrayscale": bool(look.get("bw"))}
+        if "curve_blue" in look:
+            settings_dict["ToneCurvePV2012Blue"] = [float(v) for p in look["curve_blue"] for v in p]
         index.append({"name": look["name"], "name_de": look.get("name_de"), "file": path.name,
                       "about": look["about"], "about_de": look.get("about_de"), "bw": bool(look.get("bw")),
-                      "settings": {**look["settings"], "ToneCurvePV2012": flat,
-                                   "ConvertToGrayscale": bool(look.get("bw"))}})
+                      "settings": settings_dict})
         print(f"wrote {path.relative_to(ROOT)}")
     (OUT / "looks.json").write_text(json.dumps(index, indent=1), encoding="utf-8")
     retouch_dir = OUT / "retouch"

@@ -323,5 +323,291 @@
    ],
    "ConvertToGrayscale": true
   }
+ },
+ {
+  "name": "Wedding",
+  "name_de": "Hochzeit",
+  "file": "wedding.xmp",
+  "about": "Classic wedding look: Dehaze +30, Clarity +10, muted saturation (-16), warm skin tones and signature tone curve.",
+  "about_de": "Klassischer Hochzeits-Look: Dehaze +30, Klarheit +10, sanft ents\u00e4ttigt (-16), warme Hautt\u00f6ne und edle Kontrastkurve.",
+  "bw": false,
+  "settings": {
+   "Texture": 0,
+   "Clarity2012": 10,
+   "Dehaze": 30,
+   "Vibrance": 0,
+   "Saturation": -16,
+   "ColorGradeMidtoneHue": 68,
+   "ColorGradeMidtoneSat": 13,
+   "ColorGradeShadowLum": 0,
+   "ColorGradeHighlightLum": 0,
+   "ColorGradeGlobalHue": 0,
+   "ColorGradeGlobalSat": 0,
+   "SaturationAdjustmentGreen": -35,
+   "SaturationAdjustmentPurple": -14,
+   "SaturationAdjustmentMagenta": -20,
+   "SaturationAdjustmentRed": 14,
+   "SaturationAdjustmentYellow": 10,
+   "ToneCurvePV2012": [
+    0.0,
+    8.0,
+    61.0,
+    59.0,
+    194.0,
+    186.0,
+    255.0,
+    244.0
+   ],
+   "ConvertToGrayscale": false,
+   "ToneCurvePV2012Blue": [
+    0.0,
+    0.0,
+    173.0,
+    169.0,
+    255.0,
+    255.0
+   ]
+  }
+ },
+ {
+  "name": "Wedding Herbst VS",
+  "name_de": "Hochzeit Herbst VS",
+  "file": "wedding-herbst-vs.xmp",
+  "about": "Autumn wedding mood: Dehaze +30, Clarity +10, muted saturation (-16), warm tones.",
+  "about_de": "Herbstliche Hochzeitsstimmung: Dehaze +30, Klarheit +10, sanft ents\u00e4ttigt (-16), warme T\u00f6ne.",
+  "bw": false,
+  "settings": {
+   "Texture": 0,
+   "Clarity2012": 10,
+   "Dehaze": 30,
+   "Vibrance": 0,
+   "Saturation": -16,
+   "ColorGradeMidtoneHue": 68,
+   "ColorGradeMidtoneSat": 13,
+   "ColorGradeShadowLum": 0,
+   "ColorGradeHighlightLum": 0,
+   "ColorGradeGlobalHue": 0,
+   "ColorGradeGlobalSat": 0,
+   "SaturationAdjustmentGreen": -35,
+   "SaturationAdjustmentPurple": -14,
+   "SaturationAdjustmentMagenta": -20,
+   "SaturationAdjustmentRed": 14,
+   "SaturationAdjustmentYellow": 10,
+   "ToneCurvePV2012": [
+    0.0,
+    8.0,
+    61.0,
+    59.0,
+    194.0,
+    186.0,
+    255.0,
+    244.0
+   ],
+   "ConvertToGrayscale": false,
+   "ToneCurvePV2012Blue": [
+    0.0,
+    0.0,
+    173.0,
+    169.0,
+    255.0,
+    255.0
+   ]
+  }
+ },
+ {
+  "name": "KiTa",
+  "name_de": "KiTa & Familie",
+  "file": "kita.xmp",
+  "about": "Crisp and lively look for kindergarten and child portraits: Texture +30, Clarity +10, Dehaze +10, Saturation -16.",
+  "about_de": "Knackig-lebendiger Look f\u00fcr Kindergarten- und Kinderportr\u00e4ts: Textur +30, Klarheit +10, Dunst entfernen +10, S\u00e4ttigung -16.",
+  "bw": false,
+  "settings": {
+   "Texture": 30,
+   "Clarity2012": 10,
+   "Dehaze": 10,
+   "Vibrance": 0,
+   "Saturation": -16,
+   "ToneCurvePV2012": [
+    0.0,
+    0.0,
+    64.0,
+    60.0,
+    128.0,
+    128.0,
+    192.0,
+    198.0,
+    255.0,
+    255.0
+   ],
+   "ConvertToGrayscale": false
+  }
+ },
+ {
+  "name": "Peaky Blinders",
+  "name_de": "Peaky Blinders",
+  "file": "peaky-blinders.xmp",
+  "about": "Moody, dramatic contrast look: Dehaze +62, Clarity +15, Saturation -41.",
+  "about_de": "D\u00fcsterer, dramatischer Kontrastlook: Dunst entfernen +62, Klarheit +15, S\u00e4ttigung -41.",
+  "bw": false,
+  "settings": {
+   "Texture": 15,
+   "Clarity2012": 15,
+   "Dehaze": 62,
+   "Vibrance": -12,
+   "Saturation": -41,
+   "ToneCurvePV2012": [
+    0.0,
+    16.0,
+    48.0,
+    42.0,
+    128.0,
+    126.0,
+    200.0,
+    204.0,
+    255.0,
+    250.0
+   ],
+   "ConvertToGrayscale": false
+  }
+ },
+ {
+  "name": "Vintage Sunbeam",
+  "name_de": "Vintage Sunbeam",
+  "file": "vintage-sunbeam.xmp",
+  "about": "Soft vintage warmth: gentle texture and clarity softening, subtle warm color mood.",
+  "about_de": "Sanfte Vintage-W\u00e4rme: weiche Textur und Klarheit, dezente Farbstimmung.",
+  "bw": false,
+  "settings": {
+   "Texture": -4,
+   "Clarity2012": -3,
+   "Dehaze": 0,
+   "Vibrance": -6,
+   "Saturation": -3,
+   "ToneCurvePV2012": [
+    0.0,
+    12.0,
+    64.0,
+    66.0,
+    128.0,
+    130.0,
+    192.0,
+    194.0,
+    255.0,
+    250.0
+   ],
+   "ConvertToGrayscale": false
+  }
+ },
+ {
+  "name": "Luminous Dream",
+  "name_de": "Luminous Dream",
+  "file": "luminous-dream.xmp",
+  "about": "Luminous, dreamy pastel feel: Clarity +5, muted desaturated palette (-25).",
+  "about_de": "Leuchtendes, vertr\u00e4umtes Pastellgef\u00fchl: Klarheit +5, sanfte Ents\u00e4ttigung (-25).",
+  "bw": false,
+  "settings": {
+   "Texture": 0,
+   "Clarity2012": 5,
+   "Dehaze": 0,
+   "Vibrance": 1,
+   "Saturation": -25,
+   "ToneCurvePV2012": [
+    0.0,
+    14.0,
+    60.0,
+    68.0,
+    128.0,
+    136.0,
+    192.0,
+    202.0,
+    255.0,
+    252.0
+   ],
+   "ConvertToGrayscale": false
+  }
+ },
+ {
+  "name": "Eternal Essence",
+  "name_de": "Eternal Essence",
+  "file": "eternal-essence.xmp",
+  "about": "Soft, timeless portraits: smooth clarity (-8), reduced vibrance, rich tones.",
+  "about_de": "Sanfte, zeitlose Portr\u00e4ts: weiche Klarheit (-8), ged\u00e4mpfte Dynamik, reichhaltige T\u00f6ne.",
+  "bw": false,
+  "settings": {
+   "Texture": 0,
+   "Clarity2012": -8,
+   "Dehaze": 0,
+   "Vibrance": -16,
+   "Saturation": 11,
+   "ToneCurvePV2012": [
+    0.0,
+    8.0,
+    64.0,
+    62.0,
+    128.0,
+    128.0,
+    192.0,
+    196.0,
+    255.0,
+    252.0
+   ],
+   "ConvertToGrayscale": false
+  }
+ },
+ {
+  "name": "Classic Depths BW",
+  "name_de": "Klassische Tiefe SW",
+  "file": "classic-depths-bw.xmp",
+  "about": "Deep, textured monochrome: Texture +11, Clarity -12, Dehaze +4.",
+  "about_de": "Tiefe, strukturierte Schwarzwei\u00df-\u00c4sthetik: Textur +11, Klarheit -12, Dunst entfernen +4.",
+  "bw": true,
+  "settings": {
+   "Texture": 11,
+   "Clarity2012": -12,
+   "Dehaze": 4,
+   "Vibrance": 0,
+   "Saturation": 0,
+   "ToneCurvePV2012": [
+    0.0,
+    4.0,
+    48.0,
+    40.0,
+    128.0,
+    126.0,
+    200.0,
+    206.0,
+    255.0,
+    252.0
+   ],
+   "ConvertToGrayscale": true
+  }
+ },
+ {
+  "name": "Gentle Mist BW",
+  "name_de": "Sanfter Dunst SW",
+  "file": "gentle-mist-bw.xmp",
+  "about": "Crisp, airy monochrome: Texture +11, Clarity +10, gently lifted blacks.",
+  "about_de": "Klares, luftiges Schwarzwei\u00df: Textur +11, Klarheit +10, sanft angehobene Schwarzt\u00f6ne.",
+  "bw": true,
+  "settings": {
+   "Texture": 11,
+   "Clarity2012": 10,
+   "Dehaze": 0,
+   "Vibrance": 0,
+   "Saturation": 0,
+   "ToneCurvePV2012": [
+    0.0,
+    18.0,
+    64.0,
+    70.0,
+    128.0,
+    134.0,
+    192.0,
+    200.0,
+    255.0,
+    250.0
+   ],
+   "ConvertToGrayscale": true
+  }
  }
 ]
