@@ -34,6 +34,9 @@ from calotype_inference_pipeline.npx import (
 CONFIG_PATH = Path(os.environ.get("APPDATA", "")) / "Calotype" / "bridge.json"
 DEFAULT_PORT = 47600
 DEFAULT_TOKEN = "2db38bbfb0b6450cacf4f6feedaf08c355211795581f400aa5755dbcbaa3d9a2"
+PREVIEW_EXE = Path(r"C:\Github\LR-FrameFlow\apps\bridge\target\release\examples\preview.exe")
+PREVIEW_CACHE = Path(os.environ.get("LOCALAPPDATA", r"C:\Users\haast\AppData\Local")) / "Calotype" / "previews"
+RAW_EXTS = {".cr2", ".cr3", ".nef", ".arw", ".dng", ".orf", ".rw2"}
 
 # In-memory storage for the active Lightroom session
 photos_db: dict[str, dict[str, Any]] = {}
@@ -224,26 +227,62 @@ def parse_curve_flat(curve_items: list[Any]) -> list[float]:
 
 def process_edit_job_sync(job_id: str, profile_id: str, uuids: list[str]):
     """Processes photos sequentially on local GPU and applies consistency smoothing."""
+    import subprocess
     # Find matching profile
     prof = next((p for p in AVAILABLE_PROFILES if p["profile_id"] == profile_id), None)
     preset_key = prof["preset_key"] if prof else "wedding"
     format_type = prof["format_type"] if prof else "raw"
 
     print(f"\n[Calotype Bridge] Running edit job {job_id} on {len(uuids)} photos with preset '{preset_key}'...", flush=True)
-    engine = get_engine(preset_key)
 
+    # 1. Resolve RAW previews if needed
+    PREVIEW_CACHE.mkdir(parents=True, exist_ok=True)
+    raw_to_extract = []
+    file_map: dict[str, Path] = {}
+    for u in uuids:
+        photo_info = photos_db.get(u, {})
+        file_path = photo_info.get("file_path")
+        if not file_path:
+            continue
+        p = Path(file_path)
+        if p.suffix.lower() in RAW_EXTS:
+            prev = PREVIEW_CACHE / f"{p.stem}.jpg"
+            # Also check if existing preview exists next to RAW
+            alt_prev = p.parent / f"{p.stem}.jpg"
+            alt_prev_dir = Path(r"E:\Marryween_previews") / f"{p.stem}.jpg"
+            if prev.exists() and prev.stat().st_size > 0:
+                file_map[u] = prev
+            elif alt_prev_dir.exists() and alt_prev_dir.stat().st_size > 0:
+                file_map[u] = alt_prev_dir
+            elif alt_prev.exists() and alt_prev.stat().st_size > 0:
+                file_map[u] = alt_prev
+            else:
+                raw_to_extract.append(str(p))
+                file_map[u] = prev
+        else:
+            file_map[u] = p
+
+    if raw_to_extract and PREVIEW_EXE.exists():
+        print(f"[Calotype Bridge] Extracting embedded camera previews for {len(raw_to_extract)} RAW files...", flush=True)
+        chunk_size = 50
+        for i in range(0, len(raw_to_extract), chunk_size):
+            chunk = raw_to_extract[i:i + chunk_size]
+            try:
+                subprocess.run([str(PREVIEW_EXE), str(PREVIEW_CACHE)] + chunk, capture_output=True, text=True)
+            except Exception as e:
+                print(f"[Calotype Bridge] Warning during preview extraction: {e}", flush=True)
+
+    engine = get_engine(preset_key)
     raw_results: list[dict[str, Any]] = []
 
     for idx, u in enumerate(uuids, 1):
-        photo_info = photos_db.get(u, {})
-        file_path = photo_info.get("file_path")
-        if not file_path or not Path(file_path).exists():
-            print(f"[Calotype Bridge] Warning: photo {u} path not found: {file_path}", flush=True)
+        target_path = file_map.get(u)
+        if not target_path or not target_path.exists():
+            print(f"[Calotype Bridge] Warning: photo {u} path not found: {target_path}", flush=True)
             continue
 
-        p = Path(file_path)
         try:
-            preds = engine.predict(p, preset=preset_key)
+            preds = engine.predict(target_path, preset=preset_key)
             
             # Format develop settings specifically for Lightroom SDK
             lr_settings: dict[str, Any] = {
