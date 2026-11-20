@@ -281,7 +281,6 @@ class CalotypeNeuralEngine:
 
 # Alias for backward compatibility
 CalotypeInferenceEngine = CalotypeNeuralEngine
-NeurapixInferenceEngine = CalotypeNeuralEngine
 
 
 def generate_xmp(settings: dict[str, Any]) -> str:

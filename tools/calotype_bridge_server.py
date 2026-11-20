@@ -36,7 +36,17 @@ DEFAULT_PORT = 47600
 DEFAULT_TOKEN = "2db38bbfb0b6450cacf4f6feedaf08c355211795581f400aa5755dbcbaa3d9a2"
 PREVIEW_EXE = Path(r"C:\Github\LR-FrameFlow\apps\bridge\target\release\examples\preview.exe")
 PREVIEW_CACHE = Path(os.environ.get("LOCALAPPDATA", r"C:\Users\haast\AppData\Local")) / "Calotype" / "previews"
-RAW_EXTS = {".cr2", ".cr3", ".nef", ".arw", ".dng", ".orf", ".rw2"}
+RAW_EXTS = {
+    ".cr2", ".cr3",          # Canon
+    ".nef", ".nrw",          # Nikon
+    ".arw",                  # Sony
+    ".raf",                  # Fujifilm
+    ".dng", ".rwl",          # Leica / Universal / Apple ProRAW
+    ".orf",                  # Olympus / OM System
+    ".rw2",                  # Panasonic / Lumix
+    ".pef",                  # Pentax
+    ".3fr", ".fff",          # Hasselblad
+}
 
 # In-memory storage for the active Lightroom session
 photos_db: dict[str, dict[str, Any]] = {}
@@ -327,15 +337,35 @@ def process_edit_job_sync(job_id: str, profile_id: str, uuids: list[str]):
         except Exception as e:
             print(f"[Calotype Bridge] Error on photo {p.name}: {e}", flush=True)
 
-    # Apply consistency smoothing across the batch sequence
-    if len(raw_results) > 2 and format_type == "raw":
-        for i in range(1, len(raw_results) - 1):
+    # Apply consistency smoothing across the batch sequence (anti-flicker)
+    n_res = len(raw_results)
+    if n_res > 2 and format_type == "raw":
+        # Pass 1: 1-frame spikes (Temperature & Exposure)
+        for i in range(1, n_res - 1):
+            prev_s = raw_results[i-1]["lr_settings"]
+            curr_s = raw_results[i]["lr_settings"]
+            next_s = raw_results[i+1]["lr_settings"]
+
+            # Temp
+            prev_t, curr_t, next_t = prev_s.get("Temperature", 5500), curr_s.get("Temperature", 5500), next_s.get("Temperature", 5500)
+            if abs(prev_t - next_t) < 100 and abs(curr_t - prev_t) >= 200:
+                curr_s["Temperature"] = int(round((prev_t + next_t) / 2))
+
+            # Exposure
+            prev_e, curr_e, next_e = prev_s.get("Exposure2012", 0.0), curr_s.get("Exposure2012", 0.0), next_s.get("Exposure2012", 0.0)
+            if abs(prev_e - next_e) < 0.15 and abs(curr_e - prev_e) >= 0.35:
+                curr_s["Exposure2012"] = round((prev_e + next_e) / 2, 2)
+
+        # Pass 2: 2-frame wobbles
+        for i in range(1, n_res - 2):
             prev_t = raw_results[i-1]["lr_settings"].get("Temperature", 5500)
-            curr_t = raw_results[i]["lr_settings"].get("Temperature", 5500)
-            next_t = raw_results[i+1]["lr_settings"].get("Temperature", 5500)
-            if abs(prev_t - next_t) < 100 and abs(curr_t - prev_t) >= 250:
-                smoothed_t = int(round((prev_t + next_t) / 2))
-                raw_results[i]["lr_settings"]["Temperature"] = smoothed_t
+            c1_t = raw_results[i]["lr_settings"].get("Temperature", 5500)
+            c2_t = raw_results[i+1]["lr_settings"].get("Temperature", 5500)
+            next_t = raw_results[i+2]["lr_settings"].get("Temperature", 5500)
+            if abs(prev_t - next_t) < 120 and abs(c1_t - c2_t) < 80 and abs(c1_t - prev_t) >= 250:
+                target_t = int(round((prev_t + next_t) / 2))
+                raw_results[i]["lr_settings"]["Temperature"] = target_t
+                raw_results[i+1]["lr_settings"]["Temperature"] = target_t
 
     # Finalize job
     jobs_db[job_id]["results"] = raw_results
