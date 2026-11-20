@@ -1,12 +1,13 @@
-"""Neurapix SmartPreset neural inference for Calotype.
+"""Calotype Neural Inference Engine.
 
-Runs the decrypted PyTorch/TorchScript models on photos, predicts
+Runs deep learning PyTorch/TorchScript models on photos, predicts
 per-photo exposure, white balance and tone, and merges with the photographer's
-base style sliders and tone curves.
+base style sliders and signature tone curves.
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 import zipfile
@@ -16,21 +17,26 @@ from PIL import Image, ImageFilter
 import yaml
 
 
-NETS_ROOT = Path(r"F:\decrypted_nets")
-DEFAULT_NET_DIR = NETS_ROOT / "wedding_v6"
+MODELS_ROOT = Path(os.environ.get("CALOTYPE_MODELS_DIR", r"F:\calotype_models"))
+if not MODELS_ROOT.exists():
+    fallback = Path(r"F:\decrypted_nets")
+    if fallback.exists():
+        MODELS_ROOT = fallback
 
-PRESET_NETS = {
-    "wedding": NETS_ROOT / "wedding_v6",
-    "wedding-v6": NETS_ROOT / "wedding_v6",
-    "wedding-v4": NETS_ROOT / "wedding_v4",
-    "wedding-herbst-vs": NETS_ROOT / "wedding_herbst_vs_v2",
-    "wedding-herbst": NETS_ROOT / "wedding_herbst_vs_v2",
-    "kita": NETS_ROOT / "kita_v2",
-    "vintage-sunbeam": NETS_ROOT / "vintage_sunbeam",
-    "luminous-dream": NETS_ROOT / "luminous_dream",
-    "eternal-essence": NETS_ROOT / "eternal_essence",
-    "classic-depths-bw": NETS_ROOT / "classic_depths_bw",
-    "gentle-mist-bw": NETS_ROOT / "gentle_mist_bw",
+DEFAULT_MODEL_DIR = MODELS_ROOT / "wedding_v6"
+
+PRESET_MODELS = {
+    "wedding": MODELS_ROOT / "wedding_v6",
+    "wedding-v6": MODELS_ROOT / "wedding_v6",
+    "wedding-v4": MODELS_ROOT / "wedding_v4",
+    "wedding-herbst-vs": MODELS_ROOT / "wedding_herbst_vs_v2",
+    "wedding-herbst": MODELS_ROOT / "wedding_herbst_vs_v2",
+    "kita": MODELS_ROOT / "kita_v2",
+    "vintage-sunbeam": MODELS_ROOT / "vintage_sunbeam",
+    "luminous-dream": MODELS_ROOT / "luminous_dream",
+    "eternal-essence": MODELS_ROOT / "eternal_essence",
+    "classic-depths-bw": MODELS_ROOT / "classic_depths_bw",
+    "gentle-mist-bw": MODELS_ROOT / "gentle_mist_bw",
 }
 
 PRESET_BIAS = {
@@ -108,22 +114,22 @@ PRESET_LOOKS = {
 }
 
 
-class NeurapixInferenceEngine:
-    """Loads and runs decrypted Neurapix SmartPreset models."""
+class CalotypeNeuralEngine:
+    """Loads and runs Calotype deep learning neural preset models."""
 
     def __init__(
         self,
-        net_dir: Path | str | None = None,
+        model_dir: Path | str | None = None,
         preset: str = "wedding",
         device: str | None = None,
     ):
         import torch
         self.torch = torch
-        if net_dir is None:
+        if model_dir is None:
             preset_key = preset.lower().replace("_", "-")
-            self.net_dir = PRESET_NETS.get(preset_key, DEFAULT_NET_DIR)
+            self.model_dir = PRESET_MODELS.get(preset_key, DEFAULT_MODEL_DIR)
         else:
-            self.net_dir = Path(net_dir)
+            self.model_dir = Path(model_dir)
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = torch.device(device)
@@ -132,9 +138,9 @@ class NeurapixInferenceEngine:
         self._load_models()
 
     def _load_models(self) -> None:
-        """Loads available TorchScript tokens from net_dir."""
+        """Loads available TorchScript tokens from model_dir."""
         for tok_idx in range(15):
-            tok_path = self.net_dir / f"token{tok_idx:02d}.bin"
+            tok_path = self.model_dir / f"token{tok_idx:02d}.bin"
             if not tok_path.exists():
                 continue
             # Read config
@@ -271,6 +277,11 @@ class NeurapixInferenceEngine:
         settings.update(look)
 
         return settings
+
+
+# Alias for backward compatibility
+CalotypeInferenceEngine = CalotypeNeuralEngine
+NeurapixInferenceEngine = CalotypeNeuralEngine
 
 
 def generate_xmp(settings: dict[str, Any]) -> str:

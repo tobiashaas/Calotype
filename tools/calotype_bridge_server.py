@@ -24,11 +24,11 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 # Calotype imports
-from calotype_inference_pipeline.npx import (
+from calotype_inference_pipeline.neural import (
     PRESET_BIAS,
     PRESET_LOOKS,
-    PRESET_NETS,
-    NeurapixInferenceEngine,
+    PRESET_MODELS,
+    CalotypeNeuralEngine,
 )
 
 CONFIG_PATH = Path(os.environ.get("APPDATA", "")) / "Calotype" / "bridge.json"
@@ -43,16 +43,16 @@ photos_db: dict[str, dict[str, Any]] = {}
 jobs_db: dict[str, dict[str, Any]] = {}
 
 # Cached engine instances per preset
-_engines: dict[str, NeurapixInferenceEngine] = {}
+_engines: dict[str, CalotypeNeuralEngine] = {}
 _engine_lock = threading.Lock()
 
 
-def get_engine(preset_name: str) -> NeurapixInferenceEngine:
+def get_engine(preset_name: str) -> CalotypeNeuralEngine:
     with _engine_lock:
         key = preset_name.lower().replace("_", "-")
         if key not in _engines:
             print(f"[Calotype Bridge] Initializing neural engine for preset '{key}' on GPU...", flush=True)
-            _engines[key] = NeurapixInferenceEngine(preset=key)
+            _engines[key] = CalotypeNeuralEngine(preset=key)
         return _engines[key]
 
 

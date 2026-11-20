@@ -49,10 +49,13 @@ def train_for_version(
     return train_model_v2(feature_vectors, targets, version)
 
 
-# Optional neural inference (Neurapix SmartPreset support)
-def get_npx_engine(net_dir=None, preset: str = "wedding", device: str | None = None):
-    from calotype_inference_pipeline.npx import NeurapixInferenceEngine
-    return NeurapixInferenceEngine(net_dir=net_dir, preset=preset, device=device)
+# Calotype neural inference engine
+def get_neural_engine(model_dir=None, preset: str = "wedding", device: str | None = None):
+    from calotype_inference_pipeline.neural import CalotypeNeuralEngine
+    return CalotypeNeuralEngine(model_dir=model_dir, preset=preset, device=device)
+
+
+get_npx_engine = get_neural_engine
 
 
 

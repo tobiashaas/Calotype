@@ -4,9 +4,9 @@ import sys
 import time
 from pathlib import Path
 
-from calotype_inference_pipeline.npx import (
-    DEFAULT_NET_DIR,
-    NeurapixInferenceEngine,
+from calotype_inference_pipeline.neural import (
+    DEFAULT_MODEL_DIR,
+    CalotypeNeuralEngine,
     generate_xmp,
 )
 
@@ -29,7 +29,7 @@ def main():
 
     print("Initializing Wedding v6 Neural Engine on GPU...", flush=True)
     t0_load = time.time()
-    engine = NeurapixInferenceEngine(net_dir=DEFAULT_NET_DIR, device="cuda")
+    engine = CalotypeNeuralEngine(model_dir=DEFAULT_MODEL_DIR, device="cuda")
     print(f"Engine ready on {engine.device} in {time.time()-t0_load:.1f}s", flush=True)
 
     print(f"Starting GPU batch inference on {total} photos...", flush=True)
