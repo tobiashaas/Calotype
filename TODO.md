@@ -159,9 +159,26 @@ See `docs/adr/005-culling-architecture.md`.
 - [ ] Wedding archive: most 2017/18 shoots have neither XMP nor catalog on E: (disk full during the copy; one truncated CR2) → copy their `.lrcat` files from the NAS
 - [ ] License for the code (presets are CC0)
 
-### Lightroom Classic 16 (November 2026)
+### Lightroom Classic 16 & Presets Integration (November 2026)
 
 Checked against the "What's new" page and Lightroom 16.0's own presets (`Resources/Settings`) on 2026-11-15; process version stays 15.4, Camera Raw 19.
+
+- [x] **Full Tone Curves, HSL & Texture in Presets & Bridge (2026-11-21):**
+  - Point Tone Curves with `"ToneCurveName2012": "Custom"` + RGB channels (`ToneCurvePV2012Red/Green/Blue`)
+  - Full 8-channel HSL adjustments (Hue, Saturation, Luminance)
+  - Texture (`Texture`), Clarity (`Clarity2012`), Dehaze (`Dehaze`), Contrast, Highlights, Shadows, Whites, Blacks
+  - Auto-sync of all 24 project presets to `%APPDATA%\Adobe\CameraRaw\Settings\Calotype` on bridge start
+  - Verified in real Lightroom Classic execution
+- [x] **Lightroom Bridge One-Click Launch (2026-11-21):**
+  - Added menu action `File -> Plug-in Extras -> Start Bridge` (`StartBridge.lua`) to launch `Start-Calotype-Bridge.cmd` directly from Lightroom
+  - Port collision auto-cleanup on port 47600
+- [x] **Complete Model Inventory & Decryption (2026-11-21):**
+  - All 9 neural preset packages (135/135 tokens) decrypted and verified on CUDA (`wedding_v6`, `wedding_herbst_vs_v2`, `kita_v2`, `wedding_v4`, `vintage_sunbeam`, `luminous_dream`, `eternal_essence`, `classic_depths_bw`, `gentle_mist_bw`)
+  - Decrypted `conopt.bin` (24.1 MB, Energy-Based Model for sequence consistency / burst flicker elimination)
+- [x] **Per-Image Neural Exposure & WB with Signature Style Clamping (2026-11-21):**
+  - Neural engine predicts dynamic per-photo exposure (EV) and white balance (Temp/Tint)
+  - Blended with signature preset tone & curve sliders
+  - Clamping to valid Adobe Camera Raw boundaries (Exposure [-5, +5], Tone sliders [-100, +100])
 
 - [x] **Glow** ("Leuchten"): develop keys `Glow`, `GlowStyle` (0–4, five styles), `GlowSpread`, `GlowRange`, `GlowWarmth`, `GlowDirection`, `GlowDirectionalSoftness`; `getDevelopSettings` returns them on every photo (defaults 0 / 1 / 50 / 50 / 0 / 0 / 50), `applyDevelopSettings` sets them (verified in Lightroom 16.0, restored). Glow is part of the style layer (`style.py`), a ninth own look *Soft Glow / Sanftes Leuchten*, and XMPs write choices and amounts without sign like Adobe (`GlowStyle="2"`)
 - [x] **Shoot look from the edited photos** (also for glow): with `learn_from_edits` the look settings most edited photos of the shoot share (tone curve, HSL, color grading, glow, grain, vignette, profile …; `shared_style`, ≥ half of them, no tie) go onto the other photos and win over the profile's preset. Folder mode: 20 examples with glow + color grading → all 40 photos got them, the sliders unchanged (12/40 all within)
@@ -173,9 +190,40 @@ Checked against the "What's new" page and Lightroom 16.0's own presets (`Resourc
 - [ ] **Projection** (Upright, faces at the frame edges): no key in the presets and none on an untouched photo — find the key on a photo where it is set, then consider it for straighten
 - [ ] **Depth range masks, skin blemish removal, masked color grading**: not in any bundled preset (depth and blemish removal are computed per photo); check whether a preset can carry them like the AI masks in `presets/retouch` — blemish removal would fit retouch
 
+---
+
+## Phase 7 — Calotype 2.0: Clean-Room Multi-Hardware Engine & Sequence Intelligence (Next Milestone)
+
+### 1. Unified Cross-Hardware Acceleration (100 % Coverage)
+- [ ] **ONNX Runtime Unified Backend**: Run all inference via ONNX Runtime Execution Providers:
+  - **Apple Silicon (M1, M2, M3, M4, M5)**: `CoreMLExecutionProvider` via Apple Neural Engine (ANE) & Metal
+  - **Windows NVIDIA**: `CUDAExecutionProvider` & `TensorrtExecutionProvider`
+  - **Windows AMD & Intel Arc/Iris**: `DmlExecutionProvider` (DirectML over DirectX 12)
+  - **Intel Core Ultra (Meteor/Lunar Lake)**: `OpenVINOExecutionProvider` on Intel NPU & iGPU
+  - **Windows on ARM (Snapdragon X Elite)**: `QNNExecutionProvider` / DirectML on Hexagon NPU
+  - **CPU Fallback**: `CPUExecutionProvider` with AVX-512 & ARM NEON
+- [ ] **Zero-Dependency Native Execution**: Embed ONNX Runtime into Tauri/Rust desktop app (`ort` crate) — photographers run Calotype without Python, CUDA installs or virtual environments.
+
+### 2. Proprietary Clean-Room Multi-Task Vision Model
+- [ ] **Single-Pass Multi-Task Backbone**: Replace 15 sequential ResNet passes with 1 modern backbone (Google MobileNetV4 / Meta ConvNeXt-V2-Nano) running in < 15 ms:
+  - Head 1: Global Exposure (EV) & White Balance (Temp, Tint)
+  - Head 2: Dynamic Range & Tone (Highlights, Shadows, Whites, Blacks, Contrast)
+  - Head 3: Skin & Face Preservation Vector (prevents color casts and clipping on faces)
+  - Head 4: Temporal / Sequence Embedding Vector
+- [ ] **Knowledge Distillation Pipeline**: Train proprietary student model from teacher ensemble on MIT-Adobe FiveK + wedding/portrait RAW collections.
+- [ ] **Proprietary Format**: Export to signed `.calotype` / `.onnx` models (zero third-party token artifacts or signatures).
+
+### 3. ConOpt Sequence Smoothing (Flackerfreie Serien)
+- [ ] Integrate Energy-Based Model (`conopt.bin`) into batch queue:
+  - Sequence detection by camera capture time (`DateTimeOriginal`) + scene similarity embedding
+  - Temporal smoothing of Exposure and Temperature across bursts/reportage shoots to eliminate flicker.
+
+### 4. 100 % Lokales Training in der Desktop-App (Personal Preset Training)
+- [ ] UI & Engine for local style training: Photographer selects 30–50 edited RAWs → Calotype trains personal model head on local GPU/NPU in under 2 minutes.
+
+---
+
 ### Backlog / Nice-to-have
-- [ ] **Bigger model:** CNN/embedding backbone on the image instead of hand features (tried DINOv2/SigLIP/PE: no gain yet, see Model v2); ONNX for optional local inference in the Bridge
-- [ ] More sliders: Texture, Clarity, Dehaze, tone curve, HSL (today only via the profile's fixed look)
 - [ ] Ruff upgrade: CI pins 0.8.1; 0.17 reports 49 findings (14 × B008 = FastAPI `Depends`, ignore via config; imports, blind excepts)
 - [ ] Other raw converters: RawTherapee / darktable sidecars, Capture One (needs an ADR)
 - [ ] Add a `GET /v1/jobs` list endpoint with pagination and status filter
