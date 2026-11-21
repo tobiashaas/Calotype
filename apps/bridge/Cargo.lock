@@ -353,7 +353,7 @@ dependencies = [
 
 [[package]]
 name = "calotype-bridge"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "calotype-bridge-core",
  "serde",
@@ -365,7 +365,7 @@ dependencies = [
 
 [[package]]
 name = "calotype-bridge-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",

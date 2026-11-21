@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "calotype-persistence"
-version = "0.1.0"
+version = "0.1.1"
 description = "SQLAlchemy models and repositories for Calotype"
 requires-python = ">=3.11"
 readme = "README.md"

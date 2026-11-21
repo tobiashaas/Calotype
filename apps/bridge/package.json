@@ -1,7 +1,7 @@
 {
   "name": "calotype-bridge",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Calotype Bridge — Tauri CLI wrapper",
   "scripts": {
     "tauri": "tauri",
