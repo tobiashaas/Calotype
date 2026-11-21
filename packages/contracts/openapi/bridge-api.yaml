@@ -314,6 +314,10 @@ components:
           type: boolean
           default: false
           description: Level photos with clear reference lines (result carries Lightroom crop keys).
+        consistent_series:
+          type: boolean
+          default: false
+          description: Photos of the same scene (close in capture time and alike) get exposure and white balance that agree; edited examples stay fixed.
         learn_from_edits:
           type: boolean
           default: false

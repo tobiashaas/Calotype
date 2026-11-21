@@ -61,6 +61,9 @@ class EditJobRequestV1(TolerantRequest):
     photo_ids: Annotated[list[UUID], Field(min_length=1)]
     # Optional: level photos that have clear reference lines (crop keys in the result).
     straighten: bool = False
+    # Optional: photos of the same scene (close in time and alike) get exposure and white
+    # balance that agree; edited examples stay fixed. Needs capture times.
+    consistent_series: bool = False
     # Optional: photos of the selection the photographer already edited set the shoot's look;
     # they are examples only and get no result.
     learn_from_edits: bool = False

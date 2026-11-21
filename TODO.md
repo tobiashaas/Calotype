@@ -157,7 +157,7 @@ See `docs/adr/005-culling-architecture.md`.
 - [x] Profile "Business / Aufträge" on 4,900 photos of 6 clients (2026-11-14)
 - [x] Final wedding profile "Hochzeit 2015–2019" on 13,338 photos of 11 weddings (2026-11-09); the trained shoots were removed from E: afterwards (originals on the NAS), their catalogs kept locally for the measurements
 - [ ] Wedding archive: most 2017/18 shoots have neither XMP nor catalog on E: (disk full during the copy; one truncated CR2) → copy their `.lrcat` files from the NAS
-- [ ] License for the code (presets are CC0)
+- [x] License for the code: Apache-2.0 (2026-11-21); presets are CC0
 
 ### Lightroom Classic 16 (November 2026)
 
@@ -191,8 +191,10 @@ Sources and what we take from each: [`docs/RESEARCH.md`](docs/RESEARCH.md).
 - [ ] Pooled base model + per-photographer layer (hierarchical, Saeedi et al.) — formalises today's pooled base model (R6 white balance 14 → 32 % with 20 own photos)
 
 ### 8.3 Consistent series without flicker
-- [ ] Shoot consistency as a graph optimisation in slider space (HaCohen et al.): photos that share content (capture time + image similarity) are linked, a quadratic cost keeps linked photos' exposure and white balance close, the photographer's edited examples are fixed constraints. numpy, no model
-- [ ] Yardstick: spread of the predicted sliders within a series vs. the photographer's own spread (PPR10K's group-level consistency)
+- [x] Shoot consistency as a graph optimisation in slider space (HaCohen et al.), first version 2026-11-21: `calotype_inference_pipeline.series` links photos close in capture time (≤ 20 s) *and* alike in their feature vectors, a quadratic cost pulls exposure / temperature / tint of each series together, edited examples are fixed (an example still on as-shot white balance anchors no white balance). Edit request `consistent_series` (default off), solved per connected series with numpy
+- [ ] `consistent_series` in the plugin's apply dialog, the Bridge and `calotype-folder apply`
+- [ ] Tune the link thresholds (`MAX_GAP_SECONDS`, `FEATURE_SCALE`, `STRENGTH`) on real shoots — so far only synthetic tests
+- [ ] Yardstick: spread of the predicted sliders within a series vs. the photographer's own spread (PPR10K's group-level consistency) — `series.spread()` computes it; the measurement is open
 
 ### 8.4 White balance relative to as-shot
 - [ ] Target = mired offset from as-shot instead of absolute Kelvin
