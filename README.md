@@ -40,6 +40,10 @@ The plugin is only the user interface. The Bridge builds previews from the origi
 The server can run on the same machine or elsewhere. Decisions are recorded in
 [`docs/adr/`](docs/adr/).
 
+## Scientific Foundations & AI Architecture
+
+Calotype 2.0 operates as a **differentiable parametric photo editor** rather than a destructive pixel-manipulation model. For detailed citations and architectural analysis of the computer vision and color science research underpinning our engine (Stanford, MIT, Google Research, Meta AI, CVPR, WACV), see [`docs/RESEARCH.md`](docs/RESEARCH.md).
+
 ## Repository layout
 
 ```text
