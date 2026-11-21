@@ -36,5 +36,5 @@ return {
     { title = LOC "$$$/Calotype/Menu/StatusFile=Calotype: Bridge status...", file = "BridgeStatus.lua" },
   },
 
-  VERSION = { major = 0, minor = 3, revision = 1 },
+  VERSION = { major = 0, minor = 3, revision = 2 },
 }

@@ -68,9 +68,13 @@ local function hasSnapshot(photo)
 end
 
 --- In its own catalog write transaction, before the photo is changed: keep the original as a snapshot
--- (only the first time — a re-apply must not overwrite the true original) and drop our own
--- masks from an earlier run. The photographer's own masks stay.
-function Retouch.prepare(photo)
+-- (only the first time — a re-apply must not overwrite the true original) and drop those of
+-- our masks from an earlier run that are about to be added again (ids). Our masks of other
+-- kinds stay — a run that adds "subject" must not cost the photo its earlier "sky" — and so
+-- do the photographer's own masks.
+function Retouch.prepare(photo, ids)
+  local again = {}
+  for _, id in ipairs(ids or {}) do again[id] = true end
   if photo.createDevelopSnapshot and not hasSnapshot(photo) then
     LrTasks.pcall(function() photo:createDevelopSnapshot(Retouch.SNAPSHOT, false) end)
   end
@@ -78,7 +82,7 @@ function Retouch.prepare(photo)
   if type(groups) ~= "table" then return end
   local keep, removed = {}, 0
   for _, g in ipairs(groups) do
-    if isOurs(g) then removed = removed + 1 else keep[#keep + 1] = g end
+    if again[ourId(g) or ""] then removed = removed + 1 else keep[#keep + 1] = g end
   end
   if removed > 0 then photo:applyDevelopSettings({ MaskGroupBasedCorrections = keep }) end
 end
