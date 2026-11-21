@@ -149,6 +149,7 @@ TODO.md                # Completed + open work items — keep up to date
 | `tools/eval/cull_lightroom.py` | Lightroom's assisted-culling scores vs. our features, measured against your own decisions in a catalog |
 | `tools/eval/cull_report.py` | Culling prototype on a preview folder → local HTML contact sheet + timing |
 | `THIRD_PARTY_MODELS.md` | Every downloaded model with license and SHA-256 — permissive only |
+| `tools/eval/shoot_lab.py`, `shoot_pool.py` | Few-shot shoot calibration on a prepared pool (k examples spread over a shoot, the rest predicted, per slider and all together); `shoot_pool.py` builds a pool from the Bridge example `pool` (previews + a catalog's edits, read-only). Pools stay local |
 | `tools/eval/synthetic.py` | Synthetic-rule test: make rule XMPs, score predictions vs. rule and vs. guessing |
 | `apps/lr-plugin/Calotype.lrplugin/ApplyProfile.lua` | Apply dialog (profile, look, straighten, retouch); the flow itself is `Actions.apply` |
 | `apps/lr-plugin/Calotype.lrplugin/LookPresets.lua` | The photographer's installed develop presets as a look (`base_preset` for train and apply); masks and nested settings left out, nothing stored in the project |
