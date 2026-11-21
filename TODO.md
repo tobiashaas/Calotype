@@ -208,7 +208,9 @@ Sources and what we take from each: [`docs/RESEARCH.md`](docs/RESEARCH.md).
 
 ### 8.5 Look from few examples
 - [x] Choose the closest examples by image content, not only capture time (RefRetouch), first version 2026-11-21: without a profile `shoot.calibrate` uses `blend` (half ridge, half the three references closest in feature space) and only chooses between it and `series`. Two shoots edited by other tools (internal yardstick, `tools/eval/shoot_lab.py`), all six sliders within tolerance with 10 / 20 / 50 examples: wedding 6.1 / 9.6 / 14.5 → 8.5 / 12.7 / 21.0 %, kindergarten 12.8 / 17.2 / 23.4 → 15.7 / 21.8 / 35.6 %
-- [ ] The same with a profile (`model` candidate) and with real capture times — not measured yet; the with-profile path is unchanged
+- [x] With a profile (2026-11-21): measured for the first time — the old cross-validated choice among mean / profile offset / ridge was clearly *worse* than no profile at all (all six sliders within tolerance, mean of six cases: 15.3 % vs 21.9 %; temperature 38 % vs 46 %). Now the profile's prediction is one more feature of `blend` for every slider (after Saeedi et al.: shared model, adapted per shoot): 22.5 %. The "profile" in the test was a boosting model trained on the other yardstick shoot
+- [ ] With real capture times (`series`) — not measured yet
+- [x] Tried without gain (2026-11-21, same six cases): a direct affine map from the camera's measured white point to the edited one (Zhao, Afifi & Brown, reduced to what 20 examples allow) — temperature 30–42 % against 46 % with the measurement as a feature; examples augmented with exposure-damaged copies of their previews (ATune / Deep Preset in the small, ±0.25 … ±1 EV) — exposure 45.6–48.9 % against 49.0 %
 - [ ] Exposure and temperature stay the weak sliders (40–68 % / 24–61 %): next lever is white balance relative to as-shot (8.4)
 - [ ] Content-aware style per photographer instead of one look for all photos (Kosugi & Yamasaki)
 

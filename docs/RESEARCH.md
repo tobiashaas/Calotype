@@ -28,8 +28,9 @@ Speed and accuracy figures for Calotype itself come only from our own measuremen
 
 - **Saeedi, Hoffman, DiVerdi, Ghandeharioun, Johnson, Adams — *Multimodal Prediction and
   Personalization of Photo Edits with Deep Generative Models*.** AISTATS 2018. arXiv:1704.04997.
-  Hierarchical model over many users' Lightroom-style slider edits, adapted per user. Formalises our
-  pooled base model + per-photographer layer (*planned*, 8.2).
+  Hierarchical model over many users' Lightroom-style slider edits, adapted per user. First step *used*: in shoot calibration a profile's prediction is a feature adapted on the shoot's
+  examples, not a method chosen by cross-validation (all sliders within tolerance 15 → 22.5 % on our
+  yardstick). The paper's mixture of user clusters needs edits of many photographers — *planned* (8.2).
 - **Kosugi, Yamasaki — *Personalized Image Enhancement Featuring Masked Style Modeling*.**
   arXiv:2306.09334 (2023). Style depends on the content of each photo, not one look for all
   (*planned*, 8.5).
@@ -48,7 +49,8 @@ Speed and accuracy figures for Calotype itself come only from our own measuremen
 - **Goyal, Ruiz, Meisami et al. — *ATune: Unsupervised Photo Retouching Through Image-Editor
   Controls*.** arXiv:2611.16236 (2026). Learns from good photographs alone (damaged copies give the
   pairs) and sets the sliders of darktable / RawTherapee by search. Template for an own base model and
-  for other raw converters (*planned*).
+  for other raw converters (*planned*). Tried in the small — exposure-damaged copies of the shoot's
+  own examples — without gain (exposure within 0.15 EV: 46–49 % vs 49 %).
 - **Ahn — *PREEN: Exemplar-Based Color Style Transfer with Smartphone Editor Presets*.**
   arXiv:2610.36896 (2026). Regresses a whole editor preset from a reference image, with one strength knob.
 
@@ -83,8 +85,10 @@ the edited examples.
   Cross-Camera Color Constancy*.** arXiv:2504.07959 (2025). Uses the camera's colour matrices, which
   RAW / DNG metadata carry (*planned*).
 - **Zhao, Afifi, Brown — *Learning Camera-Agnostic White-Balance Preferences*.** arXiv:2507.01342
-  (2025). Maps a neutral correction to the preferred one with ~500 parameters — a photographer's
-  "a little warmer" (*planned*, 8.4).
+  (2025). Maps a neutral illuminant estimate to the preferred one with a 539-parameter MLP in
+  CIE XYZ, trained on ~2,600 images. Reduced to what 20 examples of one shoot allow (an affine map
+  from the camera's measured white point) it lost against using the measurement as a feature
+  (temperature within 150 K: 30–42 % vs 46 %) — *tried, not used*; the full method needs pooled data.
 - **Cheng, Cui, Su, Gu, Zhang — *Perception-Inspired Color Space Design for Photo White Balance
   Editing*.** arXiv:2512.09383 (2025). White balance in a learnable HSI space that separates
   luminance from chroma.

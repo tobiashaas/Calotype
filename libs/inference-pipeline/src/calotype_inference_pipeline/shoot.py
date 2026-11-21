@@ -4,21 +4,23 @@ edited in it.
 A profile trained on earlier shoots knows how photos differ from each other, but not the look of
 a new shoot (measured on unseen weddings and client jobs: model alone 0-1 % of photos with every
 slider within tolerance, the mean of 20 edits of the same shoot 13-64 %). So the edited photos of
-the shoot ("references") set the level, and per slider a small cross-validation on them picks how
-the other photos may deviate from it:
+the shoot ("references") set the level, and per slider the other photos may deviate from it:
 
-- ``mean``:  the references' mean — a constant look (studio, uniform light)
-- ``model``: mean + beta * (profile prediction - its mean on the references), beta in [0, 1]
-- ``ridge``: mean + ridge regression on the photo's own features, fitted on the references only
+- ``mean``:  the references' mean — with fewer than eight references nothing more is learned
+- ``blend``: half a ridge regression on the photo's own features (fitted on the references
+  only), half the references closest in *content* (the three nearest feature vectors, weighted
+  by closeness) — retrieval as in RefRetouch (Weldengus et al. 2026)
 - ``series``: the value of the reference taken closest in time (same scene, same light) — only
-  when capture times are known
-- ``blend``: half ``ridge``, half the references closest in *content* (the three nearest feature
-  vectors, weighted by closeness) — retrieval as in RefRetouch (Weldengus et al. 2026)
+  when capture times are known; chosen instead of ``blend`` when it explains more held-out
+  references
 
-Without a profile the choice is only between ``blend`` and ``series``: on two shoots edited by
-other tools (internal yardstick, 10 / 20 / 50 examples spread over the shoot) ``blend`` alone put
-19 % of the photos within tolerance on all six sliders, the cross-validated choice among mean /
-ridge / series 14 % — picking among many methods on a handful of examples is itself noisy.
+A profile's prediction is one more feature of the photo (after Saeedi et al. 2018: a shared
+model, adapted per shoot), like the camera's measurements below. It is *not* a method of its
+own: choosing by cross-validation among mean / profile offset / ridge on a handful of examples
+was the weak part. On two shoots edited by other tools (internal yardstick; 10 / 20 / 50
+examples spread over the shoot; the "profile" trained on the other shoot) all six sliders within
+tolerance: the old choice with a profile 15 %, ``blend`` without one 22 %, ``blend`` with the
+profile as a feature 22.5 %.
 
 Works on internal parameter names (``exposure``, ``temp`` …); nothing here knows Lightroom.
 """
@@ -54,12 +56,8 @@ LIGHT_COPIES = 16
 # points, the wedding 0.5-2).
 CAMERA_SLIDERS = ("exposure",)
 CAMERA_COPIES = 8
-
-
-def _beta(model: np.ndarray, truth: np.ndarray) -> float:
-    dm, dt = model - model.mean(), truth - truth.mean()
-    denom = float(dm @ dm)
-    return float(np.clip((dm @ dt) / denom, 0.0, 1.0)) if denom > 0 else 0.0
+# A profile's prediction of the slider joins the features of every slider it predicts.
+MODEL_COPIES = 8
 
 
 def _ridge(X: np.ndarray, y: np.ndarray):
@@ -79,43 +77,31 @@ def _similar(X_ref: np.ndarray, truth: np.ndarray, X_new: np.ndarray) -> np.ndar
     return (weight * truth[nearest]).sum(axis=1) / weight.sum(axis=1)
 
 
-def _predict(method: str, truth, model_ref, X_ref, model_new, X_new, t_ref=None, t_new=None) -> np.ndarray:
+def _predict(method: str, truth, X_ref, X_new, t_ref=None, t_new=None) -> np.ndarray:
     mean = float(truth.mean())
     if method == "series":
         return truth[np.argmin(np.abs(t_new[:, None] - t_ref[None, :]), axis=1)]
     if method == "mean":
         return np.full(len(X_new), mean)
-    if method == "model":
-        return mean + _beta(model_ref, truth) * (model_new - model_ref.mean())
-    if method == "blend":
-        return 0.5 * (mean + _ridge(X_ref, truth)(X_new)) + 0.5 * _similar(X_ref, truth, X_new)
-    return mean + _ridge(X_ref, truth)(X_new)
+    return 0.5 * (mean + _ridge(X_ref, truth)(X_new)) + 0.5 * _similar(X_ref, truth, X_new)
 
 
-def _choose(truth, model_ref, X_ref, tolerance: float, t_ref=None) -> str:
-    """Method with the most held-out references within tolerance; ties keep the simpler one.
-
-    model_ref None: no profile — the choice is between ``blend`` and, with capture times,
-    ``series`` (see the module docstring for why not more).
-    """
+def _choose(truth, X_ref, tolerance: float, t_ref=None) -> str:
+    """``blend``, or with capture times ``series`` when it puts more held-out references
+    within tolerance (ties keep ``blend``)."""
+    if t_ref is None:
+        return "blend"
     k = len(truth)
-    hits = {"blend": 0} if model_ref is None else {"mean": 0, "model": 0, "ridge": 0}
-    if t_ref is not None:
-        hits["series"] = 0
-    if len(hits) == 1:
-        return next(iter(hits))
+    hits = {"blend": 0, "series": 0}
     # Folds are random, not consecutive: with times, a consecutive fold would hide the
     # neighbours "series" relies on, unlike the real case (examples spread over the shoot).
     order = np.random.default_rng(0).permutation(k)
     for fold in np.array_split(order, min(FOLDS, k)):
         train = np.setdiff1d(np.arange(k), fold)
         for method in hits:
-            pred = _predict(method, truth[train], None if model_ref is None else model_ref[train],
-                            X_ref[train], None if model_ref is None else model_ref[fold], X_ref[fold],
-                            None if t_ref is None else t_ref[train],
-                            None if t_ref is None else t_ref[fold])
+            pred = _predict(method, truth[train], X_ref[train], X_ref[fold], t_ref[train], t_ref[fold])
             hits[method] += int(np.sum(np.abs(pred - truth[fold]) <= tolerance))
-    return max(hits, key=lambda m: (hits[m], m == "blend", m == "mean", m == "model", m == "series"))
+    return max(hits, key=lambda m: (hits[m], m == "blend"))
 
 
 def _with_camera(X: np.ndarray, camera: Sequence[Sequence[float]]) -> np.ndarray:
@@ -183,10 +169,13 @@ def calibrate(
         F_ref, F_new = (X_ref_light, X_new_light) if lit else (X_ref, X_new)
         if with_camera and p in CAMERA_SLIDERS and len(X_new) > 0:
             F_ref, F_new = X_ref_camera, X_new_camera
-        method = "mean" if len(truth) < MIN_FOR_CHOICE else _choose(truth, m_ref, F_ref, TOLERANCE[p], t_ref)
+        if with_model and len(X_new) > 0:
+            F_ref = np.column_stack([F_ref, np.tile(m_ref[:, None], MODEL_COPIES)])
+            F_new = np.column_stack([F_new, np.tile(m_new[:, None], MODEL_COPIES)])
+        method = "mean" if len(truth) < MIN_FOR_CHOICE else _choose(truth, F_ref, TOLERANCE[p], t_ref)
         methods[p] = method
         if not out:
             continue
-        for row, value in zip(out, _predict(method, truth, m_ref, F_ref, m_new, F_new, t_ref, t_new)):
+        for row, value in zip(out, _predict(method, truth, F_ref, F_new, t_ref, t_new)):
             row[p] = float(value)
     return out, methods

@@ -16,7 +16,7 @@ def test_constant_look_comes_from_the_examples_not_the_model():
     model = [{"exposure": -0.2, "contrast": 0.0} for _ in range(40)]
     out, methods = calibrate(truth[:10], model[:10], X[:10], model[10:], X[10:])
     assert all(o["exposure"] == pytest.approx(0.6) and o["contrast"] == pytest.approx(12) for o in out)
-    assert methods == {"exposure": "mean", "contrast": "mean"}
+    assert methods == {"exposure": "blend", "contrast": "blend"}
 
 
 def test_per_photo_differences_are_learned_inside_the_shoot():
@@ -26,19 +26,23 @@ def test_per_photo_differences_are_learned_inside_the_shoot():
     model = [{"exposure": 0.0} for _ in exposure]       # the profile knows nothing about it
     out, methods = calibrate(truth[:30], model[:30], X[:30], model[30:], X[30:])
     err = np.abs(np.array([o["exposure"] for o in out]) - exposure[30:])
-    assert methods["exposure"] == "ridge"
+    assert methods["exposure"] == "blend"
     mean_err = np.abs(exposure[:30].mean() - exposure[30:])
     assert err.mean() < 0.75 * mean_err.mean()   # strongly regularised, but clearly better
 
 
-def test_model_offsets_are_kept_when_they_explain_the_examples():
+def test_a_profile_that_explains_the_examples_is_used_as_a_feature():
     X = _shoot(60, seed=2)
     signal = np.random.default_rng(3).normal(size=60) * 300
     truth = [{"temp": 5200 + s} for s in signal]
     model = [{"temp": 4000 + s} for s in signal]        # right differences, wrong level
     out, methods = calibrate(truth[:20], model[:20], X[:20], model[20:], X[20:])
-    assert methods["temp"] == "model"
-    assert np.allclose([o["temp"] for o in out], [t["temp"] for t in truth[20:]])
+    assert methods["temp"] == "blend"
+    wanted = np.array([t["temp"] for t in truth[20:]])
+    error = np.mean(np.abs(np.array([o["temp"] for o in out]) - wanted))
+    without, _ = calibrate(truth[:20], None, X[:20], None, X[20:])
+    assert error < 0.6 * np.mean(np.abs(np.array([o["temp"] for o in without]) - wanted))
+    assert abs(np.mean([o["temp"] for o in out]) - wanted.mean()) < 150     # the examples' level, not the profile's
 
 
 def test_few_examples_use_their_mean_and_missing_sliders_keep_the_model():
