@@ -17,6 +17,10 @@ pub const PRESETS: &[(&str, &str)] = &[
         include_str!("../../../../presets/bright-airy.xmp"),
     ),
     (
+        "charcoal.xmp",
+        include_str!("../../../../presets/charcoal.xmp"),
+    ),
+    (
         "clean-natural.xmp",
         include_str!("../../../../presets/clean-natural.xmp"),
     ),
@@ -35,6 +39,22 @@ pub const PRESETS: &[(&str, &str)] = &[
     (
         "golden-evening.xmp",
         include_str!("../../../../presets/golden-evening.xmp"),
+    ),
+    (
+        "old-postcard.xmp",
+        include_str!("../../../../presets/old-postcard.xmp"),
+    ),
+    (
+        "pastel-morning.xmp",
+        include_str!("../../../../presets/pastel-morning.xmp"),
+    ),
+    (
+        "quiet-portrait.xmp",
+        include_str!("../../../../presets/quiet-portrait.xmp"),
+    ),
+    (
+        "silver-haze.xmp",
+        include_str!("../../../../presets/silver-haze.xmp"),
     ),
     (
         "soft-glow.xmp",
