@@ -63,6 +63,22 @@ def test_without_a_profile_the_examples_alone_set_the_look():
     truth[0].pop("contrast")   # a slider one example lacks gets no value at all
     out, methods = calibrate(truth[:30], None, X[:30], None, X[30:])
     assert len(out) == 30 and all("contrast" not in o for o in out)
-    assert methods == {"exposure": "ridge"}
+    assert methods == {"exposure": "blend"}     # no profile: ridge + the examples closest in content
+    error = np.mean([abs(o["exposure"] - e) for o, e in zip(out, exposure[30:])])
+    assert error < 0.75 * np.mean(np.abs(exposure[30:] - exposure[:30].mean()))   # better than the mean
     out, _ = calibrate(truth[1:4], None, X[1:4], None, X[30:])   # few examples: their mean
     assert all(o["contrast"] == pytest.approx(10) for o in out)
+
+
+def test_blend_follows_the_examples_closest_in_content():
+    # Two kinds of photos (indoors / outdoors) with their own exposure: a photo takes the
+    # value of the examples that look like it, not the shoot's mean.
+    rng = np.random.default_rng(3)
+    indoors = rng.normal(0.0, 0.05, (20, 6))
+    outdoors = rng.normal(1.0, 0.05, (20, 6))
+    X_ref = np.vstack([indoors[:10], outdoors[:10]])
+    truth = [{"exposure": 1.0}] * 10 + [{"exposure": -0.5}] * 10
+    out, methods = calibrate(truth, None, X_ref, None, np.vstack([indoors[10:], outdoors[10:]]))
+    assert methods == {"exposure": "blend"}
+    assert all(o["exposure"] > 0.6 for o in out[:10])
+    assert all(o["exposure"] < -0.1 for o in out[10:])
