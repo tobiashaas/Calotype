@@ -133,4 +133,5 @@ The retouch approach (mask presets + Lightroom's `updateAISettings`) follows
 
 ## License
 
-To be decided (see `LICENSE` once added). The looks and retouch presets in `presets/` are CC0.
+The code is licensed under the [Apache License 2.0](LICENSE). The looks and retouch presets in
+`presets/` are CC0.
