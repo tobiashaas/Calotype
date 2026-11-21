@@ -194,9 +194,57 @@ def ensure_config():
     print(f"[Calotype Bridge] Configuration ready at {CONFIG_PATH}")
 
 
+def sync_presets_to_camera_raw():
+    """Syncs project presets to %APPDATA%/Adobe/CameraRaw/Settings/Calotype."""
+    try:
+        appdata = os.environ.get("APPDATA")
+        if not appdata:
+            return
+        target_dir = Path(appdata) / "Adobe" / "CameraRaw" / "Settings" / "Calotype"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        (target_dir / "retouch").mkdir(parents=True, exist_ok=True)
+
+        repo_presets = Path(r"C:\Github\LR-FrameFlow\presets")
+        if not repo_presets.exists():
+            return
+
+        synced = 0
+        for xmp_file in repo_presets.glob("*.xmp"):
+            dest = target_dir / xmp_file.name
+            dest.write_text(xmp_file.read_text(encoding="utf-8"), encoding="utf-8")
+            synced += 1
+        for retouch_xmp in (repo_presets / "retouch").glob("*.xmp"):
+            dest = target_dir / "retouch" / retouch_xmp.name
+            dest.write_text(retouch_xmp.read_text(encoding="utf-8"), encoding="utf-8")
+            synced += 1
+        print(f"[Calotype Bridge] Synced {synced} presets to {target_dir}", flush=True)
+    except Exception as e:
+        print(f"[Calotype Bridge] Warning while syncing presets: {e}", flush=True)
+
+
+def kill_process_on_port(port: int):
+    """Terminates any stale process holding the port so the bridge can start cleanly."""
+    import subprocess
+    try:
+        res = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             f"Get-NetTCPConnection -LocalPort {port} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique"],
+            capture_output=True, text=True
+        )
+        pids = [int(p.strip()) for p in res.stdout.strip().split() if p.strip().isdigit()]
+        curr_pid = os.getpid()
+        for pid in pids:
+            if pid != curr_pid and pid > 0:
+                print(f"[Calotype Bridge] Freeing port {port}: terminating stale process {pid}...", flush=True)
+                subprocess.run(["powershell", "-NoProfile", "-Command", f"Stop-Process -Id {pid} -Force -ErrorAction SilentlyContinue"])
+                time.sleep(0.5)
+    except Exception as e:
+        print(f"[Calotype Bridge] Note on port check: {e}", flush=True)
+
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "app": "Calotype Local Bridge"}
+    return {"status": "ok", "version": "0.2.0-gpu", "app": "Calotype Local Bridge"}
 
 
 @app.get("/v1/profiles")
@@ -298,34 +346,48 @@ def process_edit_job_sync(job_id: str, profile_id: str, uuids: list[str]):
             lr_settings: dict[str, Any] = {
                 "ProcessVersion": "15.4",
                 "WhiteBalance": "Custom",
-                "Exposure2012": float(preds.get("Exposure2012", 0.0)),
+                "Exposure2012": float(round(preds.get("Exposure2012", 0.0), 2)),
                 "Contrast2012": int(round(preds.get("Contrast2012", 0.0))),
                 "Highlights2012": int(round(preds.get("Highlights2012", 0.0))),
                 "Shadows2012": int(round(preds.get("Shadows2012", 0.0))),
                 "Whites2012": int(round(preds.get("Whites2012", 0.0))),
                 "Blacks2012": int(round(preds.get("Blacks2012", 0.0))),
-                "Texture": int(preds.get("Texture", 0)),
-                "Clarity2012": int(preds.get("Clarity2012", 0)),
-                "Dehaze": int(preds.get("Dehaze", 0)),
-                "Vibrance": int(preds.get("Vibrance", 0)),
-                "Saturation": int(preds.get("Saturation", 0)),
-                "ColorGradeMidtoneHue": int(preds.get("ColorGradeMidtoneHue", 0)),
-                "ColorGradeMidtoneSat": int(preds.get("ColorGradeMidtoneSat", 0)),
+                "Texture": int(round(preds.get("Texture", 0))),
+                "Clarity2012": int(round(preds.get("Clarity2012", 0))),
+                "Dehaze": int(round(preds.get("Dehaze", 0))),
+                "Vibrance": int(round(preds.get("Vibrance", 0))),
+                "Saturation": int(round(preds.get("Saturation", 0))),
             }
             
             if format_type == "jpeg_tiff":
-                # In Lightroom, JPEGs use IncrementalTemperature / IncrementalTint or relative Kelvin
-                lr_settings["IncrementalTemperature"] = 0
-                lr_settings["IncrementalTint"] = 0
+                # In Lightroom, JPEGs use IncrementalTemperature / IncrementalTint
+                lr_settings["IncrementalTemperature"] = int(round(preds.get("TemperatureDiff", 0)))
+                lr_settings["IncrementalTint"] = int(round(preds.get("TintDiff", 0)))
             else:
                 lr_settings["Temperature"] = int(round(preds.get("Temperature", 5500)))
                 lr_settings["Tint"] = int(round(preds.get("Tint", 10)))
 
-            # Curves
+            # Curves: point curve requires ToneCurveName2012 = "Custom" in Lightroom SDK
             if "ToneCurvePV2012" in preds:
+                lr_settings["ToneCurveName2012"] = "Custom"
                 lr_settings["ToneCurvePV2012"] = parse_curve_flat(preds["ToneCurvePV2012"])
-            if "ToneCurvePV2012Blue" in preds:
-                lr_settings["ToneCurvePV2012Blue"] = parse_curve_flat(preds["ToneCurvePV2012Blue"])
+            for ch in ("Red", "Green", "Blue"):
+                key = f"ToneCurvePV2012{ch}"
+                if key in preds:
+                    lr_settings[key] = parse_curve_flat(preds[key])
+
+            # Copy all HSL / Color Grading / Effects / Detail settings from preds
+            for k, v in preds.items():
+                if k.startswith(("HueAdjustment", "SaturationAdjustment", "LuminanceAdjustment")):
+                    lr_settings[k] = int(round(v))
+                elif k.startswith("ColorGrade"):
+                    lr_settings[k] = int(round(v))
+                elif k in ("PostCropVignetteAmount", "GrainAmount", "GrainSize", "GrainFrequency"):
+                    lr_settings[k] = int(round(v))
+                elif k.startswith("Glow"):
+                    lr_settings[k] = int(round(v))
+                elif k == "ConvertToGrayscale":
+                    lr_settings[k] = bool(v)
 
             raw_results.append({
                 "lr_catalog_uuid": u,
@@ -416,7 +478,9 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     args = parser.parse_args()
 
+    kill_process_on_port(args.port)
     ensure_config()
+    sync_presets_to_camera_raw()
     print(f"[Calotype Bridge] Starting server on http://{args.host}:{args.port}...")
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 

@@ -20,22 +20,49 @@
     crs:ProcessVersion="15.4"
     crs:HasSettings="True"
     crs:ToneCurveName2012="Custom"
-    crs:Texture="0"
+    crs:EnableColorAdjustments="True"
+    crs:EnableDetail="True"
+    crs:EnableEffects="True"
+    crs:EnableSplitToning="True"
+    crs:Contrast2012="18"
+    crs:Highlights2012="-30"
+    crs:Shadows2012="25"
+    crs:Whites2012="8"
+    crs:Blacks2012="-12"
+    crs:Texture="12"
     crs:Clarity2012="10"
-    crs:Dehaze="30"
-    crs:Vibrance="0"
+    crs:Dehaze="20"
+    crs:Vibrance="2"
     crs:Saturation="-16"
+    crs:HueAdjustmentRed="5"
+    crs:HueAdjustmentOrange="-2"
+    crs:HueAdjustmentYellow="-12"
+    crs:HueAdjustmentGreen="18"
+    crs:HueAdjustmentAqua="-8"
+    crs:HueAdjustmentBlue="-10"
+    crs:SaturationAdjustmentRed="16"
+    crs:SaturationAdjustmentOrange="4"
+    crs:SaturationAdjustmentYellow="8"
+    crs:SaturationAdjustmentGreen="-40"
+    crs:SaturationAdjustmentAqua="-15"
+    crs:SaturationAdjustmentBlue="-20"
+    crs:SaturationAdjustmentPurple="-14"
+    crs:SaturationAdjustmentMagenta="-20"
+    crs:LuminanceAdjustmentRed="-2"
+    crs:LuminanceAdjustmentOrange="5"
+    crs:LuminanceAdjustmentYellow="8"
+    crs:LuminanceAdjustmentGreen="-5"
     crs:ColorGradeMidtoneHue="68"
     crs:ColorGradeMidtoneSat="13"
+    crs:ColorGradeHighlightHue="42"
+    crs:ColorGradeHighlightSat="12"
+    crs:ColorGradeShadowHue="210"
+    crs:ColorGradeShadowSat="8"
+    crs:ColorGradeBlending="55"
     crs:ColorGradeShadowLum="0"
     crs:ColorGradeHighlightLum="0"
     crs:ColorGradeGlobalHue="0"
     crs:ColorGradeGlobalSat="0"
-    crs:SaturationAdjustmentGreen="-35"
-    crs:SaturationAdjustmentPurple="-14"
-    crs:SaturationAdjustmentMagenta="-20"
-    crs:SaturationAdjustmentRed="14"
-    crs:SaturationAdjustmentYellow="10"
     crs:ConvertToGrayscale="False">
    <crs:Name>
     <rdf:Alt>
@@ -60,8 +87,8 @@
    </crs:Group>
    <crs:Description>
     <rdf:Alt>
-     <rdf:li xml:lang="x-default">Autumn wedding mood: Dehaze +30, Clarity +10, muted saturation (-16), warm tones.</rdf:li>
-     <rdf:li xml:lang="de-DE">Herbstliche Hochzeitsstimmung: Dehaze +30, Klarheit +10, sanft entsättigt (-16), warme Töne.</rdf:li>
+     <rdf:li xml:lang="x-default">Autumn wedding mood: Texture +12, Clarity +10, Dehaze +20, rich autumn hues, tone settings and tone curve.</rdf:li>
+     <rdf:li xml:lang="de-DE">Herbstliche Hochzeitsstimmung: Struktur +12, Klarheit +10, Dehaze +20, warme Herbstfarbtöne und Kontrastkurve.</rdf:li>
     </rdf:Alt>
    </crs:Description>
    <crs:ToneCurvePV2012>

@@ -41,19 +41,19 @@ PRESET_MODELS = {
 
 PRESET_BIAS = {
     "wedding": {
-        "Texture": 0, "Clarity2012": 10, "Dehaze": 30, "Vibrance": 0, "Saturation": -16,
+        "Texture": 10, "Clarity2012": 10, "Dehaze": 20, "Vibrance": 0, "Saturation": -16,
     },
     "wedding-v6": {
-        "Texture": 0, "Clarity2012": 10, "Dehaze": 30, "Vibrance": 0, "Saturation": -16,
+        "Texture": 10, "Clarity2012": 10, "Dehaze": 20, "Vibrance": 0, "Saturation": -16,
     },
     "wedding-v4": {
-        "Texture": 0, "Clarity2012": 10, "Dehaze": 30, "Vibrance": 0, "Saturation": -16,
+        "Texture": 10, "Clarity2012": 10, "Dehaze": 20, "Vibrance": 0, "Saturation": -16,
     },
     "wedding-herbst-vs": {
-        "Texture": 0, "Clarity2012": 10, "Dehaze": 30, "Vibrance": 0, "Saturation": -16,
+        "Texture": 12, "Clarity2012": 10, "Dehaze": 20, "Vibrance": 2, "Saturation": -16,
     },
     "wedding-herbst": {
-        "Texture": 0, "Clarity2012": 10, "Dehaze": 30, "Vibrance": 0, "Saturation": -16,
+        "Texture": 12, "Clarity2012": 10, "Dehaze": 20, "Vibrance": 2, "Saturation": -16,
     },
     "kita": {
         "Texture": 30, "Clarity2012": 10, "Dehaze": 10, "Vibrance": 0, "Saturation": -16,
@@ -82,33 +82,120 @@ PRESET_BIAS = {
 
 PRESET_LOOKS = {
     "wedding": {
+        "ToneCurveName2012": "Custom",
+        "Contrast2012": 15,
+        "Highlights2012": -25,
+        "Shadows2012": 20,
+        "Whites2012": 10,
+        "Blacks2012": -10,
+        "HueAdjustmentOrange": 0,
+        "HueAdjustmentYellow": -8,
+        "HueAdjustmentGreen": 12,
+        "HueAdjustmentBlue": -5,
+        "SaturationAdjustmentRed": 14,
+        "SaturationAdjustmentOrange": -3,
+        "SaturationAdjustmentYellow": 10,
+        "SaturationAdjustmentGreen": -35,
+        "SaturationAdjustmentAqua": -10,
+        "SaturationAdjustmentBlue": -15,
+        "SaturationAdjustmentPurple": -14,
+        "SaturationAdjustmentMagenta": -20,
+        "LuminanceAdjustmentOrange": 6,
+        "LuminanceAdjustmentYellow": 5,
+        "LuminanceAdjustmentGreen": 4,
         "ColorGradeMidtoneHue": 68,
         "ColorGradeMidtoneSat": 13,
+        "ColorGradeHighlightHue": 45,
+        "ColorGradeHighlightSat": 8,
+        "ColorGradeShadowHue": 215,
+        "ColorGradeShadowSat": 6,
+        "ColorGradeBlending": 50,
         "ColorGradeShadowLum": 0,
         "ColorGradeHighlightLum": 0,
         "ColorGradeGlobalHue": 0,
         "ColorGradeGlobalSat": 0,
+        "ToneCurvePV2012": ["0, 8", "61, 59", "194, 186", "255, 244"],
+        "ToneCurvePV2012Red": ["0, 0", "255, 255"],
+        "ToneCurvePV2012Green": ["0, 0", "255, 255"],
+        "ToneCurvePV2012Blue": ["0, 0", "173, 169", "255, 255"],
+    },
+    "wedding-v6": {
+        "ToneCurveName2012": "Custom",
+        "Contrast2012": 15,
+        "Highlights2012": -25,
+        "Shadows2012": 20,
+        "Whites2012": 10,
+        "Blacks2012": -10,
+        "HueAdjustmentOrange": 0,
+        "HueAdjustmentYellow": -8,
+        "HueAdjustmentGreen": 12,
+        "HueAdjustmentBlue": -5,
+        "SaturationAdjustmentRed": 14,
+        "SaturationAdjustmentOrange": -3,
+        "SaturationAdjustmentYellow": 10,
         "SaturationAdjustmentGreen": -35,
+        "SaturationAdjustmentAqua": -10,
+        "SaturationAdjustmentBlue": -15,
         "SaturationAdjustmentPurple": -14,
         "SaturationAdjustmentMagenta": -20,
-        "SaturationAdjustmentRed": 14,
-        "SaturationAdjustmentYellow": 10,
+        "LuminanceAdjustmentOrange": 6,
+        "LuminanceAdjustmentYellow": 5,
+        "LuminanceAdjustmentGreen": 4,
+        "ColorGradeMidtoneHue": 68,
+        "ColorGradeMidtoneSat": 13,
+        "ColorGradeHighlightHue": 45,
+        "ColorGradeHighlightSat": 8,
+        "ColorGradeShadowHue": 215,
+        "ColorGradeShadowSat": 6,
+        "ColorGradeBlending": 50,
+        "ColorGradeShadowLum": 0,
+        "ColorGradeHighlightLum": 0,
+        "ColorGradeGlobalHue": 0,
+        "ColorGradeGlobalSat": 0,
         "ToneCurvePV2012": ["0, 8", "61, 59", "194, 186", "255, 244"],
+        "ToneCurvePV2012Red": ["0, 0", "255, 255"],
+        "ToneCurvePV2012Green": ["0, 0", "255, 255"],
         "ToneCurvePV2012Blue": ["0, 0", "173, 169", "255, 255"],
     },
     "wedding-herbst-vs": {
+        "ToneCurveName2012": "Custom",
+        "Contrast2012": 18,
+        "Highlights2012": -30,
+        "Shadows2012": 25,
+        "Whites2012": 8,
+        "Blacks2012": -12,
+        "HueAdjustmentRed": 5,
+        "HueAdjustmentOrange": -2,
+        "HueAdjustmentYellow": -12,
+        "HueAdjustmentGreen": 18,
+        "HueAdjustmentAqua": -8,
+        "HueAdjustmentBlue": -10,
+        "SaturationAdjustmentRed": 16,
+        "SaturationAdjustmentOrange": 4,
+        "SaturationAdjustmentYellow": 8,
+        "SaturationAdjustmentGreen": -40,
+        "SaturationAdjustmentAqua": -15,
+        "SaturationAdjustmentBlue": -20,
+        "SaturationAdjustmentPurple": -14,
+        "SaturationAdjustmentMagenta": -20,
+        "LuminanceAdjustmentRed": -2,
+        "LuminanceAdjustmentOrange": 5,
+        "LuminanceAdjustmentYellow": 8,
+        "LuminanceAdjustmentGreen": -5,
         "ColorGradeMidtoneHue": 68,
         "ColorGradeMidtoneSat": 13,
+        "ColorGradeHighlightHue": 42,
+        "ColorGradeHighlightSat": 12,
+        "ColorGradeShadowHue": 210,
+        "ColorGradeShadowSat": 8,
+        "ColorGradeBlending": 55,
         "ColorGradeShadowLum": 0,
         "ColorGradeHighlightLum": 0,
         "ColorGradeGlobalHue": 0,
         "ColorGradeGlobalSat": 0,
-        "SaturationAdjustmentGreen": -35,
-        "SaturationAdjustmentPurple": -14,
-        "SaturationAdjustmentMagenta": -20,
-        "SaturationAdjustmentRed": 14,
-        "SaturationAdjustmentYellow": 10,
         "ToneCurvePV2012": ["0, 8", "61, 59", "194, 186", "255, 244"],
+        "ToneCurvePV2012Red": ["0, 0", "255, 255"],
+        "ToneCurvePV2012Green": ["0, 0", "255, 255"],
         "ToneCurvePV2012Blue": ["0, 0", "173, 169", "255, 255"],
     },
 }
@@ -255,26 +342,38 @@ class CalotypeNeuralEngine:
         target_temp = max(2000.0, min(50000.0, base_temperature + temp_diff))
         target_tint = max(-150.0, min(150.0, base_tint + tint_diff))
 
-        # 4. Assemble settings
+        # 4. Resolve baseline from look
+        preset_key = preset.lower().replace("_", "-")
+        bias = PRESET_BIAS.get(preset_key, PRESET_BIAS["wedding"])
+        look = PRESET_LOOKS.get(preset_key, PRESET_LOOKS["wedding"])
+
+        base_contrast = look.get("Contrast2012", 0)
+        base_highlights = look.get("Highlights2012", 0)
+        base_shadows = look.get("Shadows2012", 0)
+        base_whites = look.get("Whites2012", 0)
+        base_blacks = look.get("Blacks2012", 0)
+        base_exposure = look.get("Exposure2012", 0.0)
+
+        # 5. Assemble settings
         settings: dict[str, Any] = {
             "ProcessVersion": "15.4",
             "WhiteBalance": "Custom",
             "Temperature": int(round(target_temp)),
             "Tint": int(round(target_tint)),
-            "Exposure2012": float(results.get("Exposure2012", 0.0)),
-            "Contrast2012": int(round(results.get("Contrast2012", 0.0))),
-            "Highlights2012": int(round(results.get("Highlights2012", 0.0))),
-            "Shadows2012": int(round(results.get("Shadows2012", 0.0))),
-            "Whites2012": int(round(results.get("Whites2012", 0.0))),
-            "Blacks2012": int(round(results.get("Blacks2012", 0.0))),
+            "Exposure2012": float(round(results.get("Exposure2012", 0.0) + base_exposure, 2)),
+            "Contrast2012": int(round(results.get("Contrast2012", base_contrast))),
+            "Highlights2012": int(round(results.get("Highlights2012", base_highlights))),
+            "Shadows2012": int(round(results.get("Shadows2012", base_shadows))),
+            "Whites2012": int(round(results.get("Whites2012", base_whites))),
+            "Blacks2012": int(round(results.get("Blacks2012", base_blacks))),
         }
 
-        # 5. Apply style layer (bias sliders + look)
-        preset_key = preset.lower().replace("_", "-")
-        bias = PRESET_BIAS.get(preset_key, PRESET_BIAS["wedding"])
-        look = PRESET_LOOKS.get(preset_key, PRESET_LOOKS["wedding"])
+        # 6. Apply style layer (bias sliders + look)
         settings.update(bias)
-        settings.update(look)
+        for k, v in look.items():
+            if k in ("Contrast2012", "Highlights2012", "Shadows2012", "Whites2012", "Blacks2012", "Exposure2012") and k in results:
+                continue
+            settings[k] = v
 
         return settings
 

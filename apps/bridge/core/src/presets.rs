@@ -17,12 +17,20 @@ pub const PRESETS: &[(&str, &str)] = &[
         include_str!("../../../../presets/bright-airy.xmp"),
     ),
     (
+        "classic-depths-bw.xmp",
+        include_str!("../../../../presets/classic-depths-bw.xmp"),
+    ),
+    (
         "clean-natural.xmp",
         include_str!("../../../../presets/clean-natural.xmp"),
     ),
     (
         "cool-modern.xmp",
         include_str!("../../../../presets/cool-modern.xmp"),
+    ),
+    (
+        "eternal-essence.xmp",
+        include_str!("../../../../presets/eternal-essence.xmp"),
     ),
     (
         "film-bw.xmp",
@@ -33,20 +41,48 @@ pub const PRESETS: &[(&str, &str)] = &[
         include_str!("../../../../presets/film-color.xmp"),
     ),
     (
+        "gentle-mist-bw.xmp",
+        include_str!("../../../../presets/gentle-mist-bw.xmp"),
+    ),
+    (
         "golden-evening.xmp",
         include_str!("../../../../presets/golden-evening.xmp"),
     ),
     (
-        "soft-glow.xmp",
-        include_str!("../../../../presets/soft-glow.xmp"),
+        "kita.xmp",
+        include_str!("../../../../presets/kita.xmp"),
+    ),
+    (
+        "luminous-dream.xmp",
+        include_str!("../../../../presets/luminous-dream.xmp"),
+    ),
+    (
+        "peaky-blinders.xmp",
+        include_str!("../../../../presets/peaky-blinders.xmp"),
     ),
     (
         "soft-bw.xmp",
         include_str!("../../../../presets/soft-bw.xmp"),
     ),
     (
+        "soft-glow.xmp",
+        include_str!("../../../../presets/soft-glow.xmp"),
+    ),
+    (
+        "vintage-sunbeam.xmp",
+        include_str!("../../../../presets/vintage-sunbeam.xmp"),
+    ),
+    (
         "warm-soft.xmp",
         include_str!("../../../../presets/warm-soft.xmp"),
+    ),
+    (
+        "wedding-herbst-vs.xmp",
+        include_str!("../../../../presets/wedding-herbst-vs.xmp"),
+    ),
+    (
+        "wedding.xmp",
+        include_str!("../../../../presets/wedding.xmp"),
     ),
     (
         "retouch/background.xmp",
