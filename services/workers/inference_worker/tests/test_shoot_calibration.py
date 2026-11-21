@@ -1,5 +1,7 @@
 from uuid import uuid4
 
+import pytest
+
 from calotype_inference_worker.cli import calibrate_to_shoot, camera_exposure, measured_light
 
 UNTOUCHED = {"WhiteBalance": "As Shot", "Temperature": 5000, "Tint": 0, "Exposure2012": 0}
@@ -64,8 +66,6 @@ def test_series_follows_the_closest_edited_photo_in_time():
 
 
 def test_without_a_profile_only_the_edited_sliders_are_set():
-    import pytest
-
     ids, settings, predictions, vectors = _job([0.5, 0.7], untouched=3)
     empty = {p: {} for p in predictions}
     targets = calibrate_to_shoot(empty, vectors, settings, ids, "raw", uuid4(), with_model=False)
