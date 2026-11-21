@@ -26,6 +26,7 @@ from calotype_edit_serializer import (
 )
 from calotype_domain.jobs import JobStatus
 from calotype_inference_pipeline import CURRENT_FEATURE_VERSION, artifact_feature_version, run_inference
+from calotype_inference_pipeline.series import smooth
 from calotype_inference_pipeline.shoot import calibrate
 from calotype_inference_pipeline.straighten import MIN_LINES, crop_settings
 from calotype_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
@@ -132,6 +133,45 @@ def calibrate_to_shoot(
     return rest
 
 
+def smooth_series(
+    predictions: dict[UUID, dict[str, float]],
+    vectors: dict[UUID, list[float]],
+    settings: dict[UUID, dict],
+    targets: list[UUID],
+    format_type: str,
+    job_uuid: UUID,
+    times: dict[UUID, float | None],
+) -> bool:
+    """Pull exposure and white balance of each series together (rewrites ``predictions`` of
+    the targets in place). Photos of the selection that are no target are the photographer's
+    edited examples: they keep their values and anchor their series. Needs the capture time
+    of every photo; returns whether anything was smoothed."""
+    nodes = list(predictions)
+    if len(nodes) < 2 or any(times.get(p) is None for p in nodes):
+        log.info("no series consistency (photos=%d, capture times missing) job_id=%s", len(nodes), job_uuid)
+        return False
+    wanted = set(targets)
+    values = []
+    for p in nodes:
+        if p in wanted:
+            values.append(predictions[p])
+            continue
+        example = from_lightroom(settings[p], format_type)
+        if keeps_as_shot(settings[p], format_type):
+            # Still on the camera's white balance: nothing the photographer chose to pass on.
+            example.pop("temp", None)
+            example.pop("tint", None)
+        values.append(example)
+    smoothed = smooth(values, [vectors[p] for p in nodes], [times[p] for p in nodes],
+                      [p not in wanted for p in nodes])
+    for p, row in zip(nodes, smoothed):
+        if p in wanted:
+            predictions[p] = row
+    log.info("series consistency over %d photos (%d fixed examples) job_id=%s",
+             len(nodes), len(nodes) - len(wanted), job_uuid)
+    return True
+
+
 def examples_look(predictions: dict[UUID, dict], targets: list[UUID], settings: dict[UUID, dict]) -> dict:
     """The look settings (tone curve, HSL, color grading, glow …) the edited photos of the
     shoot share — the examples are the photos with features that are no target."""
@@ -174,6 +214,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
     profile_id_str = envelope.payload.get("profile_id")
     photo_ids = [UUID(pid) for pid in envelope.payload.get("photo_ids", [])]
     straighten = bool(envelope.payload.get("straighten"))
+    consistent_series = bool(envelope.payload.get("consistent_series"))
     learn_from_edits = bool(envelope.payload.get("learn_from_edits"))
     set_request_id(envelope.trace_context.get("request_id", ""))
 
@@ -250,6 +291,9 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
             if targets != list(predictions):
                 retouch = examples_masks(predictions, targets, settings)
                 log.info("mask strengths from the edited photos: %s job_id=%s", retouch, job_uuid)
+
+        if consistent_series:
+            smooth_series(predictions, vectors, settings, targets, format_type, job_uuid, times)
 
         for photo_id in targets:
             with session_scope(factory) as session:

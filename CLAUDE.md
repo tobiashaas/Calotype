@@ -130,6 +130,7 @@ TODO.md                # Completed + open work items — keep up to date
 | `apps/bridge/core/src/bin/folder.rs` | `calotype-folder train/apply/cull/profiles` — folder mode without Lightroom; `train --recursive --catalogs` reads whole archives |
 | `apps/bridge/core/src/catalog.rs` | Read-only Lightroom catalog reader (`.lrcat`): develop settings (Lua table → XMP-like values), ratings, "edited" = last history step (exports ignored) neither import nor reset |
 | `libs/inference-pipeline/src/calotype_inference_pipeline/shoot.py` | Shoot calibration: `calibrate()` learns the look from the selection's already edited photos (per slider mean / profile offset / in-shoot ridge / closest edited photo in time, by CV) |
+| `libs/inference-pipeline/src/calotype_inference_pipeline/series.py` | Consistent series: `smooth()` pulls exposure / white balance of photos close in time and alike together (edited examples fixed), `spread()` is the yardstick; edit request `consistent_series` |
 | `libs/edit-serializer/src/calotype_edit_serializer/edits.py` | `edited_photos()`: which photos of a selection differ from its untouched state |
 | `libs/culling/src/calotype_culling/scoring.py` | Series + explainable baseline (keep/uncertain/reject with reasons) |
 | `libs/culling/src/calotype_culling/identity.py` | SFace face embeddings + grouping photos by person |
