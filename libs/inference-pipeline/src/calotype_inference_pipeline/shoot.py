@@ -48,6 +48,12 @@ NEIGHBOURS = 3
 # none worse); as a fixed offset it failed (a photographer does not follow the camera 1:1).
 LIGHT_SLIDERS = ("temp",)
 LIGHT_COPIES = 16
+# The camera's exposure settings (log2 of ISO, shutter time and f-number, plus the exposure
+# compensation) join the features for these sliders the same way: exposure within tolerance
+# 49.0 -> 51.7 % (mean of the same six cases, none worse; the kindergarten shoot gains 3-6
+# points, the wedding 0.5-2).
+CAMERA_SLIDERS = ("exposure",)
+CAMERA_COPIES = 8
 
 
 def _beta(model: np.ndarray, truth: np.ndarray) -> float:
@@ -112,6 +118,11 @@ def _choose(truth, model_ref, X_ref, tolerance: float, t_ref=None) -> str:
     return max(hits, key=lambda m: (hits[m], m == "blend", m == "mean", m == "model", m == "series"))
 
 
+def _with_camera(X: np.ndarray, camera: Sequence[Sequence[float]]) -> np.ndarray:
+    """The features plus the camera's exposure settings (one row of values per photo), repeated."""
+    return np.column_stack([X, np.tile(np.asarray(camera, dtype=float), CAMERA_COPIES)])
+
+
 def _with_light(X: np.ndarray, kelvin: Sequence[float]) -> np.ndarray:
     """The features plus the camera's measured colour temperature (in 1000 K), repeated."""
     column = np.asarray(kelvin, dtype=float)[:, None] / 1000.0
@@ -128,6 +139,8 @@ def calibrate(
     times: Sequence[float] | None = None,
     reference_light: Sequence[float] | None = None,
     light: Sequence[float] | None = None,
+    reference_camera: Sequence[Sequence[float]] | None = None,
+    camera: Sequence[Sequence[float]] | None = None,
 ) -> tuple[list[dict[str, float]], dict[str, str]]:
     """Predictions for the other photos of the shoot, and the method chosen per slider.
 
@@ -138,7 +151,9 @@ def calibrate(
     the ``series`` method. reference_model and model None: no profile — the look comes from
     the references alone, and sliders they lack get no value at all. reference_light / light:
     the camera's measured colour temperature in Kelvin per photo (both or neither) — one more
-    feature for the sliders in ``LIGHT_SLIDERS``.
+    feature for the sliders in ``LIGHT_SLIDERS``. reference_camera / camera: the camera's
+    exposure settings per photo (rows of equal length, both or neither) — more features for the
+    sliders in ``CAMERA_SLIDERS``.
     """
     if not references:
         raise ValueError("calibration needs at least one edited photo")
@@ -152,6 +167,10 @@ def calibrate(
     if with_light:
         X_ref_light = _with_light(X_ref, reference_light)
         X_new_light = _with_light(X_new, light) if len(X_new) else X_new
+    with_camera = reference_camera is not None and camera is not None
+    if with_camera:
+        X_ref_camera = _with_camera(X_ref, reference_camera)
+        X_new_camera = _with_camera(X_new, camera) if len(X_new) else X_new
     out = [dict(m) for m in model] if with_model else [{} for _ in range(len(X_new))]
     methods: dict[str, str] = {}
     params = [p for p in TOLERANCE if all(p in r for r in references) and (not with_model or (
@@ -162,6 +181,8 @@ def calibrate(
         m_new = np.array([m[p] for m in model], dtype=float) if with_model else None
         lit = with_light and p in LIGHT_SLIDERS and len(X_new) > 0
         F_ref, F_new = (X_ref_light, X_new_light) if lit else (X_ref, X_new)
+        if with_camera and p in CAMERA_SLIDERS and len(X_new) > 0:
+            F_ref, F_new = X_ref_camera, X_new_camera
         method = "mean" if len(truth) < MIN_FOR_CHOICE else _choose(truth, m_ref, F_ref, TOLERANCE[p], t_ref)
         methods[p] = method
         if not out:

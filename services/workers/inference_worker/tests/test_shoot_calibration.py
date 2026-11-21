@@ -1,6 +1,8 @@
 from uuid import uuid4
 
-from calotype_inference_worker.cli import calibrate_to_shoot, measured_light
+import pytest
+
+from calotype_inference_worker.cli import calibrate_to_shoot, camera_exposure, measured_light
 
 UNTOUCHED = {"WhiteBalance": "As Shot", "Temperature": 5000, "Tint": 0, "Exposure2012": 0}
 
@@ -64,8 +66,6 @@ def test_series_follows_the_closest_edited_photo_in_time():
 
 
 def test_without_a_profile_only_the_edited_sliders_are_set():
-    import pytest
-
     ids, settings, predictions, vectors = _job([0.5, 0.7], untouched=3)
     empty = {p: {} for p in predictions}
     targets = calibrate_to_shoot(empty, vectors, settings, ids, "raw", uuid4(), with_model=False)
@@ -142,3 +142,19 @@ def test_calibration_runs_with_and_without_camera_light():
     light[ids[4]] = None      # one photo without a measurement: the light is left out for all
     ids, settings, predictions, vectors = _job([0.5, 0.7], untouched=3)
     assert calibrate_to_shoot(predictions, vectors, settings, ids, "raw", uuid4(), light=dict(zip(ids, [5000.0] * 4 + [None]))) == ids[2:]
+
+
+def test_camera_exposure_is_read_from_the_exif_snapshot():
+    assert camera_exposure({"iso": 400, "shutter_speed": 0.004, "aperture": 2.8, "exposure_bias": 0.33}) == pytest.approx(
+        [8.6439, -7.9658, 1.4854, 0.33], abs=1e-3)
+    assert camera_exposure({"iso": 400, "shutter_speed": 0.004, "aperture": 2.8})[3] == 0.0
+    assert camera_exposure({"iso": 400, "shutter_speed": 0.004}) is None
+    assert camera_exposure({"iso": 0, "shutter_speed": 0.004, "aperture": 2.8}) is None
+    assert camera_exposure({"iso": "400", "shutter_speed": 0.004, "aperture": 2.8}) is None
+    assert camera_exposure(None) is None
+
+
+def test_calibration_runs_with_camera_exposure():
+    ids, settings, predictions, vectors = _job([0.5, 0.7], untouched=3)
+    camera = {p: [8.0 + i, -7.0, 1.5, 0.0] for i, p in enumerate(ids)}
+    assert calibrate_to_shoot(predictions, vectors, settings, ids, "raw", uuid4(), camera=camera) == ids[2:]

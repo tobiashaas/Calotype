@@ -39,6 +39,7 @@ local function exifSnapshot(photo)
     iso = raw("isoSpeedRating"),
     shutter_speed = raw("shutterSpeed"),
     aperture = raw("aperture"),
+    exposure_bias = raw("exposureBias"),
     focal_length = raw("focalLength"),
     date_time_original = raw("dateTimeOriginalISO8601"),
   })

@@ -97,3 +97,17 @@ def test_the_cameras_measured_light_helps_temperature_only():
     assert error(lit) < 0.5 * error(plain)
     assert methods["temp"] == "blend"
     assert [o["exposure"] for o in lit] == pytest.approx([o["exposure"] for o in plain])
+
+
+def test_the_cameras_exposure_settings_help_exposure_only():
+    # The edit lifts photos the more, the higher the ISO was; the image features say nothing.
+    rng = np.random.default_rng(6)
+    X = rng.normal(0, 1, (60, 12))
+    camera = np.column_stack([rng.uniform(6.6, 12.6, 60), rng.uniform(-9, -4, 60), rng.uniform(0.5, 3, 60), np.zeros(60)])
+    truth = [{"exposure": float(0.15 * (iso - 9.6)), "temp": 5500.0} for iso in camera[:, 0]]
+    plain, _ = calibrate(truth[:30], None, X[:30], None, X[30:])
+    lit, _ = calibrate(truth[:30], None, X[:30], None, X[30:], None, None, None, None, camera[:30], camera[30:])
+    wanted = np.array([t["exposure"] for t in truth[30:]])
+    error = lambda out: np.mean(np.abs(np.array([o["exposure"] for o in out]) - wanted))  # noqa: E731
+    assert error(lit) < 0.7 * error(plain)
+    assert [o["temp"] for o in lit] == pytest.approx([o["temp"] for o in plain])
