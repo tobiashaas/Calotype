@@ -131,3 +131,19 @@ def test_a_slider_most_examples_share_stays_exactly_there():
     truth[6]["contrast"] = truth[7]["contrast"] = truth[8]["contrast"] = 30.0     # now 19 of 30
     _, methods = calibrate(truth, None, X[:30], None, X[30:])
     assert methods["contrast"] == "blend"
+
+
+def test_a_photo_close_in_time_to_an_edited_one_takes_its_values():
+    rng = np.random.default_rng(9)
+    X = rng.normal(size=(14, 6))
+    exposure = rng.normal(0.4, 0.4, 10)
+    truth = [{"exposure": float(e)} for e in exposure]
+    times = [600.0 * i for i in range(10)]                    # one example every ten minutes
+    new_times = [600.0 * 3 + 30, 600.0 * 7 - 90, 600.0 * 2 + 300, 99_999.0]
+    out, methods = calibrate(truth, None, X[:10], None, X[10:], times, new_times)
+    plain, _ = calibrate(truth, None, X[:10], None, X[10:])
+    assert methods == {"exposure": "blend+scene"}
+    assert out[0]["exposure"] == pytest.approx(exposure[3])   # 30 s after example 3
+    assert out[1]["exposure"] == pytest.approx(exposure[7])   # 90 s before example 7
+    assert out[2]["exposure"] == pytest.approx(plain[2]["exposure"])   # five minutes from any: blend
+    assert out[3]["exposure"] == pytest.approx(plain[3]["exposure"])
