@@ -5,7 +5,8 @@
     python tools/eval/shoot_pool.py <dir> [--exiftool]
 
 Writes <dir>/pool.npz: X (features of the unedited preview), Y (the photographer's sliders,
-internal names), names, light (camera-measured Kelvin) and, with --exiftool, camera (log2 ISO,
+internal names), names, light (camera-measured Kelvin), times (capture time in seconds) and,
+with --exiftool, camera (log2 ISO,
 log2 shutter seconds, log2 f-number, exposure compensation). Only edited photos are kept.
 Pools hold a photographer's work: keep them local, never commit them.
 """
@@ -17,6 +18,7 @@ import json
 import math
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -57,7 +59,7 @@ def main() -> None:
     photos = [json.loads(line) for line in (args.dir / "photos.jsonl").read_text(encoding="utf-8").splitlines()]
     photos = [p for p in photos if p["edited"]]
     camera = camera_settings([p["file"] for p in photos]) if args.exiftool else {}
-    X, Y, names, light, cam = [], [], [], [], []
+    X, Y, names, light, cam, times = [], [], [], [], [], []
     for p in photos:
         values = from_lightroom(p["settings"], "raw")
         if any(s not in values for s in SLIDERS) or (args.exiftool and p["name"] not in camera):
@@ -67,9 +69,13 @@ def main() -> None:
         names.append(p["name"])
         light.append(float(p["wb_measured_kelvin"] or np.nan))
         cam.append(camera.get(p["name"], [np.nan] * 4))
+        taken = p.get("date_time_original")
+        times.append(datetime.fromisoformat(taken[:19]).timestamp() if taken else np.nan)
     extra = {"camera": np.array(cam)} if args.exiftool else {}
     if not np.isnan(light).any():
         extra["light"] = np.array(light)
+    if not np.isnan(times).any():
+        extra["times"] = np.array(times)
     np.savez(args.dir / "pool.npz", X=np.array(X), Y=np.array(Y), names=np.array(names), **extra)
     Yn = np.array(Y)
     print(f"{args.dir.name}: {len(names)} edited photos, extras: {sorted(extra)}")

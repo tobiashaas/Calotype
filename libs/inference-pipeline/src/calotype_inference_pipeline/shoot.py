@@ -13,9 +13,14 @@ the shoot ("references") set the level, and per slider the other photos may devi
 - ``blend``: half a ridge regression on the photo's own features (fitted on the references
   only), half the references closest in *content* (the three nearest feature vectors, weighted
   by closeness) — retrieval as in RefRetouch (Weldengus et al. 2026)
-- ``series``: the value of the reference taken closest in time (same scene, same light) — only
-  when capture times are known; chosen instead of ``blend`` when it explains more held-out
-  references
+- ``blend+scene``: with capture times, a photo taken within two minutes of an edited one takes
+  that photo's value (photographers edit one frame of a scene and sync it); the others keep
+  ``blend``. A fixed rule: choosing by cross-validation whether to follow the closest example,
+  or deciding it from how much the examples of a scene agree, both lost. Measured on five
+  shoots (three of the maintainer with their catalogs, two edited by other tools; 10-50
+  examples, all sliders within tolerance, mean of twelve cases): 36.9 % with the cross-validated
+  choice, 39.0 % with this rule — the maintainer's shoots gain (one 25 -> 44 %), a shoot edited
+  per photo by another tool loses up to four points
 
 A profile's prediction is one more feature of the photo (after Saeedi et al. 2018: a shared
 model, adapted per shoot), like the camera's measurements below. It is *not* a method of its
@@ -44,7 +49,8 @@ TOLERANCE = {
 RIDGE_ALPHA = 50.0
 # Below this, cross-validating a regression on the references is noise: only the mean is used.
 MIN_FOR_CHOICE = 8
-FOLDS = 5
+# A photo this close in time to an edited one belongs to its scene.
+SCENE_SECONDS = 120.0
 # References closest in content that set a photo's value in ``blend``.
 NEIGHBOURS = 3
 # The camera's measured colour temperature joins the features for these sliders, repeated so
@@ -90,30 +96,15 @@ def _shared_value(truth: np.ndarray) -> tuple[float, float]:
 
 
 def _predict(method: str, truth, X_ref, X_new, t_ref=None, t_new=None) -> np.ndarray:
-    mean = float(truth.mean())
-    if method == "series":
-        return truth[np.argmin(np.abs(t_new[:, None] - t_ref[None, :]), axis=1)]
     if method == "mean":
-        return np.full(len(X_new), mean)
-    return 0.5 * (mean + _ridge(X_ref, truth)(X_new)) + 0.5 * _similar(X_ref, truth, X_new)
-
-
-def _choose(truth, X_ref, tolerance: float, t_ref=None) -> str:
-    """``blend``, or with capture times ``series`` when it puts more held-out references
-    within tolerance (ties keep ``blend``)."""
-    if t_ref is None:
-        return "blend"
-    k = len(truth)
-    hits = {"blend": 0, "series": 0}
-    # Folds are random, not consecutive: with times, a consecutive fold would hide the
-    # neighbours "series" relies on, unlike the real case (examples spread over the shoot).
-    order = np.random.default_rng(0).permutation(k)
-    for fold in np.array_split(order, min(FOLDS, k)):
-        train = np.setdiff1d(np.arange(k), fold)
-        for method in hits:
-            pred = _predict(method, truth[train], X_ref[train], X_ref[fold], t_ref[train], t_ref[fold])
-            hits[method] += int(np.sum(np.abs(pred - truth[fold]) <= tolerance))
-    return max(hits, key=lambda m: (hits[m], m == "blend"))
+        return np.full(len(X_new), float(truth.mean()))
+    out = 0.5 * (float(truth.mean()) + _ridge(X_ref, truth)(X_new)) + 0.5 * _similar(X_ref, truth, X_new)
+    if method == "blend+scene":
+        gaps = np.abs(t_new[:, None] - t_ref[None, :])
+        nearest = np.argmin(gaps, axis=1)
+        close = gaps[np.arange(len(t_new)), nearest] <= SCENE_SECONDS
+        out[close] = truth[nearest[close]]
+    return out
 
 
 def _with_camera(X: np.ndarray, camera: Sequence[Sequence[float]]) -> np.ndarray:
@@ -145,8 +136,8 @@ def calibrate(
     references: the photographer's values of the edited photos; reference_model / model: the
     profile's predictions for the edited / the other photos; *_features: their feature vectors.
     Sliders missing from a reference (e.g. RAW temperature without a value) keep the model's
-    prediction. reference_times / times: capture times in seconds (both or neither) — enable
-    the ``series`` method. reference_model and model None: no profile — the look comes from
+    prediction. reference_times / times: capture times in seconds (both or neither) — photos
+    close in time to an edited one take its values (``blend+scene``). reference_model and model None: no profile — the look comes from
     the references alone, and sliders they lack get no value at all. reference_light / light:
     the camera's measured colour temperature in Kelvin per photo (both or neither) — one more
     feature for the sliders in ``LIGHT_SLIDERS``. reference_camera / camera: the camera's
@@ -190,7 +181,7 @@ def calibrate(
             for row in out:
                 row[p] = shared
             continue
-        method = "mean" if len(truth) < MIN_FOR_CHOICE else _choose(truth, F_ref, TOLERANCE[p], t_ref)
+        method = "mean" if len(truth) < MIN_FOR_CHOICE else ("blend+scene" if with_times else "blend")
         methods[p] = method
         if not out:
             continue
