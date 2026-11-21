@@ -209,6 +209,18 @@ Sources and what we take from each: [`docs/RESEARCH.md`](docs/RESEARCH.md).
 ### 8.7 Local training in the desktop app
 - [ ] The photographer picks 30–50 edited RAWs, Calotype trains the personal layer locally (GPU / NPU / CPU)
 
+### 8.8 Community Profile Package & Sharing (`.calotype-profile`)
+- [ ] **Package format (`.calotype-profile`)**: Portable bundle (ZIP) containing `profile.json` (metadata, genre, author, license), `model.joblib` (trained regressors for exposure, WB and tone), `style.xmp` (the signature look curve, HSL, grading) and optional `retouch.json` (learned AI mask strengths).
+- [ ] **Rights & Consent Confirmation (Checkbox)**: Mandatory check during export and community publishing: *"I confirm that I own the rights to this editing style/training data and that no third-party terms or models were violated."*
+- [ ] **One-Click Import & Export**:
+  - Export: Bridge / Plugin UI button "Export Profile" generates a `.calotype-profile` file to share.
+  - Import: Drag-and-drop into Desktop App or "Import Profile" in Lightroom plugin installs it instantly into ready profiles.
+- [ ] **Community Profile Hub**: Open repository directory and web index on `calotype.xyz` for community-curated styles.
+
+### 8.9 Official Bundled Starter Profiles
+- [ ] Train official out-of-the-box profiles (**Wedding Emotional**, **Wedding Golden Light**) on the maintainer's real wedding RAWs once provided.
+- [ ] Ship the pre-trained artifacts embedded in the Bridge release so new users get instant AI exposure, white balance and look without training first.
+
 ---
 
 ### Backlog / Nice-to-have
