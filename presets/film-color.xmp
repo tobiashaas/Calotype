@@ -41,7 +41,7 @@
    <crs:Name>
     <rdf:Alt>
      <rdf:li xml:lang="x-default">Film Color</rdf:li>
-     <rdf:li xml:lang="de-DE">Film Farbe</rdf:li>
+     <rdf:li xml:lang="de-DE">Film Color</rdf:li>
     </rdf:Alt>
    </crs:Name>
    <crs:ShortName>

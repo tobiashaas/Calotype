@@ -38,7 +38,7 @@
    <crs:Name>
     <rdf:Alt>
      <rdf:li xml:lang="x-default">Warm &amp; Soft</rdf:li>
-     <rdf:li xml:lang="de-DE">Warm &amp; Weich</rdf:li>
+     <rdf:li xml:lang="de-DE">Warm &amp; Soft</rdf:li>
     </rdf:Alt>
    </crs:Name>
    <crs:ShortName>

@@ -40,7 +40,7 @@
    <crs:Name>
     <rdf:Alt>
      <rdf:li xml:lang="x-default">Pastel Morning</rdf:li>
-     <rdf:li xml:lang="de-DE">Pastellmorgen</rdf:li>
+     <rdf:li xml:lang="de-DE">Pastel Morning</rdf:li>
     </rdf:Alt>
    </crs:Name>
    <crs:ShortName>

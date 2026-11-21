@@ -1,7 +1,7 @@
 [
  {
   "name": "Warm & Soft",
-  "name_de": "Warm & Weich",
+  "name_de": "Warm & Soft",
   "file": "warm-soft.xmp",
   "about": "Gentle, warm skin tones; slightly lifted blacks; quiet greens. Portraits, families.",
   "about_de": "Sanfte, warme Hautt\u00f6ne, leicht angehobene Schwarzt\u00f6ne, ruhiges Gr\u00fcn. Portr\u00e4ts, Familien.",
@@ -38,7 +38,7 @@
  },
  {
   "name": "Bright & Airy",
-  "name_de": "Hell & Luftig",
+  "name_de": "Bright & Airy",
   "file": "bright-airy.xmp",
   "about": "Light and open: lifted shadows, low contrast, pastel greens and blues. Weddings, lifestyle.",
   "about_de": "Hell und offen: angehobene Schatten, wenig Kontrast, pastellige Gr\u00fcn- und Blaut\u00f6ne. Hochzeiten, Lifestyle.",
@@ -74,7 +74,7 @@
  },
  {
   "name": "Clean & Natural",
-  "name_de": "Klar & Nat\u00fcrlich",
+  "name_de": "Clean & Natural",
   "file": "clean-natural.xmp",
   "about": "True-to-life with a bit of crispness. Business, team photos, products.",
   "about_de": "Naturgetreu mit etwas Knackigkeit. Business, Teamfotos, Produkte.",
@@ -102,7 +102,7 @@
  },
  {
   "name": "Film Color",
-  "name_de": "Film Farbe",
+  "name_de": "Film Color",
   "file": "film-color.xmp",
   "about": "Matte blacks, cool shadows, warm highlights, muted greens and fine grain.",
   "about_de": "Matte Schwarzt\u00f6ne, k\u00fchle Schatten, warme Lichter, ged\u00e4mpftes Gr\u00fcn und feines Korn.",
@@ -142,7 +142,7 @@
  },
  {
   "name": "Golden Evening",
-  "name_de": "Goldener Abend",
+  "name_de": "Golden Evening",
   "file": "golden-evening.xmp",
   "about": "Warm midtones and highlights, calm blue sky. Outdoor portraits, events at dusk.",
   "about_de": "Warme Mittelt\u00f6ne und Lichter, ruhiger blauer Himmel. Portr\u00e4ts drau\u00dfen, Events in der D\u00e4mmerung.",
@@ -180,7 +180,7 @@
  },
  {
   "name": "Cool & Modern",
-  "name_de": "K\u00fchl & Modern",
+  "name_de": "Cool & Modern",
   "file": "cool-modern.xmp",
   "about": "Clean, slightly cool, reduced greens, crisp detail. Architecture, corporate, city.",
   "about_de": "Klar, leicht k\u00fchl, wenig Gr\u00fcn, knackige Details. Architektur, Corporate, Stadt.",
@@ -214,7 +214,7 @@
  },
  {
   "name": "Soft Glow",
-  "name_de": "Sanftes Leuchten",
+  "name_de": "Soft Glow",
   "file": "soft-glow.xmp",
   "about": "Warm, soft glow in the highlights, gentle contrast, calm colors. Evening light, string lights, wedding parties.",
   "about_de": "Warmes, weiches Leuchten in den Lichtern, sanfter Kontrast, ruhige Farben. Abendlicht, Lichterketten, Hochzeitsfeiern.",
@@ -254,7 +254,7 @@
  },
  {
   "name": "Film B&W",
-  "name_de": "Film S/W",
+  "name_de": "Film B&W",
   "file": "film-bw.xmp",
   "about": "Punchy black and white with deep blacks, glowing skin and grain.",
   "about_de": "Kr\u00e4ftiges Schwarz-Wei\u00df mit tiefen Schwarzt\u00f6nen, leuchtender Haut und Korn.",
@@ -291,7 +291,7 @@
  },
  {
   "name": "Soft B&W",
-  "name_de": "Weiches S/W",
+  "name_de": "Soft B&W",
   "file": "soft-bw.xmp",
   "about": "Gentle, low-contrast black and white with lifted blacks. Quiet moments, newborns.",
   "about_de": "Sanftes Schwarz-Wei\u00df mit wenig Kontrast und angehobenen Schwarzt\u00f6nen. Stille Momente, Neugeborene.",
@@ -326,7 +326,7 @@
  },
  {
   "name": "Pastel Morning",
-  "name_de": "Pastellmorgen",
+  "name_de": "Pastel Morning",
   "file": "pastel-morning.xmp",
   "about": "Dreamy and bright: soft highlights, lifted blacks, a hint of peach and lilac, quiet greens. Getting ready, bridal portraits, babies.",
   "about_de": "Vertr\u00e4umt und hell: weiche Lichter, angehobene Schwarzt\u00f6ne, zarte Pfirsich- und Fliedert\u00f6ne, zur\u00fcckgenommenes Gr\u00fcn. Getting Ready, Brautportr\u00e4ts, Babys.",
@@ -365,7 +365,7 @@
  },
  {
   "name": "Quiet Portrait",
-  "name_de": "Stilles Portr\u00e4t",
+  "name_de": "Quiet Portrait",
   "file": "quiet-portrait.xmp",
   "about": "Timeless and calm: soft skin, gentle contrast, muted colors, a light vignette. Portraits, couples, families.",
   "about_de": "Zeitlos und ruhig: weiche Haut, sanfter Kontrast, ged\u00e4mpfte Farben, leichte Vignette. Portr\u00e4ts, Paarfotos, Familien.",
@@ -403,7 +403,7 @@
  },
  {
   "name": "Old Postcard",
-  "name_de": "Alte Postkarte",
+  "name_de": "Old Postcard",
   "file": "old-postcard.xmp",
   "about": "Warm vintage: faded blacks, amber highlights, teal shadows, matte greens and grain. Reportage, travel, outdoor parties.",
   "about_de": "Warmes Vintage: verblasste Schwarzt\u00f6ne, bernsteinfarbene Lichter, blaugr\u00fcne Schatten, mattes Gr\u00fcn und Korn. Reportage, Reisen, Feiern drau\u00dfen.",
@@ -447,7 +447,7 @@
  },
  {
   "name": "Charcoal",
-  "name_de": "Kohlezeichnung",
+  "name_de": "Charcoal",
   "file": "charcoal.xmp",
   "about": "Deep, dense black and white: rich blacks, dark skies, plenty of texture. Reportage, church, character portraits.",
   "about_de": "Tiefes, dichtes Schwarz-Wei\u00df: satte Schwarzt\u00f6ne, dunkler Himmel, viel Struktur. Reportage, Kirche, Charakterportr\u00e4ts.",
@@ -485,7 +485,7 @@
  },
  {
   "name": "Silver Haze",
-  "name_de": "Silberdunst",
+  "name_de": "Silver Haze",
   "file": "silver-haze.xmp",
   "about": "Bright, airy black and white: glowing skin, fine detail, gently lifted blacks. Bridal portraits, backlight, mist.",
   "about_de": "Helles, luftiges Schwarz-Wei\u00df: leuchtende Haut, feine Details, sanft angehobene Schwarzt\u00f6ne. Brautportr\u00e4ts, Gegenlicht, Nebel.",

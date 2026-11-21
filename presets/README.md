@@ -4,22 +4,22 @@ Fourteen looks made for this project, free to use for anything (**CC0 1.0** — 
 dedication). Every value is set by hand in [`tools/presets/build.py`](../tools/presets/build.py);
 no values come from other products. Run the script after changing a look.
 
-| Look (English / Deutsch) | Character |
+| Look | Character |
 |---|---|
-| Warm & Soft / Warm & Weich | Gentle, warm skin tones, slightly lifted blacks, quiet greens |
-| Bright & Airy / Hell & Luftig | Lifted shadows, low contrast, pastel greens and blues |
-| Clean & Natural / Klar & Natürlich | True to life with a bit of crispness |
-| Film Color / Film Farbe | Matte blacks, cool shadows, warm highlights, fine grain |
-| Golden Evening / Goldener Abend | Warm midtones and highlights, calm blue sky |
-| Cool & Modern / Kühl & Modern | Slightly cool, reduced greens, crisp detail |
-| Soft Glow / Sanftes Leuchten | Warm, soft glow in the highlights (Lightroom 16 glow; older versions ignore it) |
-| Film B&W / Film S/W | Punchy black and white with grain |
-| Soft B&W / Weiches S/W | Gentle, low-contrast black and white |
-| Pastel Morning / Pastellmorgen | Dreamy and bright, soft highlights, a hint of peach and lilac |
-| Quiet Portrait / Stilles Porträt | Soft skin, gentle contrast, muted colors, light vignette |
-| Old Postcard / Alte Postkarte | Faded blacks, amber highlights, teal shadows, grain |
-| Charcoal / Kohlezeichnung | Deep, dense black and white with dark skies |
-| Silver Haze / Silberdunst | Bright, airy black and white with glowing skin |
+| Warm & Soft | Gentle, warm skin tones, slightly lifted blacks, quiet greens |
+| Bright & Airy | Lifted shadows, low contrast, pastel greens and blues |
+| Clean & Natural | True to life with a bit of crispness |
+| Film Color | Matte blacks, cool shadows, warm highlights, fine grain |
+| Golden Evening | Warm midtones and highlights, calm blue sky |
+| Cool & Modern | Slightly cool, reduced greens, crisp detail |
+| Soft Glow | Warm, soft glow in the highlights (Lightroom 16 glow; older versions ignore it) |
+| Film B&W | Punchy black and white with grain |
+| Soft B&W | Gentle, low-contrast black and white |
+| Pastel Morning | Dreamy and bright, soft highlights, a hint of peach and lilac |
+| Quiet Portrait | Soft skin, gentle contrast, muted colors, light vignette |
+| Old Postcard | Faded blacks, amber highlights, teal shadows, grain |
+| Charcoal | Deep, dense black and white with dark skies |
+| Silver Haze | Bright, airy black and white with glowing skin |
 
 The looks only carry what makes a *style*: tone curve, HSL, color grading, texture/clarity,
 grain, vignette, glow. Exposure, white balance and the tone sliders are left out — they depend on the

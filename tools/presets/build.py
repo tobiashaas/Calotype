@@ -26,7 +26,7 @@ NS = uuid.UUID("6f1c4b52-7a0e-4c55-9b7e-2f3a1d0c9e11")   # stable preset UUIDs p
 LOOKS: list[dict] = [
     {
         "name": "Warm & Soft",
-        "name_de": "Warm & Weich",
+        "name_de": "Warm & Soft",
         "about_de": "Sanfte, warme Hauttöne, leicht angehobene Schwarztöne, ruhiges Grün. Porträts, Familien.",
         "about": "Gentle, warm skin tones; slightly lifted blacks; quiet greens. Portraits, families.",
         "curve": [(0, 10), (64, 66), (128, 132), (192, 196), (255, 250)],
@@ -41,7 +41,7 @@ LOOKS: list[dict] = [
     },
     {
         "name": "Bright & Airy",
-        "name_de": "Hell & Luftig",
+        "name_de": "Bright & Airy",
         "about_de": "Hell und offen: angehobene Schatten, wenig Kontrast, pastellige Grün- und Blautöne. Hochzeiten, Lifestyle.",
         "about": "Light and open: lifted shadows, low contrast, pastel greens and blues. Weddings, lifestyle.",
         "curve": [(0, 20), (60, 72), (128, 142), (200, 214), (255, 252)],
@@ -55,7 +55,7 @@ LOOKS: list[dict] = [
     },
     {
         "name": "Clean & Natural",
-        "name_de": "Klar & Natürlich",
+        "name_de": "Clean & Natural",
         "about_de": "Naturgetreu mit etwas Knackigkeit. Business, Teamfotos, Produkte.",
         "about": "True-to-life with a bit of crispness. Business, team photos, products.",
         "curve": [(0, 0), (64, 58), (128, 128), (192, 198), (255, 255)],
@@ -66,7 +66,7 @@ LOOKS: list[dict] = [
     },
     {
         "name": "Film Color",
-        "name_de": "Film Farbe",
+        "name_de": "Film Color",
         "about_de": "Matte Schwarztöne, kühle Schatten, warme Lichter, gedämpftes Grün und feines Korn.",
         "about": "Matte blacks, cool shadows, warm highlights, muted greens and fine grain.",
         "curve": [(0, 24), (40, 44), (128, 130), (220, 224), (255, 246)],
@@ -81,7 +81,7 @@ LOOKS: list[dict] = [
     },
     {
         "name": "Golden Evening",
-        "name_de": "Goldener Abend",
+        "name_de": "Golden Evening",
         "about_de": "Warme Mitteltöne und Lichter, ruhiger blauer Himmel. Porträts draußen, Events in der Dämmerung.",
         "about": "Warm midtones and highlights, calm blue sky. Outdoor portraits, events at dusk.",
         "curve": [(0, 6), (64, 60), (128, 130), (192, 200), (255, 252)],
@@ -97,7 +97,7 @@ LOOKS: list[dict] = [
     },
     {
         "name": "Cool & Modern",
-        "name_de": "Kühl & Modern",
+        "name_de": "Cool & Modern",
         "about_de": "Klar, leicht kühl, wenig Grün, knackige Details. Architektur, Corporate, Stadt.",
         "about": "Clean, slightly cool, reduced greens, crisp detail. Architecture, corporate, city.",
         "curve": [(0, 6), (70, 60), (128, 128), (190, 198), (255, 252)],
@@ -113,7 +113,7 @@ LOOKS: list[dict] = [
         # Glow* needs Lightroom Classic 16 / Camera Raw 19 (Nov 2026); older versions keep
         # the rest of the look and ignore the glow.
         "name": "Soft Glow",
-        "name_de": "Sanftes Leuchten",
+        "name_de": "Soft Glow",
         "about_de": "Warmes, weiches Leuchten in den Lichtern, sanfter Kontrast, ruhige Farben. Abendlicht, Lichterketten, Hochzeitsfeiern.",
         "about": "Warm, soft glow in the highlights, gentle contrast, calm colors. Evening light, string lights, wedding parties.",
         "curve": [(0, 12), (64, 68), (128, 134), (192, 198), (255, 248)],
@@ -128,7 +128,7 @@ LOOKS: list[dict] = [
     },
     {
         "name": "Film B&W",
-        "name_de": "Film S/W",
+        "name_de": "Film B&W",
         "about_de": "Kräftiges Schwarz-Weiß mit tiefen Schwarztönen, leuchtender Haut und Korn.",
         "about": "Punchy black and white with deep blacks, glowing skin and grain.",
         "bw": True,
@@ -142,7 +142,7 @@ LOOKS: list[dict] = [
     },
     {
         "name": "Soft B&W",
-        "name_de": "Weiches S/W",
+        "name_de": "Soft B&W",
         "about_de": "Sanftes Schwarz-Weiß mit wenig Kontrast und angehobenen Schwarztönen. Stille Momente, Neugeborene.",
         "about": "Gentle, low-contrast black and white with lifted blacks. Quiet moments, newborns.",
         "bw": True,
@@ -156,7 +156,7 @@ LOOKS: list[dict] = [
     },
     {
         "name": "Pastel Morning",
-        "name_de": "Pastellmorgen",
+        "name_de": "Pastel Morning",
         "about_de": "Verträumt und hell: weiche Lichter, angehobene Schwarztöne, zarte Pfirsich- und Fliedertöne, zurückgenommenes Grün. Getting Ready, Brautporträts, Babys.",
         "about": "Dreamy and bright: soft highlights, lifted blacks, a hint of peach and lilac, quiet greens. Getting ready, bridal portraits, babies.",
         "curve": [(0, 18), (64, 70), (128, 136), (192, 202), (255, 244)],
@@ -171,7 +171,7 @@ LOOKS: list[dict] = [
     },
     {
         "name": "Quiet Portrait",
-        "name_de": "Stilles Porträt",
+        "name_de": "Quiet Portrait",
         "about_de": "Zeitlos und ruhig: weiche Haut, sanfter Kontrast, gedämpfte Farben, leichte Vignette. Porträts, Paarfotos, Familien.",
         "about": "Timeless and calm: soft skin, gentle contrast, muted colors, a light vignette. Portraits, couples, families.",
         "curve": [(0, 8), (64, 62), (128, 130), (192, 196), (255, 248)],
@@ -187,7 +187,7 @@ LOOKS: list[dict] = [
     },
     {
         "name": "Old Postcard",
-        "name_de": "Alte Postkarte",
+        "name_de": "Old Postcard",
         "about_de": "Warmes Vintage: verblasste Schwarztöne, bernsteinfarbene Lichter, blaugrüne Schatten, mattes Grün und Korn. Reportage, Reisen, Feiern draußen.",
         "about": "Warm vintage: faded blacks, amber highlights, teal shadows, matte greens and grain. Reportage, travel, outdoor parties.",
         "curve": [(0, 28), (48, 52), (128, 128), (208, 210), (255, 238)],
@@ -204,7 +204,7 @@ LOOKS: list[dict] = [
     },
     {
         "name": "Charcoal",
-        "name_de": "Kohlezeichnung",
+        "name_de": "Charcoal",
         "about_de": "Tiefes, dichtes Schwarz-Weiß: satte Schwarztöne, dunkler Himmel, viel Struktur. Reportage, Kirche, Charakterporträts.",
         "about": "Deep, dense black and white: rich blacks, dark skies, plenty of texture. Reportage, church, character portraits.",
         "bw": True,
@@ -218,7 +218,7 @@ LOOKS: list[dict] = [
     },
     {
         "name": "Silver Haze",
-        "name_de": "Silberdunst",
+        "name_de": "Silver Haze",
         "about_de": "Helles, luftiges Schwarz-Weiß: leuchtende Haut, feine Details, sanft angehobene Schwarztöne. Brautporträts, Gegenlicht, Nebel.",
         "about": "Bright, airy black and white: glowing skin, fine detail, gently lifted blacks. Bridal portraits, backlight, mist.",
         "bw": True,
@@ -241,7 +241,7 @@ LOOKS: list[dict] = [
 RETOUCH_GROUP = "Calotype Retouch"
 RETOUCH: list[dict] = [
     {
-        "id": "subject", "name": "Lift subject", "name_de": "Person hervorheben",
+        "id": "subject", "name": "Lift subject", "name_de": "Lift subject",
         "about": "Brightens the people a little and opens their shadows, so they stand out from the scene.",
         "about_de": "Hellt die Personen leicht auf und öffnet ihre Schatten, damit sie sich vom Umfeld abheben.",
         "masks": [(1, None, "Subject")],
@@ -249,35 +249,35 @@ RETOUCH: list[dict] = [
                   "LocalClarity2012": 0.04},
     },
     {
-        "id": "background", "name": "Calm background", "name_de": "Hintergrund beruhigen",
+        "id": "background", "name": "Calm background", "name_de": "Calm background",
         "about": "Slightly darker, less saturated and softer background.",
         "about_de": "Hintergrund etwas dunkler, weniger gesättigt und weicher.",
         "masks": [(0, 22, "Background")],
         "local": {"LocalExposure2012": -0.08, "LocalSaturation": -0.08, "LocalClarity2012": -0.05},
     },
     {
-        "id": "skin", "name": "Soften skin", "name_de": "Haut sanfter",
+        "id": "skin", "name": "Soften skin", "name_de": "Soften skin",
         "about": "Reduces fine skin texture without making faces look plastic.",
         "about_de": "Mildert feine Hautstruktur, ohne Gesichter künstlich wirken zu lassen.",
         "masks": [(3, 2, "Face Skin")],
         "local": {"LocalTexture": -0.15, "LocalClarity2012": -0.05},
     },
     {
-        "id": "eyes", "name": "Clearer eyes", "name_de": "Augen klarer",
+        "id": "eyes", "name": "Clearer eyes", "name_de": "Clearer eyes",
         "about": "A touch of brightness and clarity in the eyes.",
         "about_de": "Etwas mehr Helligkeit und Klarheit in den Augen.",
         "masks": [(3, 8, "Eye Sclera"), (3, 3, "Iris and Pupil")],
         "local": {"LocalExposure2012": 0.06, "LocalClarity2012": 0.08, "LocalSaturation": 0.03},
     },
     {
-        "id": "teeth", "name": "Brighten teeth", "name_de": "Zähne aufhellen",
+        "id": "teeth", "name": "Brighten teeth", "name_de": "Brighten teeth",
         "about": "Slightly brighter, less yellow teeth.",
         "about_de": "Zähne etwas heller und weniger gelb.",
         "masks": [(3, 12, "Teeth")],
         "local": {"LocalExposure2012": 0.06, "LocalSaturation": -0.25},
     },
     {
-        "id": "sky", "name": "Deepen sky", "name_de": "Himmel vertiefen",
+        "id": "sky", "name": "Deepen sky", "name_de": "Deepen sky",
         "about": "Holds back bright skies and gives them a little more color.",
         "about_de": "Hält helle Himmel zurück und gibt ihnen etwas mehr Farbe.",
         "masks": [(2, None, "Sky")],

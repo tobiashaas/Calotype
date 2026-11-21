@@ -45,7 +45,7 @@
    <crs:Name>
     <rdf:Alt>
      <rdf:li xml:lang="x-default">Old Postcard</rdf:li>
-     <rdf:li xml:lang="de-DE">Alte Postkarte</rdf:li>
+     <rdf:li xml:lang="de-DE">Old Postcard</rdf:li>
     </rdf:Alt>
    </crs:Name>
    <crs:ShortName>

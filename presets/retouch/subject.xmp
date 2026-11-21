@@ -22,7 +22,7 @@
    <crs:Name>
     <rdf:Alt>
      <rdf:li xml:lang="x-default">Lift subject</rdf:li>
-     <rdf:li xml:lang="de-DE">Person hervorheben</rdf:li>
+     <rdf:li xml:lang="de-DE">Lift subject</rdf:li>
     </rdf:Alt>
    </crs:Name>
    <crs:ShortName>

@@ -38,7 +38,7 @@
    <crs:Name>
     <rdf:Alt>
      <rdf:li xml:lang="x-default">Silver Haze</rdf:li>
-     <rdf:li xml:lang="de-DE">Silberdunst</rdf:li>
+     <rdf:li xml:lang="de-DE">Silver Haze</rdf:li>
     </rdf:Alt>
    </crs:Name>
    <crs:ShortName>

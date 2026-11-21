@@ -22,7 +22,7 @@
    <crs:Name>
     <rdf:Alt>
      <rdf:li xml:lang="x-default">Soften skin</rdf:li>
-     <rdf:li xml:lang="de-DE">Haut sanfter</rdf:li>
+     <rdf:li xml:lang="de-DE">Soften skin</rdf:li>
     </rdf:Alt>
    </crs:Name>
    <crs:ShortName>
