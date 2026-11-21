@@ -363,7 +363,7 @@ function Commands.set_mask_strength(catalog, args)
   local presets = Retouch.findPresets()
   local ids = Retouch.idsFor({}, args.strengths)
   catalog:withWriteAccessDo("Calotype automation: prepare masks", function()
-    for _, photo in ipairs(photos) do Retouch.prepare(photo) end
+    for _, photo in ipairs(photos) do Retouch.prepare(photo, ids) end
   end, { timeout = 60 })
   local added = 0
   catalog:withWriteAccessDo("Calotype automation: add masks", function()

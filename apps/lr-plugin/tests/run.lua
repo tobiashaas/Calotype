@@ -639,7 +639,7 @@ test("retouch: masks added, empty ones removed, snapshot kept, re-apply replaces
   local presets = Retouch.findPresets()
   assert(presets.subject and presets.sky and not presets.skin, "presets found by correction name")
   for run = 1, 2 do
-    Retouch.prepare(photo)
+    Retouch.prepare(photo, { "subject", "sky", "skin" })
     eq(Retouch.apply(photo, presets, { "subject", "sky", "skin" }), 2, "two of three presets installed")
     local found, removed, pending = Retouch.finish(catalog, { photo })
     eq(found, 1, "subject found (run " .. run .. ")")
@@ -650,6 +650,16 @@ test("retouch: masks added, empty ones removed, snapshot kept, re-apply replaces
   for _, g in ipairs(settings.MaskGroupBasedCorrections) do names[#names + 1] = g.CorrectionName end
   eq(table.concat(names, ","), "My dodge,Calotype subject", "own mask kept, ours not duplicated")
   eq(#snapshots, 1, "one snapshot of the original")
+  -- A later run that adds only the subject keeps our mask of another kind from an earlier run
+  -- (found in a real Lightroom run: learned subject + background cost three photos their sky).
+  table.insert(settings.MaskGroupBasedCorrections,
+    { CorrectionName = "Calotype eyes", CorrectionMasks = { { What = "Mask/Image", MaskDigest = "D" } } })
+  Retouch.prepare(photo, { "subject" })
+  Retouch.apply(photo, presets, { "subject" })
+  Retouch.finish(catalog, { photo })
+  names = {}
+  for _, g in ipairs(settings.MaskGroupBasedCorrections) do names[#names + 1] = g.CorrectionName end
+  eq(table.concat(names, ","), "My dodge,Calotype eyes,Calotype subject", "our mask of another kind stays")
 end)
 
 test("apply with learned mask strengths: their masks are added, detected, then get the values", function()

@@ -198,7 +198,7 @@ function Actions.apply(catalog, photos, profile, progress, options)
     catalog:withWriteAccessDo(LOC "$$$/Calotype/Retouch/Prepare=Calotype: prepare retouch", function()
       for _, r in ipairs(final.results or {}) do
         local photo = reg.photosByUuid[r.lr_catalog_uuid]
-        if photo then Retouch.prepare(photo) end
+        if photo then Retouch.prepare(photo, Retouch.idsFor(retouchIds, r.retouch)) end
       end
     end, { timeout = 60 })
   end
