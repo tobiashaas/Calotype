@@ -35,8 +35,8 @@ Speed and accuracy figures for Calotype itself come only from our own measuremen
   (*planned*, 8.5).
 - **Weldengus et al. — *RefRetouch: Personalized Image Retouching without Test-time Fine-tuning*.**
   arXiv:2602.17044 (2026). Retrieves the reference pairs closest in content to the query photo.
-  Calotype's shoot calibration uses the closest edited photo in *time* today; choosing by content is
-  *planned* (8.5).
+  *Used*: without a profile, shoot calibration blends a ridge fit with the three edited photos
+  closest in content (`shoot.py`, measured with `tools/eval/shoot_lab.py`).
 - **Bianco, Cusano, Piccoli, Schettini — *Personalized Image Enhancement Using Neural Spline Color
   Transforms*.** IEEE TIP 2020. A new user is placed in a learned user space from a few edited photos.
 
@@ -57,7 +57,8 @@ Speed and accuracy figures for Calotype itself come only from our own measuremen
 - **HaCohen, Shechtman, Goldman, Lischinski — *Optimizing Color Consistency in Photo Collections*.**
   ACM TOG (SIGGRAPH) 32(4), 2013. Photos that share content are linked in a graph; a quadratic cost
   over the graph makes them consistent, user edits are constraints. Maps directly onto Calotype: the
-  edited examples are the constraints, the other photos of the shoot follow (*planned*, 8.3).
+  edited examples are the constraints, the other photos of the shoot follow (*used*, first version: `series.py`,
+  edit request `consistent_series`; thresholds not yet tuned on real shoots).
 - **Liang, Zeng, Cui, Xie, Zhang — *PPR10K: A Large-Scale Portrait Photo Retouching Dataset with
   Human-Region Mask and Group-Level Consistency*.** CVPR 2021. arXiv:2105.09180. Portrait retouching
   with human-region priority and consistency within a group — the yardstick for weddings

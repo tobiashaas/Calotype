@@ -202,7 +202,9 @@ Sources and what we take from each: [`docs/RESEARCH.md`](docs/RESEARCH.md).
 - [ ] Adapt to the camera from the shoot's unlabeled photos (C5) or from the colour matrices in the RAW / DNG metadata (CCMNet)
 
 ### 8.5 Look from few examples
-- [ ] Choose the closest examples by image content, not only capture time (RefRetouch, retrieval-augmented)
+- [x] Choose the closest examples by image content, not only capture time (RefRetouch), first version 2026-11-21: without a profile `shoot.calibrate` uses `blend` (half ridge, half the three references closest in feature space) and only chooses between it and `series`. Two shoots edited by other tools (internal yardstick, `tools/eval/shoot_lab.py`), all six sliders within tolerance with 10 / 20 / 50 examples: wedding 6.1 / 9.6 / 14.5 → 8.5 / 12.7 / 21.0 %, kindergarten 12.8 / 17.2 / 23.4 → 15.7 / 21.8 / 35.6 %
+- [ ] The same with a profile (`model` candidate) and with real capture times — not measured yet; the with-profile path is unchanged
+- [ ] Exposure and temperature stay the weak sliders (40–68 % / 24–61 %): next lever is white balance relative to as-shot (8.4)
 - [ ] Content-aware style per photographer instead of one look for all photos (Kosugi & Yamasaki)
 
 ### 8.6 Culling

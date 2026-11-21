@@ -12,6 +12,13 @@ the other photos may deviate from it:
 - ``ridge``: mean + ridge regression on the photo's own features, fitted on the references only
 - ``series``: the value of the reference taken closest in time (same scene, same light) — only
   when capture times are known
+- ``blend``: half ``ridge``, half the references closest in *content* (the three nearest feature
+  vectors, weighted by closeness) — retrieval as in RefRetouch (Weldengus et al. 2026)
+
+Without a profile the choice is only between ``blend`` and ``series``: on two shoots edited by
+other tools (internal yardstick, 10 / 20 / 50 examples spread over the shoot) ``blend`` alone put
+19 % of the photos within tolerance on all six sliders, the cross-validated choice among mean /
+ridge / series 14 % — picking among many methods on a handful of examples is itself noisy.
 
 Works on internal parameter names (``exposure``, ``temp`` …); nothing here knows Lightroom.
 """
@@ -33,6 +40,8 @@ RIDGE_ALPHA = 50.0
 # Below this, cross-validating a regression on the references is noise: only the mean is used.
 MIN_FOR_CHOICE = 8
 FOLDS = 5
+# References closest in content that set a photo's value in ``blend``.
+NEIGHBOURS = 3
 
 
 def _beta(model: np.ndarray, truth: np.ndarray) -> float:
@@ -48,6 +57,16 @@ def _ridge(X: np.ndarray, y: np.ndarray):
     return lambda rows: reg.predict(scaler.transform(rows))
 
 
+def _similar(X_ref: np.ndarray, truth: np.ndarray, X_new: np.ndarray) -> np.ndarray:
+    """Per new photo the mean of its nearest references in feature space, weighted by closeness."""
+    scaler = StandardScaler().fit(np.vstack([X_ref, X_new]))
+    Z_ref, Z_new = scaler.transform(X_ref), scaler.transform(X_new)
+    distance = np.sqrt(((Z_new[:, None, :] - Z_ref[None, :, :]) ** 2).mean(axis=2))
+    nearest = np.argsort(distance, axis=1)[:, : min(NEIGHBOURS, len(truth))]
+    weight = 1.0 / (np.take_along_axis(distance, nearest, axis=1) + 1e-6)
+    return (weight * truth[nearest]).sum(axis=1) / weight.sum(axis=1)
+
+
 def _predict(method: str, truth, model_ref, X_ref, model_new, X_new, t_ref=None, t_new=None) -> np.ndarray:
     mean = float(truth.mean())
     if method == "series":
@@ -56,18 +75,23 @@ def _predict(method: str, truth, model_ref, X_ref, model_new, X_new, t_ref=None,
         return np.full(len(X_new), mean)
     if method == "model":
         return mean + _beta(model_ref, truth) * (model_new - model_ref.mean())
+    if method == "blend":
+        return 0.5 * (mean + _ridge(X_ref, truth)(X_new)) + 0.5 * _similar(X_ref, truth, X_new)
     return mean + _ridge(X_ref, truth)(X_new)
 
 
 def _choose(truth, model_ref, X_ref, tolerance: float, t_ref=None) -> str:
     """Method with the most held-out references within tolerance; ties keep the simpler one.
 
-    model_ref None: no profile, so no ``model`` candidate.
+    model_ref None: no profile — the choice is between ``blend`` and, with capture times,
+    ``series`` (see the module docstring for why not more).
     """
     k = len(truth)
-    hits = {"mean": 0, "ridge": 0} if model_ref is None else {"mean": 0, "model": 0, "ridge": 0}
+    hits = {"blend": 0} if model_ref is None else {"mean": 0, "model": 0, "ridge": 0}
     if t_ref is not None:
         hits["series"] = 0
+    if len(hits) == 1:
+        return next(iter(hits))
     # Folds are random, not consecutive: with times, a consecutive fold would hide the
     # neighbours "series" relies on, unlike the real case (examples spread over the shoot).
     order = np.random.default_rng(0).permutation(k)
@@ -79,7 +103,7 @@ def _choose(truth, model_ref, X_ref, tolerance: float, t_ref=None) -> str:
                             None if t_ref is None else t_ref[train],
                             None if t_ref is None else t_ref[fold])
             hits[method] += int(np.sum(np.abs(pred - truth[fold]) <= tolerance))
-    return max(hits, key=lambda m: (hits[m], m == "mean", m == "model", m == "series"))
+    return max(hits, key=lambda m: (hits[m], m == "blend", m == "mean", m == "model", m == "series"))
 
 
 def calibrate(
