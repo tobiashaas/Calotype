@@ -4,7 +4,8 @@ the other photos are predicted from them (no profile), scored per slider and all
     python tools/eval/shoot_lab.py pool.npz [--k 10 20 50]
 
 pool.npz holds one shoot: X (photos x features, current feature version), Y (photos x sliders,
-internal names in `--sliders` order) and names (sorted = capture order). Pools made from another
+internal names in `--sliders` order), names (sorted = capture order) and optionally light (the
+camera's measured colour temperature per photo, Kelvin). Pools made from another
 tool's edits are an internal yardstick only — never commit them or anything fitted on them.
 """
 
@@ -23,7 +24,8 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
-def score(X: np.ndarray, Y: np.ndarray, sliders: list[str], k: int, offsets: int = 4) -> np.ndarray:
+def score(X: np.ndarray, Y: np.ndarray, sliders: list[str], k: int, offsets: int = 4,
+          light: np.ndarray | None = None) -> np.ndarray:
     """Share of the predicted photos within tolerance: per slider, then all sliders at once."""
     n = len(X)
     step = n / k
@@ -33,7 +35,8 @@ def score(X: np.ndarray, Y: np.ndarray, sliders: list[str], k: int, offsets: int
         ref = np.unique(np.clip((np.arange(k) * step + off * step / offsets).astype(int), 0, n - 1))
         rest = np.setdiff1d(np.arange(n), ref)
         references = [dict(zip(sliders, map(float, Y[i]))) for i in ref]
-        predicted, _ = calibrate(references, None, X[ref], None, X[rest])
+        predicted, _ = calibrate(references, None, X[ref], None, X[rest], None, None,
+                                 None if light is None else light[ref], None if light is None else light[rest])
         P = np.array([[row[s] for s in sliders] for row in predicted])
         ok = np.abs(P - Y[rest]) <= tolerance
         rows.append(np.append(ok.mean(axis=0), ok.all(axis=1).mean()))
@@ -46,6 +49,8 @@ def main() -> None:
     parser.add_argument("--k", nargs="+", type=int, default=[10, 20, 50])
     parser.add_argument("--sliders", nargs="+",
                         default=["exposure", "temp", "tint", "contrast", "highlights", "shadows"])
+    parser.add_argument("--no-light", action="store_true",
+                        help="ignore the pool's camera-measured colour temperature (key 'light')")
     args = parser.parse_args()
     print(f"{'pool':<22}{'k':>4}  " + " ".join(f"{s[:8]:>8}" for s in args.sliders) + "      all")
     for path in args.pools:
@@ -53,7 +58,8 @@ def main() -> None:
         order = np.argsort(data["names"])
         X, Y = data["X"][order], data["Y"][order]
         for k in args.k:
-            result = score(X, Y, args.sliders, k)
+            light = data["light"][order] if "light" in data.files and not args.no_light else None
+            result = score(X, Y, args.sliders, k, light=light)
             print(f"{path.stem:<22}{k:>4}  " + " ".join(f"{100 * v:7.1f}%" for v in result))
 
 

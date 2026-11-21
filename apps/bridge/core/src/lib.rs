@@ -14,6 +14,7 @@ pub mod outbox;
 pub mod presets;
 pub mod preview;
 pub mod server;
+pub mod whitebalance;
 pub mod xmp;
 
 use std::net::SocketAddr;

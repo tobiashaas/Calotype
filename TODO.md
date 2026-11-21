@@ -197,6 +197,9 @@ Sources and what we take from each: [`docs/RESEARCH.md`](docs/RESEARCH.md).
 - [ ] Yardstick: spread of the predicted sliders within a series vs. the photographer's own spread (PPR10K's group-level consistency) — `series.spread()` computes it; the measurement is open
 
 ### 8.4 White balance relative to as-shot
+- [x] The camera's *measured* colour temperature as a feature (2026-11-21): on shoots with a fixed camera setting ("Daylight") as-shot is the same on every photo and carries nothing, but Canon stores its automatic estimate per frame (`ColorTempMeasured`). The Bridge reads it from the RAW (`whitebalance.rs`: CR2 MakerNotes, CR3 `CMT3` or the `CTMD` track; identical to ExifTool on 2,064 + 618 real files from a 5D Mark IV and an R6 Mark II) and sends it as `exif_snapshot.wb_measured_kelvin`; `shoot.calibrate` adds it to the features for temperature. Two yardstick shoots, temperature within 150 K with 10 / 20 / 50 examples: wedding 24.4 / 30.8 / 42.3 → 32.8 / 35.5 / 48.6 %, kindergarten 42.5 / 47.6 / 60.8 → 42.8 / 51.5 / 65.0 %; all six sliders: 8.5 / 12.7 / 21.0 → 11.0 / 15.0 / 24.0 % and 15.7 / 21.8 / 35.6 → 15.9 / 23.0 / 36.4 %. As a fixed offset to the measurement it failed (kindergarten 47.6 → 24.5 %)
+- [ ] Other ColorData versions (only 13 and 48 are checked on real files), other makers (Nikon, Sony, Fuji) and DNG `AsShotNeutral`
+- [ ] The measurement in training a profile (today only in shoot calibration)
 - [ ] Target = mired offset from as-shot instead of absolute Kelvin
 - [ ] Map neutral to the photographer's preferred white balance with a tiny model (Zhao, Afifi & Brown: ~500 parameters)
 - [ ] Adapt to the camera from the shoot's unlabeled photos (C5) or from the colour matrices in the RAW / DNG metadata (CCMNet)

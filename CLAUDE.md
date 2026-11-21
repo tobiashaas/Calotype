@@ -125,6 +125,7 @@ TODO.md                # Completed + open work items — keep up to date
 | `apps/bridge/core/src/outbox.rs` | Background loop: preview → upload → submit job → poll → map results |
 | `apps/bridge/core/src/server.rs` | Local API for the plugin (127.0.0.1:47600) |
 | `apps/bridge/core/src/preview.rs` | Unedited preview: smallest embedded RAW JPEG ≥ 1200 px (else largest) / original JPEG/TIFF, orientation applied; reads only the first 4 MB when the preview is there (CR3: 2.7x faster from USB, ~85 % less data over a NAS) |
+| `apps/bridge/core/src/whitebalance.rs` | The camera's measured colour temperature from the RAW (Canon ColorData: CR2 MakerNotes, CR3 `CMT3` / `CTMD` track) → `exif_snapshot.wb_measured_kelvin`; a feature for temperature in shoot calibration |
 | `apps/lr-plugin/Calotype.lrplugin/BridgeClient.lua` | Plugin → Bridge HTTP, reads `bridge.json` |
 | `apps/bridge/core/src/xmp.rs` | Read/write Adobe `crs:` XMP sidecars (ProcessVersion 15.4, `calotype:Profile`) |
 | `apps/bridge/core/src/bin/folder.rs` | `calotype-folder train/apply/cull/profiles` — folder mode without Lightroom; `train --recursive --catalogs` reads whole archives |

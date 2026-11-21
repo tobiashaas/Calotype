@@ -82,3 +82,18 @@ def test_blend_follows_the_examples_closest_in_content():
     assert methods == {"exposure": "blend"}
     assert all(o["exposure"] > 0.6 for o in out[:10])
     assert all(o["exposure"] < -0.1 for o in out[10:])
+
+
+def test_the_cameras_measured_light_helps_temperature_only():
+    # The edited temperature follows what the camera measured; the image features say nothing.
+    rng = np.random.default_rng(5)
+    X = rng.normal(0, 1, (60, 12))
+    measured = rng.uniform(3500, 7500, 60)
+    truth = [{"temp": float(0.8 * m + 900), "exposure": 0.3} for m in measured]
+    plain, _ = calibrate(truth[:30], None, X[:30], None, X[30:])
+    lit, methods = calibrate(truth[:30], None, X[:30], None, X[30:], None, None, measured[:30], measured[30:])
+    wanted = np.array([t["temp"] for t in truth[30:]])
+    error = lambda out: np.mean(np.abs(np.array([o["temp"] for o in out]) - wanted))  # noqa: E731
+    assert error(lit) < 0.5 * error(plain)
+    assert methods["temp"] == "blend"
+    assert [o["exposure"] for o in lit] == pytest.approx([o["exposure"] for o in plain])
