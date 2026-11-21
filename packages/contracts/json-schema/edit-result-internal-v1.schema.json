@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.calotype.xyz/edit-result-internal-v1.schema.json",
+  "title": "EditResultInternalV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "photo_id", "model_version", "final_edit", "confidence_score", "review_needed"],
+  "properties": {
+    "schema_version": { "const": "edit-result-internal-v1" },
+    "photo_id": { "type": "string", "format": "uuid" },
+    "model_version": { "type": "string" },
+    "base_profile": { "type": "string" },
+    "scene_context": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "final_edit": {
+      "$ref": "#/$defs/lightroomGlobalAdjustmentsV1"
+    },
+    "confidence_score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "review_needed": { "type": "boolean" },
+    "reason_codes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    }
+  },
+  "$defs": {
+    "lightroomGlobalAdjustmentsV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {
+        "exposure": { "type": "number" },
+        "temp": { "type": "number" },
+        "tint": { "type": "number" },
+        "contrast": { "type": "number" },
+        "highlights": { "type": "number" },
+        "shadows": { "type": "number" },
+        "whites": { "type": "number" },
+        "blacks": { "type": "number" },
+        "vibrance": { "type": "number" },
+        "saturation": { "type": "number" }
+      }
+    }
+  }
+}

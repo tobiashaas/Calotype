@@ -1,0 +1,20 @@
+[package]
+name = "calotype-bridge"
+description = "Calotype Bridge desktop app (Tauri shell around calotype-bridge-core)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "calotype-bridge"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+calotype-bridge-core = { path = "../core" }
+tauri = { version = "2", features = [] }
+serde.workspace = true
+serde_json.workspace = true
+tracing-subscriber.workspace = true

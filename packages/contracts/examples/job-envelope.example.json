@@ -1,0 +1,12 @@
+{
+  "envelope_schema_version": "job-envelope-v1",
+  "job_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+  "job_kind": "edit",
+  "attempt": 0,
+  "trace_context": { "correlation_id": "plugin-xyz" },
+  "payload": {
+    "schema_version": "edit-request-v1",
+    "profile_id": "6fa459ea-ee8a-3ca4-894e-db77e160355e",
+    "photo_ids": ["6ba7b810-9dad-11d1-80b4-00c04fd430c8"]
+  }
+}

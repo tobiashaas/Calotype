@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "calotype-api"
+version = "0.1.0"
+description = "Thin FastAPI gateway for Calotype jobs"
+requires-python = ">=3.11"
+readme = "README.md"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "pydantic>=2.10",
+  "python-multipart>=0.0.12",
+  "boto3>=1.35",
+  "calotype-domain",
+  "calotype-persistence",
+  "calotype-queue",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.28", "anyio[trio]>=4", "ruff>=0.8", "pillow>=10"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

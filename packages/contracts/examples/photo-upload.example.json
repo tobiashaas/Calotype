@@ -1,0 +1,23 @@
+{
+  "schema_version": "photo-upload-v1",
+  "lr_catalog_uuid": "2F3A1B4C-8D9E-4F10-A2B3-C4D5E6F70001",
+  "exif_snapshot": {
+    "camera": "Sony A7 IV",
+    "iso": 400,
+    "shutter_speed": "1/500",
+    "aperture": "f/2.8",
+    "focal_length_mm": 85
+  },
+  "lr_develop_settings": {
+    "Exposure2012": 0.3,
+    "Contrast2012": 10,
+    "Highlights2012": -20,
+    "Shadows2012": 15,
+    "Temperature": 5600
+  },
+  "lr_metadata": {
+    "rating": 4,
+    "pick_status": 1,
+    "color_label": "green"
+  }
+}

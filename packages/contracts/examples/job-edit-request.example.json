@@ -1,0 +1,9 @@
+{
+  "schema_version": "edit-request-v1",
+  "profile_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "photo_ids": [
+    "11111111-2222-3333-4444-555555555555",
+    "66666666-7777-8888-9999-000000000000"
+  ],
+  "correlation_id": "session-abc-123"
+}

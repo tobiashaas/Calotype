@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.calotype.xyz/job-event-v1.schema.json",
+  "title": "JobEventV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "job_id", "event_type"],
+  "properties": {
+    "schema_version": { "const": "job-event-v1" },
+    "job_id": { "type": "string", "format": "uuid" },
+    "event_type": {
+      "type": "string",
+      "enum": ["queued", "started", "stage_feature", "stage_train", "stage_inference", "completed", "failed"]
+    },
+    "progress": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "opaque stage metadata (counts, durations…)"
+    }
+  }
+}

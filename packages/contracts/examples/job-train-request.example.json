@@ -1,0 +1,10 @@
+{
+  "schema_version": "train-request-v1",
+  "profile_name": "Wedding Warm",
+  "genre": "wedding",
+  "format_type": "raw",
+  "color_type": "color",
+  "photo_ids": ["6ba7b810-9dad-11d1-80b4-00c04fd430c8"],
+  "base_preset": {"contrast": 8, "vibrance": 6},
+  "correlation_id": "lr-plugin-xyz"
+}

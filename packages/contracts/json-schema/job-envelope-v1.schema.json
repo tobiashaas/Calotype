@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.calotype.xyz/job-envelope-v1.schema.json",
+  "title": "JobEnvelopeV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["envelope_schema_version", "job_id", "job_kind", "payload"],
+  "properties": {
+    "envelope_schema_version": {
+      "const": "job-envelope-v1"
+    },
+    "job_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "job_kind": {
+      "type": "string",
+      "enum": ["train", "edit", "cull"]
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "trace_context": {
+      "type": "object",
+      "additionalProperties": true,
+      "default": {}
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Original Bridge/API validated body embedded for workers"
+    }
+  }
+}

@@ -1,0 +1,502 @@
+openapi: 3.0.3
+info:
+  title: Calotype Bridge ↔ API
+  version: "0.1.0"
+  description: |
+    Thin Gateway: Jobs werden asynchron eingereiht (`202 Accepted`).
+    Zusätzliche kanonische JSON Schemas unter `json-schema/` (gleiche Felder abstimmen).
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local API (compose default host port)
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Liveness
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+  /v1/photos:
+    post:
+      operationId: uploadPhoto
+      summary: Upload JPEG preview + metadata, returns photo_id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, metadata]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: JPEG preview image (max longest side 1200px recommended)
+                metadata:
+                  type: string
+                  description: JSON string conforming to photo-upload-v1 schema
+      responses:
+        "200":
+          description: Photo registered (already existed or newly created)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhotoCreatedResponse"
+  /v1/profiles:
+    get:
+      operationId: listProfiles
+      summary: List all profiles
+      responses:
+        "200":
+          description: List of profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProfileResponse"
+  /v1/profiles/{profile_id}:
+    get:
+      operationId: getProfile
+      summary: Get a single profile by ID
+      parameters:
+        - name: profile_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Profile found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+        "404":
+          description: Profile not found
+  /v1/jobs/train:
+    post:
+      operationId: createTrainJob
+      summary: Enqueue profile training job
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrainJobRequestV1"
+      responses:
+        "202":
+          description: Job queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobAcceptedResponse"
+  /v1/jobs/edit:
+    post:
+      operationId: createEditJob
+      summary: Enqueue edit inference job
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EditJobRequestV1"
+      responses:
+        "202":
+          description: Job queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobAcceptedResponse"
+  /v1/jobs/cull:
+    post:
+      operationId: createCullJob
+      summary: Enqueue a culling job (keep / uncertain / reject with a reason per photo)
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CullJobRequestV1"
+      responses:
+        "202":
+          description: Job queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobAcceptedResponse"
+        "422":
+          description: Unknown photo ids
+  /v1/jobs/{job_id}/cull-result:
+    get:
+      operationId: getCullResult
+      summary: Culling decisions of a completed cull job
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: One decision per photo with a usable preview
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CullResultResponse"
+        "404":
+          description: Job not found
+        "409":
+          description: Not a cull job, or not completed yet
+  /v1/jobs/{job_id}:
+    get:
+      operationId: getJob
+      summary: Retrieve job lifecycle state
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Known job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobSnapshotV1"
+        "404":
+          description: Job not found
+  /v1/jobs/{job_id}/result:
+    get:
+      operationId: getJobResult
+      summary: Retrieve edit result (LR settings) once job is completed
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Edit result available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EditResultResponse"
+        "404":
+          description: Job or result not found
+        "409":
+          description: Job not yet completed
+  /v1/jobs/{job_id}/events:
+    get:
+      operationId: streamJobEvents
+      summary: Server-Sent Events stream (optional MVP)
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: SSE stream placeholder
+          content:
+            text/event-stream:
+              schema:
+                type: string
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        description: Replay-safe enqueue key for Bridge retries
+  schemas:
+    JobAcceptedResponse:
+      type: object
+      required: [job_id, status, kind]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued]
+        kind:
+          type: string
+          enum: [train, edit, cull]
+        profile_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Train jobs — the profile created in `draft` status
+    TrainJobRequestV1:
+      type: object
+      required:
+        - schema_version
+        - profile_name
+        - genre
+        - format_type
+        - color_type
+        - photo_ids
+      properties:
+        schema_version:
+          type: string
+          example: train-request-v1
+        correlation_id:
+          type: string
+          description: Trace id from Lightroom/Bridge pipeline
+        profile_name:
+          type: string
+        genre:
+          type: string
+        format_type:
+          type: string
+          enum: [raw, jpeg_tiff]
+        color_type:
+          type: string
+          enum: [color, bw]
+        photo_ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+        base_preset:
+          type: object
+          additionalProperties: true
+    EditJobRequestV1:
+      type: object
+      description: Without profile_id the look comes only from the selection's edited photos; then learn_from_edits and format_type are required.
+      required:
+        - schema_version
+        - photo_ids
+      properties:
+        schema_version:
+          type: string
+          example: edit-request-v1
+        correlation_id:
+          type: string
+        profile_id:
+          type: string
+          format: uuid
+        format_type:
+          type: string
+          enum: [raw, jpeg_tiff]
+          description: Only without profile_id — how to read the photos' white balance.
+        collection_name:
+          type: string
+        straighten:
+          type: boolean
+          default: false
+          description: Level photos with clear reference lines (result carries Lightroom crop keys).
+        learn_from_edits:
+          type: boolean
+          default: false
+          description: Photos among photo_ids the photographer already edited set the shoot's look; they get no result.
+        base_preset:
+          type: object
+          additionalProperties: true
+          description: A look (develop settings of one of the photographer's presets) replacing the profile's base preset; only its look settings are used, exposure and white balance stay per photo.
+        photo_ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+    JobSnapshotV1:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - queued
+            - running
+            - completed
+            - failed
+        payload_schema_version:
+          type: string
+        profile_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Profile the job trains (train) or applies (edit)
+        failure_reason:
+          type: string
+          nullable: true
+          description: Short, user-facing reason when status is `failed`
+        correlation_id:
+          type: string
+    PhotoCreatedResponse:
+      type: object
+      required: [photo_id, s3_key, already_existed]
+      properties:
+        photo_id:
+          type: string
+          format: uuid
+        s3_key:
+          type: string
+        already_existed:
+          type: boolean
+    ProfileResponse:
+      type: object
+      required: [profile_id, name, genre, format_type, color_type, status, version]
+      properties:
+        profile_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        genre:
+          type: string
+        format_type:
+          type: string
+          enum: [raw, jpeg_tiff]
+        color_type:
+          type: string
+          enum: [color, bw]
+        status:
+          type: string
+          enum: [draft, training, ready, failed]
+        version:
+          type: integer
+        model_artifact_key:
+          type: string
+          nullable: true
+        failure_reason:
+          type: string
+          nullable: true
+    CullJobRequestV1:
+      type: object
+      required: [schema_version, photo_ids]
+      properties:
+        schema_version:
+          type: string
+          enum: [cull-request-v1]
+        correlation_id:
+          type: string
+        photo_ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+          description: Photos that already carry a decision (stars, pick/reject) teach the scorer.
+    CullResultResponse:
+      type: object
+      required: [job_id, photo_id, bucket, score, reason, method]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        photo_id:
+          type: string
+          format: uuid
+        bucket:
+          type: string
+          enum: [keep, uncertain, reject]
+        score:
+          type: number
+          description: learned = keep probability 0..1; rules = summed evidence
+        reason:
+          type: string
+        method:
+          type: string
+          enum: [learned, rules]
+    EditResultResponse:
+      type: object
+      required: [job_id, photo_id, lr_settings]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        photo_id:
+          type: string
+          format: uuid
+        lr_settings:
+          type: object
+          additionalProperties: true
+          description: |
+            Lightroom Classic develop settings, ready for `photo:applyDevelopSettings()`.
+            Keys use Lightroom names (`Exposure2012`, `Contrast2012`, `Highlights2012`, …);
+            white balance is `Temperature`/`Tint` for RAW profiles and
+            `IncrementalTemperature`/`IncrementalTint` for JPEG/TIFF profiles.
+            Values are clamped to the slider ranges.
+          example:
+            Exposure2012: 0.35
+            Temperature: 5600
+            Tint: 8
+            Contrast2012: -12
+            Highlights2012: -40
+        s3_key:
+          type: string
+          nullable: true
+        retouch:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: object
+            additionalProperties: { type: number }
+          description: |
+            Learned mask strengths: Lightroom AI masks to add (keys = retouch ids subject, sky,
+            background, skin, eyes, teeth) with the local values the photographer uses on them
+            (`LocalShadows2012` … as -1…1). Learned from the profile's training photos or, with
+            `learn_from_edits`, the selection's edited photos. Null when nothing was learned.
+          example:
+            subject: { LocalShadows2012: 0.16, LocalHighlights2012: -0.18 }
+    JobEnvelopeV1:
+      type: object
+      description: Redis queue payload (JSON Schema job-envelope-v1.schema.json)
+      required:
+        - envelope_schema_version
+        - job_id
+        - job_kind
+        - payload
+      additionalProperties: false
+      properties:
+        envelope_schema_version:
+          type: string
+          enum: ["job-envelope-v1"]
+        job_id:
+          type: string
+          format: uuid
+        job_kind:
+          type: string
+          enum: [train, edit]
+        attempt:
+          type: integer
+          minimum: 0
+          default: 0
+        trace_context:
+          type: object
+          additionalProperties: {}
+        payload:
+          type: object
+          additionalProperties: {}

@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Rust / Tauri
+target/
+**/target/
+
+# Node (Bridge UI)
+node_modules/
+.npm/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs & local data
+*.log
+logs/
+tmp/
+
+# Lightroom / Adobe (falls lokale Artefakte)
+*.lrcat-wal
+
+# Tauri generated schemas
+apps/bridge/src-tauri/gen/
