@@ -11,6 +11,9 @@ folders.
 > number of beautiful prints. Calotype learns your style once and prints it on every photo.
 
 - **Website:** [calotype.xyz](https://calotype.xyz) · **Code:** [github.com/tobiashaas/Calotype](https://github.com/tobiashaas/Calotype)
+- **Download:** installers for the Bridge app (Windows, macOS, Linux) and the Lightroom plugin are on the
+  [releases page](https://github.com/tobiashaas/Calotype/releases). They are not code-signed yet, and the
+  server still needs Docker (see below).
 
 ## What it does
 
