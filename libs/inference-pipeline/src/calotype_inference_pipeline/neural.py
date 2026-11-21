@@ -360,18 +360,18 @@ class CalotypeNeuralEngine:
             "WhiteBalance": "Custom",
             "Temperature": int(round(target_temp)),
             "Tint": int(round(target_tint)),
-            "Exposure2012": float(round(results.get("Exposure2012", 0.0) + base_exposure, 2)),
-            "Contrast2012": int(round(results.get("Contrast2012", base_contrast))),
-            "Highlights2012": int(round(results.get("Highlights2012", base_highlights))),
-            "Shadows2012": int(round(results.get("Shadows2012", base_shadows))),
-            "Whites2012": int(round(results.get("Whites2012", base_whites))),
-            "Blacks2012": int(round(results.get("Blacks2012", base_blacks))),
+            "Exposure2012": float(round(max(-5.0, min(5.0, results.get("Exposure2012", 0.0) + base_exposure)), 2)),
+            "Contrast2012": int(round(max(-100, min(100, base_contrast + results.get("Contrast2012", 0))))),
+            "Highlights2012": int(round(max(-100, min(100, base_highlights + results.get("Highlights2012", 0))))),
+            "Shadows2012": int(round(max(-100, min(100, base_shadows + results.get("Shadows2012", 0))))),
+            "Whites2012": int(round(max(-100, min(100, base_whites + results.get("Whites2012", 0))))),
+            "Blacks2012": int(round(max(-100, min(100, base_blacks + results.get("Blacks2012", 0))))),
         }
 
         # 6. Apply style layer (bias sliders + look)
         settings.update(bias)
         for k, v in look.items():
-            if k in ("Contrast2012", "Highlights2012", "Shadows2012", "Whites2012", "Blacks2012", "Exposure2012") and k in results:
+            if k in ("Contrast2012", "Highlights2012", "Shadows2012", "Whites2012", "Blacks2012", "Exposure2012"):
                 continue
             settings[k] = v
 

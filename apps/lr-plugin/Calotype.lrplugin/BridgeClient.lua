@@ -137,6 +137,33 @@ function BridgeClient.profiles()
   return request("GET", "/v1/profiles")
 end
 
+function BridgeClient.startBridge()
+  local LrShell = import "LrShell"
+  local LrTasks = import "LrTasks"
+  local candidates = {
+    "C:\\Github\\LR-FrameFlow\\Start-Calotype-Bridge.cmd",
+  }
+  if _PLUGIN and _PLUGIN.path then
+    local root = LrPathUtils.parent(LrPathUtils.parent(LrPathUtils.parent(_PLUGIN.path)))
+    if root then
+      candidates[#candidates + 1] = LrPathUtils.child(root, "Start-Calotype-Bridge.cmd")
+    end
+  end
+  for _, p in ipairs(candidates) do
+    if LrFileUtils.exists(p) == "file" then
+      if LrShell and LrShell.openExternalFileForCommandLine then
+        LrShell.openExternalFileForCommandLine(p, "")
+        return true
+      end
+      if LrTasks and LrTasks.execute then
+        LrTasks.execute(string.format('cmd.exe /c start "" "%s"', p))
+        return true
+      end
+    end
+  end
+  return false
+end
+
 function BridgeClient.automationNext()
   return request("GET", "/v1/automation/next")
 end

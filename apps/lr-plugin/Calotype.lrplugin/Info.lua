@@ -26,6 +26,7 @@ return {
     { title = LOC "$$$/Calotype/Menu/Apply=Apply profile to selected photos...", file = "ApplyProfile.lua" },
     { title = LOC "$$$/Calotype/Menu/Cull=Sort selected photos (culling)...", file = "CullPhotos.lua" },
     { title = LOC "$$$/Calotype/Menu/Status=Bridge status...", file = "BridgeStatus.lua" },
+    { title = LOC "$$$/Calotype/Menu/StartBridge=Start Calotype Bridge...", file = "StartBridge.lua" },
   },
 
   -- File > Plug-in Extras
@@ -34,6 +35,7 @@ return {
     { title = LOC "$$$/Calotype/Menu/ApplyFile=Calotype: Apply profile...", file = "ApplyProfile.lua" },
     { title = LOC "$$$/Calotype/Menu/CullFile=Calotype: Sort photos (culling)...", file = "CullPhotos.lua" },
     { title = LOC "$$$/Calotype/Menu/StatusFile=Calotype: Bridge status...", file = "BridgeStatus.lua" },
+    { title = LOC "$$$/Calotype/Menu/StartBridgeFile=Calotype: Start Bridge...", file = "StartBridge.lua" },
   },
 
   VERSION = { major = 0, minor = 3, revision = 0 },

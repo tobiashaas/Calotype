@@ -36,12 +36,14 @@ def main():
     t0 = time.time()
     success = 0
 
+    force = "--force" in sys.argv
+
     for idx, jpg in enumerate(jpg_files, 1):
         out_xmp = jpg.with_suffix(".xmp")
-        # Skip if already developed with Calotype Wedding in this session
-        if out_xmp.exists() and out_xmp.stat().st_size > 500:
+        # Skip if already developed with updated Calotype Wedding
+        if not force and out_xmp.exists() and out_xmp.stat().st_size > 500:
             content = out_xmp.read_text(encoding="utf-8", errors="ignore")
-            if 'crs:ColorGradeMidtoneHue="68"' in content and "ToneCurvePV2012Blue" in content:
+            if 'crs:Contrast2012="15"' in content and 'crs:Texture="10"' in content:
                 success += 1
                 continue
 
