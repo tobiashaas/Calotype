@@ -80,6 +80,13 @@ def capture_time(exif: dict | None) -> float | None:
         return None
 
 
+def measured_light(exif: dict | None) -> float | None:
+    """What the camera measured as colour temperature (Kelvin, read from the RAW by the
+    Bridge) — None if unknown."""
+    value = (exif or {}).get("wb_measured_kelvin")
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else None
+
+
 def calibrate_to_shoot(
     predictions: dict[UUID, dict[str, float]],
     vectors: dict[UUID, list[float]],
@@ -89,6 +96,7 @@ def calibrate_to_shoot(
     job_uuid: UUID,
     times: dict[UUID, float | None] | None = None,
     with_model: bool = True,
+    light: dict[UUID, float | None] | None = None,
 ) -> list[UUID]:
     """Learn the shoot's look from the photos already edited in the selection.
 
@@ -109,6 +117,8 @@ def calibrate_to_shoot(
         return list(predictions)
     times = times or {}
     timed = all(times.get(p) is not None for p in refs + rest)
+    light = light or {}
+    lit = all(light.get(p) is not None for p in refs + rest)
     references = [from_lightroom(settings[p], format_type) for p in refs]
     if not with_model:
         # Without a profile, a RAW example still on the camera's white balance has no Kelvin
@@ -125,11 +135,13 @@ def calibrate_to_shoot(
         [vectors[p] for p in rest],
         [times[p] for p in refs] if timed else None,
         [times[p] for p in rest] if timed else None,
+        [light[p] for p in refs] if lit else None,
+        [light[p] for p in rest] if lit else None,
     )
     for p, values in zip(rest, calibrated):
         predictions[p] = values
-    log.info("shoot calibration from %d edited photos, %d to edit, capture times %s, methods %s job_id=%s",
-             len(refs), len(rest), timed, methods, job_uuid)
+    log.info("shoot calibration from %d edited photos, %d to edit, capture times %s, camera light %s, "
+             "methods %s job_id=%s", len(refs), len(rest), timed, lit, methods, job_uuid)
     return rest
 
 
@@ -263,12 +275,14 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         vectors: dict[UUID, list[float]] = {}
         settings: dict[UUID, dict] = {}
         times: dict[UUID, float | None] = {}
+        light: dict[UUID, float | None] = {}
         for photo_id in photo_ids:
             with session_scope(factory) as session:
                 JobRepository.touch(session, job_uuid)
                 photo = PhotoRepository.get_by_id(session, photo_id)
                 settings[photo_id] = dict(photo.lr_develop_settings or {}) if photo else {}
                 times[photo_id] = capture_time(photo.exif_snapshot if photo else None)
+                light[photo_id] = measured_light(photo.exif_snapshot if photo else None)
                 fv = FeatureVectorRepository.get_by_photo_id(session, photo_id, feature_version)
                 if fv is None:
                     log.warning("no %s feature vector, skipping photo_id=%s job_id=%s",
@@ -281,7 +295,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         look: dict = {}
         if learn_from_edits:
             targets = calibrate_to_shoot(predictions, vectors, settings, photo_ids, format_type, job_uuid, times,
-                                         with_model=model_bytes is not None)
+                                         with_model=model_bytes is not None, light=light)
             # The shoot's own look wins over the profile's preset: it is what this shoot got.
             look = examples_look(predictions, targets, settings)
             log.info("shoot look from the edited photos: %d settings (%s) job_id=%s",

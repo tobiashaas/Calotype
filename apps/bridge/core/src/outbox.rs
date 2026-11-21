@@ -70,10 +70,30 @@ async fn upload_photos(state: &Arc<AppState>) -> Result<usize> {
     Ok(count)
 }
 
+/// The EXIF snapshot plus what the camera measured as colour temperature (read from the RAW;
+/// absent for files without one). Shoot calibration uses it as a feature for temperature.
+fn with_measured_light(exif: Value, light: Option<u32>) -> Value {
+    match (exif, light) {
+        (Value::Object(mut map), Some(kelvin)) => {
+            map.insert("wb_measured_kelvin".into(), json!(kelvin));
+            Value::Object(map)
+        }
+        (Value::Null, Some(kelvin)) => json!({ "wb_measured_kelvin": kelvin }),
+        (exif, _) => exif,
+    }
+}
+
 async fn upload_one(state: &AppState, photo: crate::db::PhotoRow) -> Result<()> {
     let uuid = photo.lr_catalog_uuid.clone();
     let path = PathBuf::from(&photo.file_path);
-    let jpeg = match tokio::task::spawn_blocking(move || build_preview(&path)).await? {
+    let (preview, light) = tokio::task::spawn_blocking(move || {
+        (
+            build_preview(&path),
+            crate::whitebalance::measured_kelvin(&path),
+        )
+    })
+    .await?;
+    let jpeg = match preview {
         Ok(jpeg) => jpeg,
         // File not reachable (external drive unplugged, NAS offline): try again later.
         Err(e @ PreviewError::Read { .. }) => {
@@ -87,7 +107,7 @@ async fn upload_one(state: &AppState, photo: crate::db::PhotoRow) -> Result<()> 
     let metadata = json!({
         "schema_version": "photo-upload-v1",
         "lr_catalog_uuid": uuid,
-        "exif_snapshot": photo.exif_snapshot,
+        "exif_snapshot": with_measured_light(photo.exif_snapshot, light),
         "lr_develop_settings": photo.lr_develop_settings,
         "lr_metadata": photo.lr_metadata,
     });

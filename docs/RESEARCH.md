@@ -70,6 +70,11 @@ Speed and accuracy figures for Calotype itself come only from our own measuremen
 
 Absolute white balance does not transfer between shoots in our measurements; these address that.
 
+*Used* so far: the camera's own illuminant estimate per frame (Canon `ColorTempMeasured`, read from the
+RAW by the Bridge) is a feature for temperature in shoot calibration — the measurement the methods
+below start from. A fixed offset to it did not work; the photographer's preference is learned from
+the edited examples.
+
 - **Afifi, Brown — *Deep White-Balance Editing*.** CVPR 2020. arXiv:2004.01354.
 - **Afifi, Barron, LeGendre, Tsai, Bleibel — *Cross-Camera Convolutional Color Constancy* (C5).**
   ICCV 2021. arXiv:2011.11890. Calibrates to a new camera from unlabeled images at test time — we

@@ -42,6 +42,12 @@ MIN_FOR_CHOICE = 8
 FOLDS = 5
 # References closest in content that set a photo's value in ``blend``.
 NEIGHBOURS = 3
+# The camera's measured colour temperature joins the features for these sliders, repeated so
+# that it carries about a tenth of the weight (153 image features + 16 copies). On the two
+# yardstick shoots that lifted temperature within tolerance from 42 to 47 % (mean of six cases,
+# none worse); as a fixed offset it failed (a photographer does not follow the camera 1:1).
+LIGHT_SLIDERS = ("temp",)
+LIGHT_COPIES = 16
 
 
 def _beta(model: np.ndarray, truth: np.ndarray) -> float:
@@ -106,6 +112,12 @@ def _choose(truth, model_ref, X_ref, tolerance: float, t_ref=None) -> str:
     return max(hits, key=lambda m: (hits[m], m == "blend", m == "mean", m == "model", m == "series"))
 
 
+def _with_light(X: np.ndarray, kelvin: Sequence[float]) -> np.ndarray:
+    """The features plus the camera's measured colour temperature (in 1000 K), repeated."""
+    column = np.asarray(kelvin, dtype=float)[:, None] / 1000.0
+    return np.column_stack([X, np.tile(column, LIGHT_COPIES)])
+
+
 def calibrate(
     references: Sequence[Mapping[str, float]],
     reference_model: Sequence[Mapping[str, float]] | None,
@@ -114,6 +126,8 @@ def calibrate(
     features: Sequence[Sequence[float]],
     reference_times: Sequence[float] | None = None,
     times: Sequence[float] | None = None,
+    reference_light: Sequence[float] | None = None,
+    light: Sequence[float] | None = None,
 ) -> tuple[list[dict[str, float]], dict[str, str]]:
     """Predictions for the other photos of the shoot, and the method chosen per slider.
 
@@ -122,7 +136,9 @@ def calibrate(
     Sliders missing from a reference (e.g. RAW temperature without a value) keep the model's
     prediction. reference_times / times: capture times in seconds (both or neither) — enable
     the ``series`` method. reference_model and model None: no profile — the look comes from
-    the references alone, and sliders they lack get no value at all.
+    the references alone, and sliders they lack get no value at all. reference_light / light:
+    the camera's measured colour temperature in Kelvin per photo (both or neither) — one more
+    feature for the sliders in ``LIGHT_SLIDERS``.
     """
     if not references:
         raise ValueError("calibration needs at least one edited photo")
@@ -132,6 +148,10 @@ def calibrate(
     t_ref = np.asarray(reference_times, dtype=float) if with_times else None
     t_new = np.asarray(times, dtype=float) if with_times else None
     with_model = reference_model is not None and model is not None
+    with_light = reference_light is not None and light is not None
+    if with_light:
+        X_ref_light = _with_light(X_ref, reference_light)
+        X_new_light = _with_light(X_new, light) if len(X_new) else X_new
     out = [dict(m) for m in model] if with_model else [{} for _ in range(len(X_new))]
     methods: dict[str, str] = {}
     params = [p for p in TOLERANCE if all(p in r for r in references) and (not with_model or (
@@ -140,10 +160,12 @@ def calibrate(
         truth = np.array([r[p] for r in references], dtype=float)
         m_ref = np.array([m[p] for m in reference_model], dtype=float) if with_model else None
         m_new = np.array([m[p] for m in model], dtype=float) if with_model else None
-        method = "mean" if len(truth) < MIN_FOR_CHOICE else _choose(truth, m_ref, X_ref, TOLERANCE[p], t_ref)
+        lit = with_light and p in LIGHT_SLIDERS and len(X_new) > 0
+        F_ref, F_new = (X_ref_light, X_new_light) if lit else (X_ref, X_new)
+        method = "mean" if len(truth) < MIN_FOR_CHOICE else _choose(truth, m_ref, F_ref, TOLERANCE[p], t_ref)
         methods[p] = method
         if not out:
             continue
-        for row, value in zip(out, _predict(method, truth, m_ref, X_ref, m_new, X_new, t_ref, t_new)):
+        for row, value in zip(out, _predict(method, truth, m_ref, F_ref, m_new, F_new, t_ref, t_new)):
             row[p] = float(value)
     return out, methods

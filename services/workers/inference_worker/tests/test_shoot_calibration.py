@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from calotype_inference_worker.cli import calibrate_to_shoot
+from calotype_inference_worker.cli import calibrate_to_shoot, measured_light
 
 UNTOUCHED = {"WhiteBalance": "As Shot", "Temperature": 5000, "Tint": 0, "Exposure2012": 0}
 
@@ -126,3 +126,19 @@ def test_only_a_look_chosen_for_the_job_brings_its_tone_sliders():
     assert styled(predicted, preset, chosen=False)["Contrast2012"] == 10   # profile preset: look only
     assert styled(predicted, preset, chosen=True)["Contrast2012"] == 80    # chosen: like by hand
     assert styled(predicted, preset, chosen=True)["GrainAmount"] == 20
+
+
+def test_measured_light_is_read_from_the_exif_snapshot():
+    assert measured_light({"wb_measured_kelvin": 5574}) == 5574.0
+    assert measured_light({"wb_measured_kelvin": "5574"}) is None
+    assert measured_light({"wb_measured_kelvin": 0}) is None
+    assert measured_light({}) is None and measured_light(None) is None
+
+
+def test_calibration_runs_with_and_without_camera_light():
+    ids, settings, predictions, vectors = _job([0.5, 0.7], untouched=3)
+    light = {p: 5000.0 + 100 * i for i, p in enumerate(ids)}
+    assert calibrate_to_shoot(predictions, vectors, settings, ids, "raw", uuid4(), light=light) == ids[2:]
+    light[ids[4]] = None      # one photo without a measurement: the light is left out for all
+    ids, settings, predictions, vectors = _job([0.5, 0.7], untouched=3)
+    assert calibrate_to_shoot(predictions, vectors, settings, ids, "raw", uuid4(), light=dict(zip(ids, [5000.0] * 4 + [None]))) == ids[2:]
