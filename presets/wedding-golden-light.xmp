@@ -20,11 +20,6 @@
     crs:ProcessVersion="15.4"
     crs:HasSettings="True"
     crs:ToneCurveName2012="Custom"
-    crs:Contrast2012="18"
-    crs:Highlights2012="-30"
-    crs:Shadows2012="25"
-    crs:Whites2012="8"
-    crs:Blacks2012="-12"
     crs:Texture="12"
     crs:Clarity2012="10"
     crs:Dehaze="20"
@@ -83,7 +78,7 @@
    </crs:Group>
    <crs:Description>
     <rdf:Alt>
-     <rdf:li xml:lang="x-default">Golden wedding mood: Texture +12, Clarity +10, Dehaze +20, rich warm hues, tone settings and tone curve.</rdf:li>
+     <rdf:li xml:lang="x-default">Golden wedding mood: Texture +12, Clarity +10, Dehaze +20, rich warm hues and tone curve.</rdf:li>
      <rdf:li xml:lang="de-DE">Goldene Hochzeitsstimmung: Struktur +12, Klarheit +10, Dehaze +20, warme Farbtöne und Kontrastkurve.</rdf:li>
     </rdf:Alt>
    </crs:Description>

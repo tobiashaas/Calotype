@@ -29,7 +29,7 @@ folders (renamed from LR-FrameFlow, see ADR 006; website `calotype.xyz`, repo
 | Phase 5 — Bridge & Plugin | ✅ Done | Bridge, LR plugin, folder mode (RAW+XMP); automated end-to-end tests in real Lightroom 15.6 (`tools/lr_e2e/`: apply, train, straighten, culling, retouch); open: tray mode, JPEG/TIFF smoke test, more RAW formats |
 | Phase 6 — Culling | ✅ First version | Cull job end to end (plugin menu → Bridge → API → `cull_worker` → collections Keep / Check / Sort out in Lightroom): learns from the stars/flags among the selected photos, else starter rules; verified in Lightroom 15.6 (80 photos in 14 s, 85 % agreement with existing stars). Measured against a photographer's real exports: ROC-AUC 0.654 — see ADR 005 |
 
-| Phase 7 — Retouch, looks, straighten | ✅ Done | AI-mask retouch via presets + `updateAISettings`; twenty-three own looks (CC0, one with Lightroom 16 glow) installed by the Bridge; straighten with Lightroom-exact crop — all verified in Lightroom |
+| Phase 7 — Retouch, looks, straighten | ✅ Done | AI-mask retouch via presets + `updateAISettings`; eighteen own looks (CC0, one with Lightroom 16 glow) installed by the Bridge; straighten with Lightroom-exact crop — all verified in Lightroom |
 | Next | 🔜 | Culling profiles from earlier shoots, learned mask strengths in folder mode, white balance relative to as-shot, other raw converters, training on the maintainer's own wedding archive |
 
 See `TODO.md` for the detailed task breakdown.

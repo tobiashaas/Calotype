@@ -20,11 +20,6 @@
     crs:ProcessVersion="15.4"
     crs:HasSettings="True"
     crs:ToneCurveName2012="Custom"
-    crs:Contrast2012="15"
-    crs:Highlights2012="-25"
-    crs:Shadows2012="20"
-    crs:Whites2012="10"
-    crs:Blacks2012="-10"
     crs:Texture="10"
     crs:Clarity2012="10"
     crs:Dehaze="20"
@@ -80,8 +75,8 @@
    </crs:Group>
    <crs:Description>
     <rdf:Alt>
-     <rdf:li xml:lang="x-default">Classic wedding look: Texture +10, Clarity +10, Dehaze +20, tone settings, warm skin hues and signature tone curve.</rdf:li>
-     <rdf:li xml:lang="de-DE">Klassischer Hochzeits-Look: Struktur +10, Klarheit +10, Dehaze +20, Tonwerte, edle Farbtöne und Gradationskurve.</rdf:li>
+     <rdf:li xml:lang="x-default">Classic wedding look: Texture +10, Clarity +10, Dehaze +20, warm skin hues and signature tone curve.</rdf:li>
+     <rdf:li xml:lang="de-DE">Klassischer Hochzeits-Look: Struktur +10, Klarheit +10, Dehaze +20, edle Farbtöne und Gradationskurve.</rdf:li>
     </rdf:Alt>
    </crs:Description>
    <crs:ToneCurvePV2012>

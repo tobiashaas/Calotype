@@ -1,6 +1,6 @@
 # Looks
 
-Twenty-three looks made for this project, free to use for anything (**CC0 1.0** — public domain
+Eighteen looks made for this project, free to use for anything (**CC0 1.0** — public domain
 dedication). Every value is set by hand in [`tools/presets/build.py`](../tools/presets/build.py);
 no values come from other products. Run the script after changing a look.
 
@@ -24,11 +24,6 @@ no values come from other products. Run the script after changing a look.
 | Wedding Golden Light | Golden hour wedding mood: rich warm autumn tones, lifted shadow curve |
 | Lively Moments | Crisp, lively look for family and child portraits |
 | Cinematic Drama | Moody, cinematic contrast look with deep shadows and muted vibrance |
-| Warm Nostalgia | Soft vintage warmth with gentle texture and subtle warm tones |
-| Dreamy Pastel | Luminous, dreamy pastel feel with muted, romantic colors |
-| Timeless Portrait | Smooth clarity, rich skin tones, timeless portrait aesthetics |
-| Deep Monochrome | Deep, structured monochrome aesthetic with rich contrast |
-| Airy Monochrome | Crisp, airy black and white with lifted shadows |
 
 The looks only carry what makes a *style*: tone curve, HSL, color grading, texture/clarity,
 grain, vignette, glow. Exposure, white balance and the tone sliders are left out — they depend on the

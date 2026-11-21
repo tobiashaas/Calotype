@@ -13,10 +13,6 @@ pub const FOLDER: &str = "Calotype";
 /// (path below `presets/`, content). `presets_on_disk_are_all_embedded` keeps this in sync.
 pub const PRESETS: &[(&str, &str)] = &[
     (
-        "airy-monochrome.xmp",
-        include_str!("../../../../presets/airy-monochrome.xmp"),
-    ),
-    (
         "bright-airy.xmp",
         include_str!("../../../../presets/bright-airy.xmp"),
     ),
@@ -35,14 +31,6 @@ pub const PRESETS: &[(&str, &str)] = &[
     (
         "cool-modern.xmp",
         include_str!("../../../../presets/cool-modern.xmp"),
-    ),
-    (
-        "deep-monochrome.xmp",
-        include_str!("../../../../presets/deep-monochrome.xmp"),
-    ),
-    (
-        "dreamy-pastel.xmp",
-        include_str!("../../../../presets/dreamy-pastel.xmp"),
     ),
     (
         "film-bw.xmp",
@@ -83,14 +71,6 @@ pub const PRESETS: &[(&str, &str)] = &[
     (
         "soft-glow.xmp",
         include_str!("../../../../presets/soft-glow.xmp"),
-    ),
-    (
-        "timeless-portrait.xmp",
-        include_str!("../../../../presets/timeless-portrait.xmp"),
-    ),
-    (
-        "warm-nostalgia.xmp",
-        include_str!("../../../../presets/warm-nostalgia.xmp"),
     ),
     (
         "warm-soft.xmp",

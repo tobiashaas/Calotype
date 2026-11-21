@@ -524,15 +524,10 @@
   "name": "Wedding Emotional",
   "name_de": "Wedding Emotional",
   "file": "wedding-emotional.xmp",
-  "about": "Classic wedding look: Texture +10, Clarity +10, Dehaze +20, tone settings, warm skin hues and signature tone curve.",
-  "about_de": "Klassischer Hochzeits-Look: Struktur +10, Klarheit +10, Dehaze +20, Tonwerte, edle Farbt\u00f6ne und Gradationskurve.",
+  "about": "Classic wedding look: Texture +10, Clarity +10, Dehaze +20, warm skin hues and signature tone curve.",
+  "about_de": "Klassischer Hochzeits-Look: Struktur +10, Klarheit +10, Dehaze +20, edle Farbt\u00f6ne und Gradationskurve.",
   "bw": false,
   "settings": {
-   "Contrast2012": 15,
-   "Highlights2012": -25,
-   "Shadows2012": 20,
-   "Whites2012": 10,
-   "Blacks2012": -10,
    "Texture": 10,
    "Clarity2012": 10,
    "Dehaze": 20,
@@ -581,15 +576,10 @@
   "name": "Wedding Golden Light",
   "name_de": "Wedding Golden Light",
   "file": "wedding-golden-light.xmp",
-  "about": "Golden wedding mood: Texture +12, Clarity +10, Dehaze +20, rich warm hues, tone settings and tone curve.",
+  "about": "Golden wedding mood: Texture +12, Clarity +10, Dehaze +20, rich warm hues and tone curve.",
   "about_de": "Goldene Hochzeitsstimmung: Struktur +12, Klarheit +10, Dehaze +20, warme Farbt\u00f6ne und Kontrastkurve.",
   "bw": false,
   "settings": {
-   "Contrast2012": 18,
-   "Highlights2012": -30,
-   "Shadows2012": 25,
-   "Whites2012": 8,
-   "Blacks2012": -12,
    "Texture": 12,
    "Clarity2012": 10,
    "Dehaze": 20,
@@ -691,146 +681,6 @@
     250.0
    ],
    "ConvertToGrayscale": false
-  }
- },
- {
-  "name": "Warm Nostalgia",
-  "name_de": "Warm Nostalgia",
-  "file": "warm-nostalgia.xmp",
-  "about": "Soft vintage warmth: gentle texture and clarity softening, subtle warm color mood.",
-  "about_de": "Sanfte Vintage-W\u00e4rme: weiche Textur und Klarheit, dezente Farbstimmung.",
-  "bw": false,
-  "settings": {
-   "Texture": -4,
-   "Clarity2012": -3,
-   "Dehaze": 0,
-   "Vibrance": -6,
-   "Saturation": -3,
-   "ToneCurvePV2012": [
-    0.0,
-    12.0,
-    64.0,
-    66.0,
-    128.0,
-    130.0,
-    192.0,
-    194.0,
-    255.0,
-    250.0
-   ],
-   "ConvertToGrayscale": false
-  }
- },
- {
-  "name": "Dreamy Pastel",
-  "name_de": "Dreamy Pastel",
-  "file": "dreamy-pastel.xmp",
-  "about": "Luminous, dreamy pastel feel: Clarity +5, muted desaturated palette (-25).",
-  "about_de": "Leuchtendes, vertr\u00e4umtes Pastellgef\u00fchl: Klarheit +5, sanfte Ents\u00e4ttigung (-25).",
-  "bw": false,
-  "settings": {
-   "Texture": 0,
-   "Clarity2012": 5,
-   "Dehaze": 0,
-   "Vibrance": 1,
-   "Saturation": -25,
-   "ToneCurvePV2012": [
-    0.0,
-    14.0,
-    60.0,
-    68.0,
-    128.0,
-    136.0,
-    192.0,
-    202.0,
-    255.0,
-    252.0
-   ],
-   "ConvertToGrayscale": false
-  }
- },
- {
-  "name": "Timeless Portrait",
-  "name_de": "Timeless Portrait",
-  "file": "timeless-portrait.xmp",
-  "about": "Soft, timeless portraits: smooth clarity (-8), reduced vibrance, rich tones.",
-  "about_de": "Sanfte, zeitlose Portr\u00e4ts: weiche Klarheit (-8), ged\u00e4mpfte Dynamik, reichhaltige T\u00f6ne.",
-  "bw": false,
-  "settings": {
-   "Texture": 0,
-   "Clarity2012": -8,
-   "Dehaze": 0,
-   "Vibrance": -16,
-   "Saturation": 11,
-   "ToneCurvePV2012": [
-    0.0,
-    8.0,
-    64.0,
-    62.0,
-    128.0,
-    128.0,
-    192.0,
-    196.0,
-    255.0,
-    252.0
-   ],
-   "ConvertToGrayscale": false
-  }
- },
- {
-  "name": "Deep Monochrome",
-  "name_de": "Deep Monochrome",
-  "file": "deep-monochrome.xmp",
-  "about": "Deep, textured monochrome: Texture +11, Clarity -12, Dehaze +4.",
-  "about_de": "Tiefe, strukturierte Schwarzwei\u00df-\u00c4sthetik: Textur +11, Klarheit -12, Dunst entfernen +4.",
-  "bw": true,
-  "settings": {
-   "Texture": 11,
-   "Clarity2012": -12,
-   "Dehaze": 4,
-   "Vibrance": 0,
-   "Saturation": 0,
-   "ToneCurvePV2012": [
-    0.0,
-    4.0,
-    48.0,
-    40.0,
-    128.0,
-    126.0,
-    200.0,
-    206.0,
-    255.0,
-    252.0
-   ],
-   "ConvertToGrayscale": true
-  }
- },
- {
-  "name": "Airy Monochrome",
-  "name_de": "Airy Monochrome",
-  "file": "airy-monochrome.xmp",
-  "about": "Crisp, airy monochrome: Texture +11, Clarity +10, gently lifted blacks.",
-  "about_de": "Klares, luftiges Schwarzwei\u00df: Textur +11, Klarheit +10, sanft angehobene Schwarzt\u00f6ne.",
-  "bw": true,
-  "settings": {
-   "Texture": 11,
-   "Clarity2012": 10,
-   "Dehaze": 0,
-   "Vibrance": 0,
-   "Saturation": 0,
-   "ToneCurvePV2012": [
-    0.0,
-    18.0,
-    64.0,
-    70.0,
-    128.0,
-    134.0,
-    192.0,
-    200.0,
-    255.0,
-    250.0
-   ],
-   "ConvertToGrayscale": true
   }
  }
 ]
