@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import sys
 import time
@@ -87,6 +88,22 @@ def measured_light(exif: dict | None) -> float | None:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else None
 
 
+def camera_exposure(exif: dict | None) -> list[float] | None:
+    """The camera's exposure settings as features: log2 of ISO, shutter time (seconds) and
+    f-number, plus the exposure compensation (0 when not recorded) — None unless ISO, time and
+    aperture are known."""
+    exif = exif or {}
+
+    def number(key: str) -> float | None:
+        value = exif.get(key)
+        return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+    iso, shutter, aperture = number("iso"), number("shutter_speed"), number("aperture")
+    if not iso or not shutter or not aperture or min(iso, shutter, aperture) <= 0:
+        return None
+    return [math.log2(iso), math.log2(shutter), math.log2(aperture), number("exposure_bias") or 0.0]
+
+
 def calibrate_to_shoot(
     predictions: dict[UUID, dict[str, float]],
     vectors: dict[UUID, list[float]],
@@ -97,6 +114,7 @@ def calibrate_to_shoot(
     times: dict[UUID, float | None] | None = None,
     with_model: bool = True,
     light: dict[UUID, float | None] | None = None,
+    camera: dict[UUID, list[float] | None] | None = None,
 ) -> list[UUID]:
     """Learn the shoot's look from the photos already edited in the selection.
 
@@ -119,6 +137,8 @@ def calibrate_to_shoot(
     timed = all(times.get(p) is not None for p in refs + rest)
     light = light or {}
     lit = all(light.get(p) is not None for p in refs + rest)
+    camera = camera or {}
+    exposed = all(camera.get(p) is not None for p in refs + rest)
     references = [from_lightroom(settings[p], format_type) for p in refs]
     if not with_model:
         # Without a profile, a RAW example still on the camera's white balance has no Kelvin
@@ -137,11 +157,13 @@ def calibrate_to_shoot(
         [times[p] for p in rest] if timed else None,
         [light[p] for p in refs] if lit else None,
         [light[p] for p in rest] if lit else None,
+        [camera[p] for p in refs] if exposed else None,
+        [camera[p] for p in rest] if exposed else None,
     )
     for p, values in zip(rest, calibrated):
         predictions[p] = values
     log.info("shoot calibration from %d edited photos, %d to edit, capture times %s, camera light %s, "
-             "methods %s job_id=%s", len(refs), len(rest), timed, lit, methods, job_uuid)
+             "camera exposure %s, methods %s job_id=%s", len(refs), len(rest), timed, lit, exposed, methods, job_uuid)
     return rest
 
 
@@ -276,6 +298,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         settings: dict[UUID, dict] = {}
         times: dict[UUID, float | None] = {}
         light: dict[UUID, float | None] = {}
+        camera: dict[UUID, list[float] | None] = {}
         for photo_id in photo_ids:
             with session_scope(factory) as session:
                 JobRepository.touch(session, job_uuid)
@@ -283,6 +306,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
                 settings[photo_id] = dict(photo.lr_develop_settings or {}) if photo else {}
                 times[photo_id] = capture_time(photo.exif_snapshot if photo else None)
                 light[photo_id] = measured_light(photo.exif_snapshot if photo else None)
+                camera[photo_id] = camera_exposure(photo.exif_snapshot if photo else None)
                 fv = FeatureVectorRepository.get_by_photo_id(session, photo_id, feature_version)
                 if fv is None:
                     log.warning("no %s feature vector, skipping photo_id=%s job_id=%s",
@@ -295,7 +319,8 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         look: dict = {}
         if learn_from_edits:
             targets = calibrate_to_shoot(predictions, vectors, settings, photo_ids, format_type, job_uuid, times,
-                                         with_model=model_bytes is not None, light=light)
+                                         with_model=model_bytes is not None, light=light,
+                                         camera=camera)
             # The shoot's own look wins over the profile's preset: it is what this shoot got.
             look = examples_look(predictions, targets, settings)
             log.info("shoot look from the edited photos: %d settings (%s) job_id=%s",
