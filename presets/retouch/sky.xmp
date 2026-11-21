@@ -22,7 +22,7 @@
    <crs:Name>
     <rdf:Alt>
      <rdf:li xml:lang="x-default">Deepen sky</rdf:li>
-     <rdf:li xml:lang="de-DE">Himmel vertiefen</rdf:li>
+     <rdf:li xml:lang="de-DE">Deepen sky</rdf:li>
     </rdf:Alt>
    </crs:Name>
    <crs:ShortName>

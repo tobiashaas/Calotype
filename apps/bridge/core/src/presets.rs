@@ -17,6 +17,14 @@ pub const PRESETS: &[(&str, &str)] = &[
         include_str!("../../../../presets/bright-airy.xmp"),
     ),
     (
+        "charcoal.xmp",
+        include_str!("../../../../presets/charcoal.xmp"),
+    ),
+    (
+        "cinematic-drama.xmp",
+        include_str!("../../../../presets/cinematic-drama.xmp"),
+    ),
+    (
         "clean-natural.xmp",
         include_str!("../../../../presets/clean-natural.xmp"),
     ),
@@ -37,16 +45,44 @@ pub const PRESETS: &[(&str, &str)] = &[
         include_str!("../../../../presets/golden-evening.xmp"),
     ),
     (
-        "soft-glow.xmp",
-        include_str!("../../../../presets/soft-glow.xmp"),
+        "lively-moments.xmp",
+        include_str!("../../../../presets/lively-moments.xmp"),
+    ),
+    (
+        "old-postcard.xmp",
+        include_str!("../../../../presets/old-postcard.xmp"),
+    ),
+    (
+        "pastel-morning.xmp",
+        include_str!("../../../../presets/pastel-morning.xmp"),
+    ),
+    (
+        "quiet-portrait.xmp",
+        include_str!("../../../../presets/quiet-portrait.xmp"),
+    ),
+    (
+        "silver-haze.xmp",
+        include_str!("../../../../presets/silver-haze.xmp"),
     ),
     (
         "soft-bw.xmp",
         include_str!("../../../../presets/soft-bw.xmp"),
     ),
     (
+        "soft-glow.xmp",
+        include_str!("../../../../presets/soft-glow.xmp"),
+    ),
+    (
         "warm-soft.xmp",
         include_str!("../../../../presets/warm-soft.xmp"),
+    ),
+    (
+        "wedding-emotional.xmp",
+        include_str!("../../../../presets/wedding-emotional.xmp"),
+    ),
+    (
+        "wedding-golden-light.xmp",
+        include_str!("../../../../presets/wedding-golden-light.xmp"),
     ),
     (
         "retouch/background.xmp",

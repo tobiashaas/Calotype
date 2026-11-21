@@ -41,7 +41,7 @@
    <crs:Name>
     <rdf:Alt>
      <rdf:li xml:lang="x-default">Soft Glow</rdf:li>
-     <rdf:li xml:lang="de-DE">Sanftes Leuchten</rdf:li>
+     <rdf:li xml:lang="de-DE">Soft Glow</rdf:li>
     </rdf:Alt>
    </crs:Name>
    <crs:ShortName>

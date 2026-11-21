@@ -39,7 +39,7 @@
    <crs:Name>
     <rdf:Alt>
      <rdf:li xml:lang="x-default">Golden Evening</rdf:li>
-     <rdf:li xml:lang="de-DE">Goldener Abend</rdf:li>
+     <rdf:li xml:lang="de-DE">Golden Evening</rdf:li>
     </rdf:Alt>
    </crs:Name>
    <crs:ShortName>

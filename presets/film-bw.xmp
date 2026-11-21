@@ -38,7 +38,7 @@
    <crs:Name>
     <rdf:Alt>
      <rdf:li xml:lang="x-default">Film B&amp;W</rdf:li>
-     <rdf:li xml:lang="de-DE">Film S/W</rdf:li>
+     <rdf:li xml:lang="de-DE">Film B&amp;W</rdf:li>
     </rdf:Alt>
    </crs:Name>
    <crs:ShortName>

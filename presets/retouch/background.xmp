@@ -22,7 +22,7 @@
    <crs:Name>
     <rdf:Alt>
      <rdf:li xml:lang="x-default">Calm background</rdf:li>
-     <rdf:li xml:lang="de-DE">Hintergrund beruhigen</rdf:li>
+     <rdf:li xml:lang="de-DE">Calm background</rdf:li>
     </rdf:Alt>
    </crs:Name>
    <crs:ShortName>
