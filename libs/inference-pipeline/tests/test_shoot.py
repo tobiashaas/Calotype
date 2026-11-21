@@ -16,7 +16,7 @@ def test_constant_look_comes_from_the_examples_not_the_model():
     model = [{"exposure": -0.2, "contrast": 0.0} for _ in range(40)]
     out, methods = calibrate(truth[:10], model[:10], X[:10], model[10:], X[10:])
     assert all(o["exposure"] == pytest.approx(0.6) and o["contrast"] == pytest.approx(12) for o in out)
-    assert methods == {"exposure": "blend", "contrast": "blend"}
+    assert methods == {"exposure": "same", "contrast": "same"}
 
 
 def test_per_photo_differences_are_learned_inside_the_shoot():
@@ -115,3 +115,19 @@ def test_the_cameras_exposure_settings_help_exposure_only():
     error = lambda out: np.mean(np.abs(np.array([o["exposure"] for o in out]) - wanted))  # noqa: E731
     assert error(lit) < 0.7 * error(plain)
     assert [o["temp"] for o in lit] == pytest.approx([o["temp"] for o in plain])
+
+
+def test_a_slider_most_examples_share_stays_exactly_there():
+    # Contrast was synced over the shoot (+12), four photos got an own value; exposure varies.
+    rng = np.random.default_rng(8)
+    X = rng.normal(size=(40, 6))
+    truth = [{"contrast": 12.0, "exposure": float(e)} for e in rng.normal(0.3, 0.3, 30)]
+    for i in (3, 9, 17, 25):
+        truth[i]["contrast"] = 40.0
+    out, methods = calibrate(truth, None, X[:30], None, X[30:])
+    assert methods == {"contrast": "same", "exposure": "blend"}
+    assert all(o["contrast"] == 12.0 for o in out)
+    truth[1]["contrast"] = truth[2]["contrast"] = truth[4]["contrast"] = truth[5]["contrast"] = 40.0
+    truth[6]["contrast"] = truth[7]["contrast"] = truth[8]["contrast"] = 30.0     # now 19 of 30
+    _, methods = calibrate(truth, None, X[:30], None, X[30:])
+    assert methods["contrast"] == "blend"

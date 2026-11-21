@@ -6,6 +6,9 @@ a new shoot (measured on unseen weddings and client jobs: model alone 0-1 % of p
 slider within tolerance, the mean of 20 edits of the same shoot 13-64 %). So the edited photos of
 the shoot ("references") set the level, and per slider the other photos may deviate from it:
 
+- ``same``:  the value two thirds of the references share — a slider the photographer synced
+  over the shoot stays exactly there (measured on the maintainer's own shoot: contrast within
+  tolerance 80-86 % with ``blend``, 97 % with this rule; no case of twelve got worse)
 - ``mean``:  the references' mean — with fewer than eight references nothing more is learned
 - ``blend``: half a ridge regression on the photo's own features (fitted on the references
   only), half the references closest in *content* (the three nearest feature vectors, weighted
@@ -58,6 +61,8 @@ CAMERA_SLIDERS = ("exposure",)
 CAMERA_COPIES = 8
 # A profile's prediction of the slider joins the features of every slider it predicts.
 MODEL_COPIES = 8
+# Share of the references that must carry the identical value for ``same``.
+SHARED_SHARE = 2 / 3
 
 
 def _ridge(X: np.ndarray, y: np.ndarray):
@@ -75,6 +80,13 @@ def _similar(X_ref: np.ndarray, truth: np.ndarray, X_new: np.ndarray) -> np.ndar
     nearest = np.argsort(distance, axis=1)[:, : min(NEIGHBOURS, len(truth))]
     weight = 1.0 / (np.take_along_axis(distance, nearest, axis=1) + 1e-6)
     return (weight * truth[nearest]).sum(axis=1) / weight.sum(axis=1)
+
+
+def _shared_value(truth: np.ndarray) -> tuple[float, float]:
+    """The most common value among the references and the share of them that carry it."""
+    values, counts = np.unique(np.round(truth, 3), return_counts=True)
+    most = int(np.argmax(counts))
+    return float(values[most]), float(counts[most] / len(truth))
 
 
 def _predict(method: str, truth, X_ref, X_new, t_ref=None, t_new=None) -> np.ndarray:
@@ -172,6 +184,12 @@ def calibrate(
         if with_model and len(X_new) > 0:
             F_ref = np.column_stack([F_ref, np.tile(m_ref[:, None], MODEL_COPIES)])
             F_new = np.column_stack([F_new, np.tile(m_new[:, None], MODEL_COPIES)])
+        shared, share = _shared_value(truth)
+        if len(truth) >= 3 and share >= SHARED_SHARE:
+            methods[p] = "same"
+            for row in out:
+                row[p] = shared
+            continue
         method = "mean" if len(truth) < MIN_FOR_CHOICE else _choose(truth, F_ref, TOLERANCE[p], t_ref)
         methods[p] = method
         if not out:
