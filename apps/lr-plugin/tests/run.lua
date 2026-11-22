@@ -795,6 +795,7 @@ test("look presets: the photographer's presets listed, their look sent with appl
              getSetting = function() return settings end }
   end
   local jewel = { GrainAmount = 25, ToneCurvePV2012 = { 0, 12, 255, 240 }, ConvertToGrayscale = false,
+                  CameraProfile = "Default Profile",
                   MaskGroupBasedCorrections = { { CorrectionName = "x" } } }
   sdk.LrApplication.developPresetFolders = function()
     return {
@@ -813,6 +814,7 @@ test("look presets: the photographer's presets listed, their look sent with appl
   eq(look.ToneCurvePV2012[2], 12, "tone curve kept")
   eq(look.ConvertToGrayscale, false, "booleans kept")
   eq(look.MaskGroupBasedCorrections, nil, "masks left out")
+  eq(look.CameraProfile, nil, "placeholder camera profile left out")
   eq(LookPresets.settings("nope"), nil, "unknown preset")
 
   local photo = fakePhoto("a", "RAW")

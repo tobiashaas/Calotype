@@ -20,6 +20,7 @@
     crs:ProcessVersion="15.4"
     crs:HasSettings="True"
     crs:ToneCurveName2012="Custom"
+    crs:CameraProfile="Adobe Standard"
     crs:Clarity2012="10"
     crs:Saturation="-16"
     crs:ParametricShadows="-100"
