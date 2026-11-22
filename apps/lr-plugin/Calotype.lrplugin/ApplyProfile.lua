@@ -12,6 +12,7 @@ local LrPrefs = import "LrPrefs"
 local LrView = import "LrView"
 
 local Actions = require "Actions"
+local Fresh = require "Fresh"
 local LookPresets = require "LookPresets"
 local Retouch = require "Retouch"
 
@@ -33,6 +34,7 @@ local function askForProfile(context, items, count)
   end
   props.straighten = prefs.straighten == true
   props.learnFromEdits = prefs.learnFromEdits == true
+  props.fresh = prefs.fresh == true
   for _, item in ipairs(Retouch.ITEMS) do props["retouch_" .. item.id] = prefs["retouch_" .. item.id] == true end
   local checks = {}
   for _, item in ipairs(Retouch.ITEMS) do
@@ -58,6 +60,15 @@ local function askForProfile(context, items, count)
         title = LOC "$$$/Calotype/Apply/Straighten=Straighten photos with clear lines (your own crops stay)",
       },
       f:checkbox {
+        value = LrView.bind "fresh",
+        title = LOC "$$$/Calotype/Fresh/Option=Start from zero: reset all selected photos first",
+        enabled = LrBinding.keyIsNot("profileId", OWN_EDITS),
+      },
+      f:static_text {
+        title = LOC "$$$/Calotype/Fresh/Hint=Replaces existing edits, crops and masks, so only the profile and the look remain. Needs a trained profile. The state before is kept as a snapshot.",
+        width_in_chars = 52, height_in_lines = 3,
+      },
+      f:checkbox {
         value = LrView.bind "learnFromEdits",
         title = LOC "$$$/Calotype/Apply/LearnFromEdits=Learn this shoot's look from the photos in the selection you already edited",
         enabled = LrBinding.keyIsNot("profileId", OWN_EDITS),
@@ -78,6 +89,7 @@ local function askForProfile(context, items, count)
   prefs.straighten = props.straighten
   prefs.lastProfileId = props.profileId
   prefs.learnFromEdits = props.learnFromEdits
+  prefs.fresh = props.fresh
   prefs.lastLook = props.look
   local look = LookPresets.settings(props.look)
   local retouch = {}
@@ -87,8 +99,10 @@ local function askForProfile(context, items, count)
   end
   for _, item in ipairs(items) do
     if item.value == props.profileId then
-      return item.profile, { straighten = props.straighten, retouch = retouch,
-        learnFromEdits = props.learnFromEdits or item.value == OWN_EDITS, look = look }
+      -- Start from zero leaves no edited photo to learn from; the two exclude each other.
+      local fresh = props.fresh == true and item.value ~= OWN_EDITS
+      return item.profile, { straighten = props.straighten, retouch = retouch, fresh = fresh,
+        learnFromEdits = not fresh and (props.learnFromEdits or item.value == OWN_EDITS), look = look }
     end
   end
   return nil
@@ -118,6 +132,13 @@ LrFunctionContext.postAsyncTaskWithContext("Calotype.apply", function(context)
 
   local profile, options = askForProfile(context, items, #photos)
   if not profile then return end
+  if options.fresh then
+    local go = LrDialogs.confirm(
+      LOC("$$$/Calotype/Fresh/ConfirmTitle=Reset ^1 photos and edit them from zero?", #photos),
+      LOC("$$$/Calotype/Fresh/Confirm=Existing edits, crops and masks of all selected photos are replaced. The state before is kept on every photo as the snapshot \"^1\".", Fresh.snapshotName()),
+      LOC "$$$/Calotype/Fresh/ConfirmAction=Reset and edit")
+    if go ~= "ok" then return end
+  end
 
   local progress = LrProgressScope {
     title = LOC("$$$/Calotype/Apply/Progress=Calotype: applying \"^1\"", profile.name),

@@ -361,7 +361,7 @@ end
 test("every UI text has a German translation with the same placeholders", function()
   local english = {}
   for _, file in ipairs({ "Info.lua", "BridgeClient.lua", "JobWait.lua", "Actions.lua", "TrainProfile.lua",
-                          "ApplyProfile.lua", "BridgeStatus.lua", "AutomationCommands.lua", "CullPhotos.lua", "Retouch.lua" }) do
+                          "ApplyProfile.lua", "BridgeStatus.lua", "AutomationCommands.lua", "CullPhotos.lua", "Retouch.lua", "Fresh.lua" }) do
     local src = readFile(PLUGIN .. file)
     for key, value in src:gmatch('"(%$%$%$/Calotype/[%w/]+)=(.-[^\\])"') do english[key] = value end
   end
@@ -500,6 +500,70 @@ test("apply with straighten: crop for uncropped photos, own crops stay", functio
   eq(photos[2].applied.Exposure2012, 0.3, "but still edited")
   eq(r.straightened, 1, "count straightened")
   eq(r.kept_crop, 1, "count kept")
+end)
+
+test("apply from zero: every photo reset first, masks off, snapshot kept, then the results", function()
+  local Commands = require "AutomationCommands"
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  local function photo(uuid, settings)
+    local p = fakePhoto(uuid, "RAW", settings)
+    p.writes, p.snapshots = {}, {}
+    p.getDevelopSettings = function() return settings end
+    p.applyDevelopSettings = function(_, s)
+      p.writes[#p.writes + 1] = s
+      for k, v in pairs(s) do settings[k] = v end
+    end
+    p.getDevelopSnapshots = function() return p.snapshots end
+    p.createDevelopSnapshot = function(_, name) p.snapshots[#p.snapshots + 1] = { name = name } end
+    return p
+  end
+  local a = photo("a", { Exposure2012 = 0.8, ColorGradeMidtoneSat = 13, GrainAmount = 20, GlowAmount = 30,
+    CropAngle = 1.5, CropLeft = 0.1, CropTop = 0, CropRight = 0.9, CropBottom = 1, WhiteBalance = "Custom",
+    Temperature = 6100, MaskGroupBasedCorrections = { { CorrectionName = "own mask" } } })
+  local b = photo("b", { Exposure2012 = 0, WhiteBalance = "As Shot" })
+  local catalog = fakeCatalog({ a, b })
+  respond(200, { { profile_id = "p1", name = "Test", genre = "event", format_type = "raw", status = "ready", version = 1 } })
+  respond(202, { status = "pending" })
+  respond(202, { status = "pending" })
+  respond(202, { job_id = "j9", status = "waiting_for_photos" })
+  respond(200, { job_id = "j9", status = "completed", results = {
+    { lr_catalog_uuid = "a", lr_settings = { Exposure2012 = 0.3, CropAngle = 2, CropLeft = 0.03, CropTop = 0,
+                                              CropRight = 0.97, CropBottom = 1, HasCrop = true } },
+    { lr_catalog_uuid = "b", lr_settings = { Exposure2012 = -0.2 } },
+  } })
+  local ok, r = Commands.run(catalog, { command = "apply",
+    args = { profile = "Test", uuids = { "a", "b" }, fresh = true, straighten = true, learn_from_edits = true } })
+  eq(ok, true, "apply ok: " .. tostring(r.error))
+  eq(r.reset, 2, "both photos reset")
+  assert(a.snapshots[1].name:find("^Calotype: before reset %d%d%d%d%-"), "the state before is kept as a dated snapshot: " .. tostring(a.snapshots[1].name))
+  eq(next(a.writes[1].MaskGroupBasedCorrections), nil, "first write only takes the masks off")
+  eq(a.writes[1].Exposure2012, nil, "... and nothing else")
+  eq(a.writes[2].ColorGradeMidtoneSat, 0, "second write: the old look is gone")
+  eq(a.writes[2].GrainAmount, 0, "grain off")
+  eq(a.writes[2].GlowAmount, 0, "glow off")
+  eq(a.writes[2].WhiteBalance, "As Shot", "white balance back to the camera's")
+  eq(a.writes[2].ToneCurvePV2012Red[4], 255, "channel curves linear")
+  eq(#b.writes, 2, "a photo without masks: reset and result only")
+  local registered = Json.decode(fake.requests[2].body)
+  eq(registered.lr_develop_settings.Exposure2012, 0, "the Bridge sees the reset photo, not the old edit")
+  local job = Json.decode(fake.requests[4].body)
+  eq(job.learn_from_edits, nil, "nothing to learn from after a reset")
+  eq(a.writes[3].Exposure2012, 0.3, "then the result")
+  eq(a.writes[3].CropAngle, 2, "and the photo is straightened: its old crop is gone")
+  eq(r.straightened, 1, "count straightened")
+end)
+
+test("apply from zero without a profile: refused with a clear hint, nothing reset", function()
+  local Commands = require "AutomationCommands"
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  local p = fakePhoto("a", "RAW", { Exposure2012 = 0.5 })
+  respond(200, {})
+  local ok, r = Commands.run(fakeCatalog({ p }), { command = "apply",
+    args = { uuids = { "a" }, fresh = true, learn_from_edits = true } })
+  eq(ok, true, "command ran: " .. tostring(r.error))
+  eq(r.ok, false, "refused")
+  assert(tostring(r.title):find("needs a profile"), tostring(r.title))
+  eq(p.applied, nil, "nothing written")
 end)
 
 test("apply learning from edits: flag sent, edited photos stay as they are", function()
@@ -815,7 +879,7 @@ end)
 
 test("menu scripts compile", function()
   for _, file in ipairs({ "Info.lua", "TrainProfile.lua", "ApplyProfile.lua", "BridgeStatus.lua", "CullPhotos.lua",
-                          "Actions.lua", "Automation.lua", "AutomationCommands.lua", "Retouch.lua" }) do
+                          "Actions.lua", "Automation.lua", "AutomationCommands.lua", "Retouch.lua", "Fresh.lua" }) do
     assert(loadfile(PLUGIN .. file))
   end
   local info = assert(loadfile(PLUGIN .. "Info.lua"))()

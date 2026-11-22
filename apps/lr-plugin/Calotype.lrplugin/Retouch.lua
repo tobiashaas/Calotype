@@ -67,6 +67,14 @@ local function hasSnapshot(photo)
   return false
 end
 
+--- Inside catalog write access, before the photo is changed: keep the original as the develop
+-- snapshot "Calotype: before" — only the first time, a later run must not overwrite it.
+function Retouch.keepOriginal(photo)
+  if photo.createDevelopSnapshot and not hasSnapshot(photo) then
+    LrTasks.pcall(function() photo:createDevelopSnapshot(Retouch.SNAPSHOT, false) end)
+  end
+end
+
 --- In its own catalog write transaction, before the photo is changed: keep the original as a snapshot
 -- (only the first time — a re-apply must not overwrite the true original) and drop those of
 -- our masks from an earlier run that are about to be added again (ids). Our masks of other
@@ -75,9 +83,7 @@ end
 function Retouch.prepare(photo, ids)
   local again = {}
   for _, id in ipairs(ids or {}) do again[id] = true end
-  if photo.createDevelopSnapshot and not hasSnapshot(photo) then
-    LrTasks.pcall(function() photo:createDevelopSnapshot(Retouch.SNAPSHOT, false) end)
-  end
+  Retouch.keepOriginal(photo)
   local groups = (photo:getDevelopSettings() or {}).MaskGroupBasedCorrections
   if type(groups) ~= "table" then return end
   local keep, removed = {}, 0
