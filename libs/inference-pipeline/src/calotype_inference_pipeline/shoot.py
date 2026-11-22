@@ -15,7 +15,10 @@ the shoot ("references") set the level, and per slider the other photos may devi
   by closeness) — retrieval as in RefRetouch (Weldengus et al. 2026)
 - ``blend+scene``: with capture times, a photo taken within two minutes of an edited one takes
   that photo's value (photographers edit one frame of a scene and sync it); the others keep
-  ``blend``. A fixed rule: choosing by cross-validation whether to follow the closest example,
+  ``blend``. Two sliders differ, measured on seven of the maintainer's weddings (previews from
+  the archive, 10-50 examples): white balance follows the closest edited photo for ten minutes
+  (the light of a scene lasts), and for exposure that photo counts less the further away it is
+  — weddings are exposed frame by frame, copying alone was worse there than ``blend``. A fixed rule: choosing by cross-validation whether to follow the closest example,
   or deciding it from how much the examples of a scene agree, both lost. Measured on five
   shoots (three of the maintainer with their catalogs, two edited by other tools; 10-50
   examples, all sliders within tolerance, mean of twelve cases): 36.9 % with the cross-validated
@@ -51,6 +54,13 @@ RIDGE_ALPHA = 50.0
 MIN_FOR_CHOICE = 8
 # A photo this close in time to an edited one belongs to its scene.
 SCENE_SECONDS = 120.0
+# The light of a scene outlasts the single frame: white balance follows the closest edited
+# photo for ten minutes.
+LIGHT_SCENE_SECONDS = 600.0
+LIGHT_SCENE_SLIDERS = ("temp", "tint")
+# Exposure is set frame by frame: the closest edited photo counts less the further away it is
+# (weight 1/e after this many seconds, the rest is ``blend``), up to ``LIGHT_SCENE_SECONDS``.
+EXPOSURE_FADE_SECONDS = 60.0
 # References closest in content that set a photo's value in ``blend``.
 NEIGHBOURS = 3
 # The camera's measured colour temperature joins the features for these sliders, repeated so
@@ -95,15 +105,28 @@ def _shared_value(truth: np.ndarray) -> tuple[float, float]:
     return float(values[most]), float(counts[most] / len(truth))
 
 
-def _predict(method: str, truth, X_ref, X_new, t_ref=None, t_new=None) -> np.ndarray:
+def _scene(slider: str) -> tuple[float, float | None]:
+    """How far in time an edited photo reaches for this slider, and over how many seconds its
+    weight fades (None: it counts fully up to the limit)."""
+    if slider == "exposure":
+        return LIGHT_SCENE_SECONDS, EXPOSURE_FADE_SECONDS
+    if slider in LIGHT_SCENE_SLIDERS:
+        return LIGHT_SCENE_SECONDS, None
+    return SCENE_SECONDS, None
+
+
+def _predict(method: str, truth, X_ref, X_new, t_ref=None, t_new=None, slider: str = "") -> np.ndarray:
     if method == "mean":
         return np.full(len(X_new), float(truth.mean()))
     out = 0.5 * (float(truth.mean()) + _ridge(X_ref, truth)(X_new)) + 0.5 * _similar(X_ref, truth, X_new)
     if method == "blend+scene":
+        limit, fade = _scene(slider)
         gaps = np.abs(t_new[:, None] - t_ref[None, :])
         nearest = np.argmin(gaps, axis=1)
-        close = gaps[np.arange(len(t_new)), nearest] <= SCENE_SECONDS
-        out[close] = truth[nearest[close]]
+        gap = gaps[np.arange(len(t_new)), nearest]
+        close = gap <= limit
+        weight = np.exp(-gap[close] / fade) if fade else 1.0
+        out[close] = weight * truth[nearest[close]] + (1.0 - weight) * out[close]
     return out
 
 
@@ -185,6 +208,6 @@ def calibrate(
         methods[p] = method
         if not out:
             continue
-        for row, value in zip(out, _predict(method, truth, F_ref, F_new, t_ref, t_new)):
+        for row, value in zip(out, _predict(method, truth, F_ref, F_new, t_ref, t_new, p)):
             row[p] = float(value)
     return out, methods

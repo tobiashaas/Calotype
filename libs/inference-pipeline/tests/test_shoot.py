@@ -136,14 +136,41 @@ def test_a_slider_most_examples_share_stays_exactly_there():
 def test_a_photo_close_in_time_to_an_edited_one_takes_its_values():
     rng = np.random.default_rng(9)
     X = rng.normal(size=(14, 6))
-    exposure = rng.normal(0.4, 0.4, 10)
-    truth = [{"exposure": float(e)} for e in exposure]
+    contrast = rng.normal(10.0, 12.0, 10)
+    truth = [{"contrast": float(c)} for c in contrast]
     times = [600.0 * i for i in range(10)]                    # one example every ten minutes
     new_times = [600.0 * 3 + 30, 600.0 * 7 - 90, 600.0 * 2 + 300, 99_999.0]
     out, methods = calibrate(truth, None, X[:10], None, X[10:], times, new_times)
     plain, _ = calibrate(truth, None, X[:10], None, X[10:])
-    assert methods == {"exposure": "blend+scene"}
-    assert out[0]["exposure"] == pytest.approx(exposure[3])   # 30 s after example 3
-    assert out[1]["exposure"] == pytest.approx(exposure[7])   # 90 s before example 7
-    assert out[2]["exposure"] == pytest.approx(plain[2]["exposure"])   # five minutes from any: blend
-    assert out[3]["exposure"] == pytest.approx(plain[3]["exposure"])
+    assert methods == {"contrast": "blend+scene"}
+    assert out[0]["contrast"] == pytest.approx(contrast[3])   # 30 s after example 3
+    assert out[1]["contrast"] == pytest.approx(contrast[7])   # 90 s before example 7
+    assert out[2]["contrast"] == pytest.approx(plain[2]["contrast"])   # five minutes from any: blend
+    assert out[3]["contrast"] == pytest.approx(plain[3]["contrast"])
+
+
+def test_white_balance_follows_the_closest_edited_photo_for_ten_minutes():
+    rng = np.random.default_rng(5)
+    X = rng.normal(size=(13, 6))
+    temp = rng.normal(5500.0, 600.0, 10)
+    truth = [{"temp": float(t)} for t in temp]
+    times = [3600.0 * i for i in range(10)]                   # one example every hour
+    out, _ = calibrate(truth, None, X[:10], None, X[10:], times, [3600.0 * 4 + 500, 3600.0 * 6 - 590, 3600.0 * 2 + 700])
+    plain, _ = calibrate(truth, None, X[:10], None, X[10:])
+    assert out[0]["temp"] == pytest.approx(temp[4])           # eight minutes after example 4
+    assert out[1]["temp"] == pytest.approx(temp[6])
+    assert out[2]["temp"] == pytest.approx(plain[2]["temp"])  # more than ten minutes: blend
+
+
+def test_exposure_of_the_closest_edited_photo_fades_with_the_time_between():
+    rng = np.random.default_rng(9)
+    X = rng.normal(size=(13, 6))
+    exposure = rng.normal(0.4, 0.4, 10)
+    truth = [{"exposure": float(e)} for e in exposure]
+    times = [3600.0 * i for i in range(10)]
+    out, _ = calibrate(truth, None, X[:10], None, X[10:], times, [3600.0 * 3, 3600.0 * 3 + 60, 3600.0 * 3 + 601])
+    plain, _ = calibrate(truth, None, X[:10], None, X[10:])
+    assert out[0]["exposure"] == pytest.approx(exposure[3])   # same moment: the example's value
+    share = np.exp(-1.0)                                      # one minute later: 1/e of it
+    assert out[1]["exposure"] == pytest.approx(share * exposure[3] + (1 - share) * plain[1]["exposure"])
+    assert out[2]["exposure"] == pytest.approx(plain[2]["exposure"])
