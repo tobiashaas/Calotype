@@ -21,7 +21,7 @@ local Commands = {}
 -- or metamethod call", found in the first automated run). LrTasks.pcall can.
 local pcall = LrTasks.pcall or pcall
 
-local PLUGIN_VERSION = "0.3.0"
+local PLUGIN_VERSION = "0.3.2" -- same as Info.lua (checked by tests/run.lua)
 local LIST_KEYS = { "uuid", "path", "fileFormat", "rating", "pickStatus", "isVirtualCopy" }
 
 local function photosByUuid(catalog, uuids)

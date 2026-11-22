@@ -820,6 +820,10 @@ test("menu scripts compile", function()
   end
   local info = assert(loadfile(PLUGIN .. "Info.lua"))()
   eq(info.LrToolkitIdentifier, "xyz.calotype.lightroom", "toolkit id")
+  local v = info.VERSION
+  local source = assert(io.open(PLUGIN .. "AutomationCommands.lua")):read("*a")
+  eq(source:match('PLUGIN_VERSION = "([%d%.]+)"'), v.major .. "." .. v.minor .. "." .. v.revision,
+     "the version the automation ping reports")
   for _, item in ipairs(info.LrLibraryMenuItems) do
     assert(io.open(PLUGIN .. item.file), "menu file exists: " .. item.file)
   end
