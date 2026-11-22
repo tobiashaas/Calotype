@@ -40,9 +40,9 @@ log = get_logger("calotype.train_worker")
 # Share of the training photos still on the camera's white balance from which a profile keeps
 # it as shot. Leaving it is exactly right for every photo the photographer leaves, while a
 # Kelvin value predicted for an unseen wedding was within 150 K for only 13-27 % of the photos
-# (three of the maintainer's weddings of one recipe, each predicted from the other two) — so
-# keeping the camera's white balance wins well below a majority.
-AS_SHOT_SHARE = 0.4
+# (three of the maintainer's weddings of one recipe, each predicted from the other two). So
+# keeping the camera's white balance wins as soon as more photos than that are left as shot.
+AS_SHOT_SHARE = 0.3
 
 
 def _s3_client():
