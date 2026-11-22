@@ -20,37 +20,44 @@
     crs:ProcessVersion="15.4"
     crs:HasSettings="True"
     crs:ToneCurveName2012="Custom"
-    crs:Texture="10"
     crs:Clarity2012="10"
-    crs:Dehaze="20"
-    crs:Vibrance="0"
     crs:Saturation="-16"
-    crs:HueAdjustmentOrange="0"
-    crs:HueAdjustmentYellow="-8"
+    crs:ParametricShadows="-100"
+    crs:ParametricDarks="25"
+    crs:ParametricLights="8"
+    crs:ParametricShadowSplit="10"
+    crs:ParametricMidtoneSplit="54"
+    crs:ParametricHighlightSplit="90"
+    crs:HueAdjustmentRed="36"
+    crs:HueAdjustmentOrange="-8"
+    crs:HueAdjustmentYellow="-12"
     crs:HueAdjustmentGreen="12"
-    crs:HueAdjustmentBlue="-5"
-    crs:SaturationAdjustmentRed="14"
-    crs:SaturationAdjustmentOrange="-3"
-    crs:SaturationAdjustmentYellow="10"
-    crs:SaturationAdjustmentGreen="-35"
-    crs:SaturationAdjustmentAqua="-10"
-    crs:SaturationAdjustmentBlue="-15"
-    crs:SaturationAdjustmentPurple="-14"
-    crs:SaturationAdjustmentMagenta="-20"
-    crs:LuminanceAdjustmentOrange="6"
-    crs:LuminanceAdjustmentYellow="5"
-    crs:LuminanceAdjustmentGreen="4"
-    crs:ColorGradeMidtoneHue="68"
-    crs:ColorGradeMidtoneSat="13"
-    crs:ColorGradeHighlightHue="45"
-    crs:ColorGradeHighlightSat="8"
-    crs:ColorGradeShadowHue="215"
-    crs:ColorGradeShadowSat="6"
-    crs:ColorGradeBlending="50"
-    crs:ColorGradeShadowLum="0"
-    crs:ColorGradeHighlightLum="0"
-    crs:ColorGradeGlobalHue="0"
-    crs:ColorGradeGlobalSat="0"
+    crs:HueAdjustmentAqua="-8"
+    crs:HueAdjustmentBlue="-17"
+    crs:HueAdjustmentPurple="-1"
+    crs:SaturationAdjustmentRed="-20"
+    crs:SaturationAdjustmentOrange="5"
+    crs:SaturationAdjustmentYellow="-31"
+    crs:SaturationAdjustmentGreen="-26"
+    crs:SaturationAdjustmentAqua="6"
+    crs:SaturationAdjustmentBlue="-8"
+    crs:SaturationAdjustmentPurple="1"
+    crs:SaturationAdjustmentMagenta="-2"
+    crs:LuminanceAdjustmentRed="-2"
+    crs:LuminanceAdjustmentOrange="-10"
+    crs:LuminanceAdjustmentYellow="-2"
+    crs:LuminanceAdjustmentGreen="3"
+    crs:LuminanceAdjustmentAqua="3"
+    crs:LuminanceAdjustmentBlue="6"
+    crs:LuminanceAdjustmentPurple="1"
+    crs:LuminanceAdjustmentMagenta="2"
+    crs:GrainAmount="29"
+    crs:GrainSize="25"
+    crs:PostCropVignetteAmount="-16"
+    crs:Sharpness="70"
+    crs:SharpenRadius="0.7"
+    crs:SharpenDetail="25"
+    crs:SharpenEdgeMasking="70"
     crs:ConvertToGrayscale="False">
    <crs:Name>
     <rdf:Alt>
@@ -75,33 +82,43 @@
    </crs:Group>
    <crs:Description>
     <rdf:Alt>
-     <rdf:li xml:lang="x-default">Classic wedding look: Texture +10, Clarity +10, Dehaze +20, warm skin hues and signature tone curve.</rdf:li>
-     <rdf:li xml:lang="de-DE">Klassischer Hochzeits-Look: Struktur +10, Klarheit +10, Dehaze +20, edle Farbtöne und Gradationskurve.</rdf:li>
+     <rdf:li xml:lang="x-default">The maintainer's wedding look as 26 of his weddings 2020–2023 carry it: matte shadows through the channel curves, restrained reds and yellows, fine grain, a light vignette.</rdf:li>
+     <rdf:li xml:lang="de-DE">Der Hochzeits-Look des Maintainers, wie ihn 26 seiner Hochzeiten 2020–2023 tragen: matte Tiefen über die Farbkurven, zurückgenommene Rot- und Gelbtöne, feines Korn, leichte Vignette.</rdf:li>
     </rdf:Alt>
    </crs:Description>
    <crs:ToneCurvePV2012>
     <rdf:Seq>
-     <rdf:li>0, 8</rdf:li>
-     <rdf:li>61, 59</rdf:li>
-     <rdf:li>194, 186</rdf:li>
-     <rdf:li>255, 244</rdf:li>
+     <rdf:li>0, 9</rdf:li>
+     <rdf:li>60, 63</rdf:li>
+     <rdf:li>129, 121</rdf:li>
+     <rdf:li>190, 178</rdf:li>
+     <rdf:li>255, 228</rdf:li>
     </rdf:Seq>
    </crs:ToneCurvePV2012>
    <crs:ToneCurvePV2012Red>
     <rdf:Seq>
      <rdf:li>0, 0</rdf:li>
+     <rdf:li>80, 52</rdf:li>
+     <rdf:li>130, 126</rdf:li>
+     <rdf:li>198, 202</rdf:li>
      <rdf:li>255, 255</rdf:li>
     </rdf:Seq>
    </crs:ToneCurvePV2012Red>
    <crs:ToneCurvePV2012Green>
     <rdf:Seq>
      <rdf:li>0, 0</rdf:li>
+     <rdf:li>78, 47</rdf:li>
+     <rdf:li>130, 126</rdf:li>
+     <rdf:li>192, 198</rdf:li>
      <rdf:li>255, 255</rdf:li>
     </rdf:Seq>
    </crs:ToneCurvePV2012Green>
    <crs:ToneCurvePV2012Blue>
     <rdf:Seq>
      <rdf:li>0, 0</rdf:li>
+     <rdf:li>80, 45</rdf:li>
+     <rdf:li>136, 126</rdf:li>
+     <rdf:li>205, 214</rdf:li>
      <rdf:li>255, 255</rdf:li>
     </rdf:Seq>
    </crs:ToneCurvePV2012Blue>

@@ -31,7 +31,8 @@ _STYLE_PREFIXES = (
 )
 _STYLE_KEYS = frozenset({
     "Texture", "Clarity2012", "Dehaze", "Vibrance", "Saturation", "ConvertToGrayscale",
-    "CameraProfile", "Sharpness", "LuminanceSmoothing", "ColorNoiseReduction",
+    "CameraProfile", "Sharpness", "SharpenRadius", "SharpenDetail", "SharpenEdgeMasking",
+    "LuminanceSmoothing", "ColorNoiseReduction",
     "GrayMixerRed", "GrayMixerOrange", "GrayMixerYellow", "GrayMixerGreen",
     "GrayMixerAqua", "GrayMixerBlue", "GrayMixerPurple", "GrayMixerMagenta",
 })

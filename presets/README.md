@@ -20,7 +20,7 @@ no values come from other products. Run the script after changing a look.
 | Old Postcard | Faded blacks, amber highlights, teal shadows, grain |
 | Charcoal | Deep, dense black and white with dark skies |
 | Silver Haze | Bright, airy black and white with glowing skin |
-| Wedding Emotional | Classic wedding aesthetic: warm skin hues, refined tone curve, gentle texture |
+| Wedding Emotional | The maintainer's own wedding look (26 weddings 2020–2023): matte shadows through the channel curves, restrained reds and yellows, fine grain, a light vignette |
 | Wedding Golden Light | Golden hour wedding mood: rich warm autumn tones, lifted shadow curve |
 | Lively Moments | Crisp, lively look for family and child portraits |
 | Cinematic Drama | Moody, cinematic contrast look with deep shadows and muted vibrance |
