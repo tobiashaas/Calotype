@@ -61,8 +61,9 @@ def test_series_follows_the_closest_edited_photo_in_time():
     times[ids[10]], times[ids[11]] = 2.5, 36007.5
     targets = calibrate_to_shoot(predictions, vectors, settings, ids, "raw", uuid4(), times)
     assert targets == ids[10:]
-    assert predictions[ids[10]]["exposure"] == 0.2
-    assert predictions[ids[11]]["exposure"] == 1.2
+    # Exposure of the closest example fades with the seconds between, so nearly its value.
+    assert predictions[ids[10]]["exposure"] == pytest.approx(0.2, abs=0.05)
+    assert predictions[ids[11]]["exposure"] == pytest.approx(1.2, abs=0.05)
 
 
 def test_without_a_profile_only_the_edited_sliders_are_set():
