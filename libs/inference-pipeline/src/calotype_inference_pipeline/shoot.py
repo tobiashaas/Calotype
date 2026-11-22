@@ -185,17 +185,19 @@ def calibrate(
         X_new_camera = _with_camera(X_new, camera) if len(X_new) else X_new
     out = [dict(m) for m in model] if with_model else [{} for _ in range(len(X_new))]
     methods: dict[str, str] = {}
-    params = [p for p in TOLERANCE if all(p in r for r in references) and (not with_model or (
-        all(p in m for m in reference_model) and all(p in m for m in model)))]
+    params = [p for p in TOLERANCE if all(p in r for r in references)]
     for p in params:
         truth = np.array([r[p] for r in references], dtype=float)
-        m_ref = np.array([m[p] for m in reference_model], dtype=float) if with_model else None
-        m_new = np.array([m[p] for m in model], dtype=float) if with_model else None
+        # A profile may predict only some sliders (one that keeps the camera's white balance
+        # has no temperature): the others are calibrated from the references alone.
+        modelled = with_model and all(p in m for m in reference_model) and all(p in m for m in model)
+        m_ref = np.array([m[p] for m in reference_model], dtype=float) if modelled else None
+        m_new = np.array([m[p] for m in model], dtype=float) if modelled else None
         lit = with_light and p in LIGHT_SLIDERS and len(X_new) > 0
         F_ref, F_new = (X_ref_light, X_new_light) if lit else (X_ref, X_new)
         if with_camera and p in CAMERA_SLIDERS and len(X_new) > 0:
             F_ref, F_new = X_ref_camera, X_new_camera
-        if with_model and len(X_new) > 0:
+        if modelled and len(X_new) > 0:
             F_ref = np.column_stack([F_ref, np.tile(m_ref[:, None], MODEL_COPIES)])
             F_new = np.column_stack([F_new, np.tile(m_new[:, None], MODEL_COPIES)])
         shared, share = _shared_value(truth)
