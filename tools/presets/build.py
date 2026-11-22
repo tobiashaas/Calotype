@@ -240,6 +240,7 @@ LOOKS: list[dict] = [
         "curve_green": [(0, 0), (78, 47), (130, 126), (192, 198), (255, 255)],
         "curve_blue": [(0, 0), (80, 45), (136, 126), (205, 214), (255, 255)],
         "settings": {
+            "CameraProfile": "Adobe Standard",
             "Clarity2012": 10,
             "Saturation": -16,
             "ParametricShadows": -100, "ParametricDarks": 25, "ParametricLights": 8,

@@ -66,7 +66,10 @@ function LookPresets.settings(id)
   local out, n = {}, 0
   for k, v in pairs(settings) do
     local t = type(v)
-    if type(k) == "string" and (t == "number" or t == "string" or t == "boolean") then
+    if k == "CameraProfile" and v == "Default Profile" then
+      -- Lightroom's placeholder for "the preset names no profile": not a look setting.
+      -- Passing it on replaced the photographer's camera profile on every photo.
+    elseif type(k) == "string" and (t == "number" or t == "string" or t == "boolean") then
       out[k], n = v, n + 1
     elseif type(k) == "string" and t == "table" and isNumberList(v) then
       local copy = {}

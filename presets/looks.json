@@ -528,6 +528,7 @@
   "about_de": "Der Hochzeits-Look des Maintainers, wie ihn 26 seiner Hochzeiten 2020\u20132023 tragen: matte Tiefen \u00fcber die Farbkurven, zur\u00fcckgenommene Rot- und Gelbt\u00f6ne, feines Korn, leichte Vignette.",
   "bw": false,
   "settings": {
+   "CameraProfile": "Adobe Standard",
    "Clarity2012": 10,
    "Saturation": -16,
    "ParametricShadows": -100,
