@@ -34,6 +34,7 @@ pub const COMMANDS: &[&str] = &[
     "set_mask_strength",
     "look_presets",
     "virtual_copies",
+    "fresh",
 ];
 
 #[derive(Debug, Clone, Serialize, PartialEq)]

@@ -11,6 +11,7 @@ local LrProgressScope = import "LrProgressScope"
 local LrTasks = import "LrTasks"
 
 local Actions = require "Actions"
+local Fresh = require "Fresh"
 local LookPresets = require "LookPresets"
 local Json = require "Json"
 local PhotoData = require "PhotoData"
@@ -43,7 +44,7 @@ local function plain(r)
     ok = r.ok, title = r.title, text = r.text, canceled = r.canceled, job_id = r.job_id,
     profile_id = r.profile_id, applied = r.applied, applied_uuids = r.applied_uuids,
     skipped_type = r.skipped_type, photos = r.photos, straightened = r.straightened,
-    kept_crop = r.kept_crop, masks = r.masks,
+    kept_crop = r.kept_crop, masks = r.masks, reset = r.reset,
   })
 end
 
@@ -179,7 +180,7 @@ function Commands.apply(catalog, args)
   local progress = progressScope(profile.name)
   local ok, r = pcall(Actions.apply, catalog, photos, profile, progress,
     { straighten = args.straighten == true, retouch = args.retouch,
-      learnFromEdits = args.learn_from_edits == true, look = look })
+      learnFromEdits = args.learn_from_edits == true, look = look, fresh = args.fresh == true })
   progress:done()
   if not ok then error(r) end
   local out = plain(r)
@@ -415,6 +416,14 @@ function Commands.virtual_copies(catalog, args)
     out[master and master:getRawMetadata("uuid") or "?"] = copy:getRawMetadata("uuid")
   end
   return Json.object({ copies = out, missing = missing })
+end
+
+--- Start from zero without applying anything: reset these photos (Fresh.lua).
+function Commands.fresh(catalog, args)
+  local photos, missing = photosByUuid(catalog, args.uuids)
+  local reset, snapshot = 0, nil
+  if #photos > 0 then reset, snapshot = Fresh.start(catalog, photos) end
+  return Json.object({ reset = reset, snapshot = snapshot, missing = missing })
 end
 
 --- Run one command; returns ok, result (result = { error = message } on failure).

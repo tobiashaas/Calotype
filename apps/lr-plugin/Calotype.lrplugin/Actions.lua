@@ -6,6 +6,7 @@ Every function returns a result table; dialogs are the caller's business.
 Call only from an async task. ]]
 
 local BridgeClient = require "BridgeClient"
+local Fresh = require "Fresh"
 local JobWait = require "JobWait"
 local Log = require "Log"
 local PhotoData = require "PhotoData"
@@ -120,8 +121,17 @@ end
 -- options.learnFromEdits: photos of the selection already edited set the shoot's look and
 -- stay as they are; options.look: develop settings of a preset whose look replaces the
 -- profile's (LookPresets.settings) — the edited photos' shared look still goes on top. A profile from Actions.ownEditsProfile always learns from the edits.
+-- options.fresh: start from zero — every selected photo is reset first (Fresh.lua), so the
+-- result is exactly the profile's values and the look, nothing left from earlier edits. Then
+-- no photo is an example: it needs a trained profile and switches learnFromEdits off.
 function Actions.apply(catalog, photos, profile, progress, options)
   options = options or {}
+  if profile.own_edits and options.fresh then
+    return result(false, LOC "$$$/Calotype/Fresh/NeedsProfileTitle=Start from zero needs a profile",
+      LOC "$$$/Calotype/Fresh/NeedsProfile=After a reset no photo is edited, so there is nothing to learn from in the selection. Choose a trained profile, or switch start from zero off.",
+      "warning")
+  end
+  if options.fresh then options.learnFromEdits = false end
   if profile.own_edits then options.learnFromEdits = true end
   -- Only photos of the profile's file type: RAW white balance (Kelvin) and JPEG
   -- white balance (relative) are different sliders.
@@ -137,6 +147,13 @@ function Actions.apply(catalog, photos, profile, progress, options)
     return result(false, LOC "$$$/Calotype/Apply/NoMatchTitle=No matching photos",
       LOC("$$$/Calotype/Apply/NoMatch=\"^1\" is a ^2 profile; none of the selected photos is ^2.",
         profile.name, formatText(profile.format_type)), "warning")
+  end
+
+  local reset, resetSnapshot = 0, nil
+  if options.fresh then
+    progress:setCaption(LOC "$$$/Calotype/Fresh/Resetting=Resetting the photos")
+    reset, resetSnapshot = Fresh.start(catalog, matching)
+    Log.info("start from zero: %d photos reset", reset)
   end
 
   local reg, regErr = JobWait.registerPhotos(matching, progress)
@@ -264,6 +281,10 @@ function Actions.apply(catalog, photos, profile, progress, options)
   elseif applied < #reg.uuids then
     notes[#notes + 1] = LOC("$$$/Calotype/Apply/NoResult=^1 photos got no result (no usable preview).", #reg.uuids - applied)
   end
+  if reset > 0 then
+    notes[#notes + 1] = LOC("$$$/Calotype/Fresh/Done=^1 photos were reset first. The state before is kept as the snapshot \"^2\".",
+      reset, resetSnapshot)
+  end
   if straightened > 0 then
     notes[#notes + 1] = LOC("$$$/Calotype/Apply/Straightened=^1 photos were straightened.", straightened)
   end
@@ -277,7 +298,7 @@ function Actions.apply(catalog, photos, profile, progress, options)
   return result(true, LOC("$$$/Calotype/Apply/DoneTitle=\"^1\" applied to ^2 photos", profile.name, applied),
     #notes > 0 and table.concat(notes, "\n") or LOC "$$$/Calotype/Apply/UndoHint=Use Edit > Undo to revert.", "info",
     { job_id = job.job_id, applied = applied, applied_uuids = appliedUuids, skipped_type = wrongType,
-      straightened = straightened, kept_crop = keptCrop, masks = masks })
+      straightened = straightened, kept_crop = keptCrop, masks = masks, reset = reset })
 end
 
 -- ---------------------------------------------------------------------------- culling

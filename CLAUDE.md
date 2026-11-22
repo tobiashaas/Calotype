@@ -139,6 +139,7 @@ TODO.md                # Completed + open work items — keep up to date
 | `libs/culling/src/calotype_culling/cull.py` | `cull()`: learned from decided photos (≥ 8 per class) else rules; `decision_from_metadata` |
 | `apps/lr-plugin/Calotype.lrplugin/CullPhotos.lua` | Menu: sort selected photos into collections (stars/flags untouched) |
 | `apps/lr-plugin/Calotype.lrplugin/Retouch.lua` | AI-mask retouch: find our presets by correction name, snapshot, apply, `updateAISettings`, remove empty masks |
+| `apps/lr-plugin/Calotype.lrplugin/Fresh.lua` | Start from zero: reset the selected photos (neutral sliders, curves, colors, crop, no masks) before a profile is applied; dated snapshot of the state before |
 | `apps/bridge/core/src/presets.rs` | Embeds `presets/` and installs them into Camera Raw's settings folder on start |
 | `tools/presets/build.py` | Generates the looks and retouch presets (CC0) |
 | `tools/lr_e2e/retouch_check.py` | Retouch end-to-end in Lightroom (masks computed, own masks kept, no duplicates, restore) |
