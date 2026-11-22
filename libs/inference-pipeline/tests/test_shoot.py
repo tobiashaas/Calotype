@@ -174,3 +174,15 @@ def test_exposure_of_the_closest_edited_photo_fades_with_the_time_between():
     share = np.exp(-1.0)                                      # one minute later: 1/e of it
     assert out[1]["exposure"] == pytest.approx(share * exposure[3] + (1 - share) * plain[1]["exposure"])
     assert out[2]["exposure"] == pytest.approx(plain[2]["exposure"])
+
+
+def test_a_slider_the_profile_does_not_predict_is_calibrated_from_the_examples_alone():
+    rng = np.random.default_rng(4)
+    X = rng.normal(size=(15, 6))
+    truth = [{"exposure": 0.3 + 0.1 * i, "temp": 5000.0 + 40 * i} for i in range(10)]
+    # The profile keeps the camera's white balance: its predictions carry no temperature.
+    ref_model = [{"exposure": 0.2} for _ in range(10)]
+    model = [{"exposure": 0.2} for _ in range(5)]
+    out, methods = calibrate(truth, ref_model, X[:10], model, X[10:])
+    assert set(methods) == {"exposure", "temp"}
+    assert all("temp" in row and 4800 < row["temp"] < 5600 for row in out)

@@ -13,7 +13,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.orm import Session, sessionmaker
 
-from calotype_edit_serializer import from_lightroom, shared_masks
+from calotype_edit_serializer import from_lightroom, keeps_as_shot, shared_masks
 from calotype_domain.jobs import JobStatus
 from calotype_domain.profiles import ProfileStatus
 from calotype_inference_pipeline import (
@@ -35,6 +35,14 @@ from calotype_queue.constants import QUEUE_TRAIN
 from calotype_queue.publisher import RedisQueuePublisher, redis_from_env
 
 log = get_logger("calotype.train_worker")
+
+
+# Share of the training photos still on the camera's white balance from which a profile keeps
+# it as shot. Leaving it is exactly right for every photo the photographer leaves, while a
+# Kelvin value predicted for an unseen wedding was within 150 K for only 13-27 % of the photos
+# (three of the maintainer's weddings of one recipe, each predicted from the other two) — so
+# keeping the camera's white balance wins well below a majority.
+AS_SHOT_SHARE = 0.4
 
 
 def _s3_client():
@@ -156,7 +164,13 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
             )
 
         # Train real model and save bytes to MinIO
-        model_bytes = train_for_version(feature_vectors, targets, CURRENT_FEATURE_VERSION)
+        # Most photos still on the camera's white balance: the photographer's way is to leave
+        # it, so the profile leaves it too instead of predicting a Kelvin value.
+        kept = sum(1 for s in used_settings if keeps_as_shot(s, format_type))
+        as_shot = kept / len(used_settings) >= AS_SHOT_SHARE
+        log.info("white balance: %d of %d training photos as shot -> %s", kept, len(used_settings),
+                 "kept as shot" if as_shot else "predicted")
+        model_bytes = train_for_version(feature_vectors, targets, CURRENT_FEATURE_VERSION, as_shot=as_shot)
         profile_id = UUID(profile_id_str) if profile_id_str else None
         artifact_name = f"model-{CURRENT_FEATURE_VERSION}.joblib"
         artifact_key = f"models/{profile_id}/{artifact_name}" if profile_id else f"models/job-{job_uuid}/{artifact_name}"

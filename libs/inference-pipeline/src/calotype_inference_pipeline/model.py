@@ -55,17 +55,41 @@ def train_model(
 
 
 BOOSTING_MIN_SAMPLES = 30  # below this, boosting overfits; Ridge on the same features is safer
+# A slider this share of the training photos carry with the identical value belongs to the
+# photographer's recipe: it is stored as a constant instead of being predicted. Measured on
+# 30 of the maintainer's weddings: 85-100 % of a wedding's photos share contrast, highlights,
+# shadows, whites and blacks exactly — only the exposure changes from photo to photo. A model
+# over all ten sliders averaged three such recipes into values none of them has.
+RECIPE_SHARE = 0.6
+# White balance is never a recipe constant: a Kelvin value belongs to the light of one photo.
+NEVER_CONSTANT = ("temp", "tint")
+
+
+def recipe_constants(rows: list[dict[str, float]]) -> dict[str, float]:
+    """Sliders that at least ``RECIPE_SHARE`` of the rows carry with the identical value."""
+    out: dict[str, float] = {}
+    for p in LR_PARAMS:
+        if p in NEVER_CONSTANT or not rows:
+            continue
+        values, counts = np.unique(np.round([row.get(p, 0.0) for row in rows], 3), return_counts=True)
+        if counts.max() / len(rows) >= RECIPE_SHARE:
+            out[p] = float(values[counts.argmax()])
+    return out
 
 
 def train_model_v2(
     feature_vectors: list[list[float]],
     lr_settings_list: list[dict[str, float]],
     feature_version: str,
+    as_shot: bool = False,
 ) -> bytes:
     """Gradient boosting per slider (falls back to Ridge for small sets).
 
     The artifact records the feature version it was trained on, so inference can refuse
-    vectors of another version instead of silently predicting nonsense.
+    vectors of another version instead of silently predicting nonsense. Sliders of the
+    photographer's recipe (``recipe_constants``) are stored as constants and win over the
+    model. as_shot: most training photos kept the camera's white balance — then the profile
+    predicts no temperature and tint, and the photos it is applied to keep theirs.
     """
     if len(feature_vectors) < MIN_SAMPLES:
         raise ValueError(f"need at least {MIN_SAMPLES} training photos")
@@ -87,7 +111,7 @@ def train_model_v2(
             ).fit(X, Y[:, j])
         artifact = {"type": "gbr_v2", "models": models}
     artifact.update(lr_params=LR_PARAMS, feature_version=feature_version, n_features=X.shape[1],
-                    n_samples=len(X))
+                    n_samples=len(X), constants=recipe_constants(lr_settings_list), as_shot=bool(as_shot))
     buf = io.BytesIO()
     joblib.dump(artifact, buf)
     return buf.getvalue()
@@ -113,7 +137,8 @@ def artifact_feature_version(model_bytes: bytes) -> str:
 def run_inference(model_bytes: bytes, feature_vector: list[float]) -> dict[str, float]:
     """Apply a trained model to a feature vector and return LR settings.
 
-    Returns a dict of {param: value} for all LR_PARAMS.
+    Returns a dict of {param: value} for all LR_PARAMS — without temperature and tint for a
+    profile whose training photos kept the camera's white balance.
 
     Raises ``ValueError`` for an unreadable artifact or a vector of the wrong size:
     silently returning zeros would reset the user's photos to neutral settings.
@@ -132,6 +157,13 @@ def run_inference(model_bytes: bytes, feature_vector: list[float]) -> dict[str, 
     params = artifact["lr_params"]
     X = np.array([feature_vector], dtype=np.float32)
     if kind == "gbr_v2":
-        return {p: float(artifact["models"][p].predict(X)[0]) for p in params}
-    pred = artifact["model"].predict(artifact["scaler"].transform(X))[0]  # ridge_v1 / ridge_v2
-    return {p: float(v) for p, v in zip(params, pred)}
+        out = {p: float(artifact["models"][p].predict(X)[0]) for p in params}
+    else:
+        pred = artifact["model"].predict(artifact["scaler"].transform(X))[0]  # ridge_v1 / ridge_v2
+        out = {p: float(v) for p, v in zip(params, pred)}
+    # The recipe wins over the model (artifacts before this field have none).
+    out.update(artifact.get("constants") or {})
+    if artifact.get("as_shot"):
+        for p in NEVER_CONSTANT:
+            out.pop(p, None)
+    return out
