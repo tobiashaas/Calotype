@@ -233,44 +233,31 @@ LOOKS: list[dict] = [
     {
         "name": "Wedding Emotional",
         "name_de": "Wedding Emotional",
-        "about_de": "Klassischer Hochzeits-Look: Struktur +10, Klarheit +10, Dehaze +20, edle Farbtöne und Gradationskurve.",
-        "about": "Classic wedding look: Texture +10, Clarity +10, Dehaze +20, warm skin hues and signature tone curve.",
-        "curve": [(0, 8), (61, 59), (194, 186), (255, 244)],
-        "curve_red": [(0, 0), (255, 255)],
-        "curve_green": [(0, 0), (255, 255)],
-        "curve_blue": [(0, 0), (173, 169), (255, 255)],
+        "about_de": "Der Hochzeits-Look des Maintainers, wie ihn 26 seiner Hochzeiten 2020–2023 tragen: matte Tiefen über die Farbkurven, zurückgenommene Rot- und Gelbtöne, feines Korn, leichte Vignette.",
+        "about": "The maintainer's wedding look as 26 of his weddings 2020–2023 carry it: matte shadows through the channel curves, restrained reds and yellows, fine grain, a light vignette.",
+        "curve": [(0, 9), (60, 63), (129, 121), (190, 178), (255, 228)],
+        "curve_red": [(0, 0), (80, 52), (130, 126), (198, 202), (255, 255)],
+        "curve_green": [(0, 0), (78, 47), (130, 126), (192, 198), (255, 255)],
+        "curve_blue": [(0, 0), (80, 45), (136, 126), (205, 214), (255, 255)],
         "settings": {
-            "Texture": 10,
             "Clarity2012": 10,
-            "Dehaze": 20,
-            "Vibrance": 0,
             "Saturation": -16,
-            "HueAdjustmentOrange": 0,
-            "HueAdjustmentYellow": -8,
-            "HueAdjustmentGreen": 12,
-            "HueAdjustmentBlue": -5,
-            "SaturationAdjustmentRed": 14,
-            "SaturationAdjustmentOrange": -3,
-            "SaturationAdjustmentYellow": 10,
-            "SaturationAdjustmentGreen": -35,
-            "SaturationAdjustmentAqua": -10,
-            "SaturationAdjustmentBlue": -15,
-            "SaturationAdjustmentPurple": -14,
-            "SaturationAdjustmentMagenta": -20,
-            "LuminanceAdjustmentOrange": 6,
-            "LuminanceAdjustmentYellow": 5,
-            "LuminanceAdjustmentGreen": 4,
-            "ColorGradeMidtoneHue": 68,
-            "ColorGradeMidtoneSat": 13,
-            "ColorGradeHighlightHue": 45,
-            "ColorGradeHighlightSat": 8,
-            "ColorGradeShadowHue": 215,
-            "ColorGradeShadowSat": 6,
-            "ColorGradeBlending": 50,
-            "ColorGradeShadowLum": 0,
-            "ColorGradeHighlightLum": 0,
-            "ColorGradeGlobalHue": 0,
-            "ColorGradeGlobalSat": 0,
+            "ParametricShadows": -100, "ParametricDarks": 25, "ParametricLights": 8,
+            "ParametricShadowSplit": 10, "ParametricMidtoneSplit": 54, "ParametricHighlightSplit": 90,
+            "HueAdjustmentRed": 36, "HueAdjustmentOrange": -8, "HueAdjustmentYellow": -12,
+            "HueAdjustmentGreen": 12, "HueAdjustmentAqua": -8, "HueAdjustmentBlue": -17,
+            "HueAdjustmentPurple": -1,
+            "SaturationAdjustmentRed": -20, "SaturationAdjustmentOrange": 5,
+            "SaturationAdjustmentYellow": -31, "SaturationAdjustmentGreen": -26,
+            "SaturationAdjustmentAqua": 6, "SaturationAdjustmentBlue": -8,
+            "SaturationAdjustmentPurple": 1, "SaturationAdjustmentMagenta": -2,
+            "LuminanceAdjustmentRed": -2, "LuminanceAdjustmentOrange": -10,
+            "LuminanceAdjustmentYellow": -2, "LuminanceAdjustmentGreen": 3,
+            "LuminanceAdjustmentAqua": 3, "LuminanceAdjustmentBlue": 6,
+            "LuminanceAdjustmentPurple": 1, "LuminanceAdjustmentMagenta": 2,
+            "GrainAmount": 29, "GrainSize": 25,
+            "PostCropVignetteAmount": -16,
+            "Sharpness": 70, "SharpenRadius": 0.7, "SharpenDetail": 25, "SharpenEdgeMasking": 70,
         },
     },
     {
@@ -486,7 +473,7 @@ def preset_xmp(look: dict) -> str:
     lines += _alt("Group", GROUP) + _alt("Description", look["about"], look.get("about_de"))
     lines += seq("ToneCurvePV2012", look["curve"])
     for channel in ("Red", "Green", "Blue"):
-        lines += seq(f"ToneCurvePV2012{channel}", [(0, 0), (255, 255)])
+        lines += seq(f"ToneCurvePV2012{channel}", look.get(f"curve_{channel.lower()}", [(0, 0), (255, 255)]))
     lines += ["  </rdf:Description>", " </rdf:RDF>", "</x:xmpmeta>", '<?xpacket end="w"?>', ""]
     return "\n".join(lines)
 
@@ -501,6 +488,8 @@ def main() -> int:
         index.append({"name": look["name"], "name_de": look.get("name_de"), "file": path.name,
                       "about": look["about"], "about_de": look.get("about_de"), "bw": bool(look.get("bw")),
                       "settings": {**look["settings"], "ToneCurvePV2012": flat,
+                                   **{f"ToneCurvePV2012{c.capitalize()}": [float(v) for p in look[f"curve_{c}"] for v in p]
+                                      for c in ("red", "green", "blue") if f"curve_{c}" in look},
                                    "ConvertToGrayscale": bool(look.get("bw"))}})
         print(f"wrote {path.relative_to(ROOT)}")
     (OUT / "looks.json").write_text(json.dumps(index, indent=1), encoding="utf-8")
