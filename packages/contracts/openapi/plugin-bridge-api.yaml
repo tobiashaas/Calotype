@@ -175,7 +175,10 @@ components:
         file_path:
           type: string
           description: Absolute path of the original file (`photo:getRawMetadata('path')`)
-        exif_snapshot: { type: object, additionalProperties: true }
+        exif_snapshot:
+          type: object
+          additionalProperties: true
+          description: "What the camera recorded — JSON Schema exif-snapshot-v1.schema.json"
         lr_develop_settings:
           type: object
           additionalProperties: true
@@ -274,3 +277,8 @@ components:
                 description: |
                   Only when learned: AI masks to add (retouch id → local values), set after
                   Lightroom computed them. Never via applyDevelopSettings with new masks.
+              kept_crop:
+                type: boolean
+                description: |
+                  Only when true: straightened, but the photo keeps its own crop (no crop keys
+                  in lr_settings). The server decides it from the uploaded develop settings.

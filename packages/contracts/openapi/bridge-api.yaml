@@ -484,6 +484,13 @@ components:
             `learn_from_edits`, the selection's edited photos. Null when nothing was learned.
           example:
             subject: { LocalShadows2012: 0.16, LocalHighlights2012: -0.18 }
+        kept_crop:
+          type: boolean
+          nullable: true
+          description: |
+            True when the job straightened but the photo already had a crop or straighten of its
+            own: it keeps it, and `lr_settings` carries no crop keys. Clients count these
+            (older servers: absent, the client then sees no crop keys either way).
     JobEnvelopeV1:
       type: object
       description: Redis queue payload (JSON Schema job-envelope-v1.schema.json)

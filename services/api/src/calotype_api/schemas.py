@@ -153,3 +153,5 @@ class EditResultResponse(BaseModel):
     s3_key: str | None = None
     # Learned mask strengths: AI masks to add with these local values ({retouch id: {key: value}}).
     retouch: dict[str, dict[str, float]] | None = None
+    # Straightened, but the photo has a crop of its own: it keeps it (no crop keys above).
+    kept_crop: bool | None = None

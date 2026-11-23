@@ -3,6 +3,10 @@ the other photos are predicted from them (no profile), scored per slider and all
 
     python tools/eval/shoot_lab.py pool.npz [--k 10 20 50]
 
+Runs the production edit plan (`plan_edit` of the inference worker, no profile,
+learn_from_edits): the examples carry the pool's sliders as Lightroom settings, the other
+photos are untouched, and the results are read back as sliders.
+
 pool.npz holds one shoot: X (photos x features, current feature version), Y (photos x sliders,
 internal names in `--sliders` order), names (sorted = capture order) and optionally light (the
 camera's measured colour temperature per photo, Kelvin) and camera (per photo log2 ISO, log2
@@ -19,11 +23,35 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "libs" / "inference-pipeline" / "src"))
-from calotype_inference_pipeline.shoot import TOLERANCE, calibrate  # noqa: E402
+ROOT = Path(__file__).resolve().parents[2]
+for src in ("libs/inference-pipeline/src", "libs/edit-serializer/src", "services/workers/inference_worker/src"):
+    sys.path.insert(0, str(ROOT / src))
+from calotype_edit_serializer import from_lightroom, to_lightroom  # noqa: E402
+from calotype_inference_pipeline.shoot import TOLERANCE  # noqa: E402
+from calotype_inference_worker.plan import (  # noqa: E402
+    EditProfile,
+    EditRequest,
+    ExifSnapshot,
+    ShootPhoto,
+    plan_edit,
+)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+
+def exif(i: int, light: np.ndarray | None, camera: np.ndarray | None, times: np.ndarray | None) -> ExifSnapshot:
+    """The snapshot the plugin would have sent for photo i (the pool keeps camera exposure as
+    log2 features: back to ISO, seconds and f-number)."""
+    cam = None if camera is None else camera[i]
+    return ExifSnapshot(
+        capture_time=None if times is None else float(times[i]),
+        measured_kelvin=None if light is None else float(light[i]),
+        iso=None if cam is None else 2.0 ** cam[0],
+        shutter_speed=None if cam is None else 2.0 ** cam[1],
+        aperture=None if cam is None else 2.0 ** cam[2],
+        exposure_bias=None if cam is None else float(cam[3]),
+    )
 
 
 def score(X: np.ndarray, Y: np.ndarray, sliders: list[str], k: int, offsets: int = 4,
@@ -37,12 +65,21 @@ def score(X: np.ndarray, Y: np.ndarray, sliders: list[str], k: int, offsets: int
     for off in range(offsets):
         ref = np.unique(np.clip((np.arange(k) * step + off * step / offsets).astype(int), 0, n - 1))
         rest = np.setdiff1d(np.arange(n), ref)
-        references = [dict(zip(sliders, map(float, Y[i]))) for i in ref]
-        predicted, _ = calibrate(references, None, X[ref], None, X[rest],
-                                 None if times is None else times[ref], None if times is None else times[rest],
-                                 None if light is None else light[ref], None if light is None else light[rest],
-                                 None if camera is None else camera[ref], None if camera is None else camera[rest])
-        P = np.array([[row[s] for s in sliders] for row in predicted])
+        examples = set(ref.tolist())
+        photos = [
+            ShootPhoto(
+                photo_id=i,
+                # An example as Lightroom settings with its own white balance; the rest untouched.
+                settings={**to_lightroom(dict(zip(sliders, map(float, Y[i]))), "raw"), "WhiteBalance": "Custom"}
+                if i in examples else {},
+                vector=X[i],
+                exif=exif(i, light, camera, times),
+            )
+            for i in range(n)
+        ]
+        plan = plan_edit(EditRequest(learn_from_edits=True), EditProfile("raw"), photos)
+        predicted = {r.photo_id: from_lightroom(r.lr_settings, "raw") for r in plan.results}
+        P = np.array([[predicted.get(i, {}).get(s, np.nan) for s in sliders] for i in rest])
         ok = np.abs(P - Y[rest]) <= tolerance
         rows.append(np.append(ok.mean(axis=0), ok.all(axis=1).mean()))
     return np.mean(rows, axis=0)

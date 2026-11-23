@@ -177,6 +177,14 @@ Checked against the "What's new" page and Lightroom 16.0's own presets (`Resourc
 
 ---
 
+### Edit plan as one module (2026-11-24)
+- [x] `plan_edit` (`services/workers/inference_worker/src/calotype_inference_worker/plan.py`): the edit job's domain logic in one place — examples vs. targets, shoot calibration, as-shot handling, series smoothing, look / preset / shoot look / crop / mask precedence; no queue, database or S3. The worker is load → plan → save; `tools/eval/shoot_lab.py` and `shoot_pool.py` run the same plan / EXIF parser, so the yardstick measures the production pipeline (same numbers on a synthetic pool)
+- [x] Look composition in one place: `calotype_edit_serializer.compose` (prediction → preset or chosen Look → shoot look → straighten crop). "An own crop stays" is decided on the server now; each edit result says `kept_crop` (migration 015, API / Bridge / plugin contracts, optional); the plugin and `calotype-folder apply` only count it. Folder mode sends the crop keys of the photos to edit for that
+- [x] Typed EXIF snapshot: `ExifSnapshot.from_snapshot` is the one parser (capture time, measured colour temperature, ISO / shutter / aperture / exposure compensation); contract `exif-snapshot-v1.schema.json`, referenced from `photo-upload-v1`
+- [x] Folder mode sends the camera's exposure settings and measured colour temperature (`exif.rs`, Exif IFD of TIFF RAWs and the CR3 `CMT2` box, no new dependency), so camera-exposure features no longer switch off for folder-mode jobs
+- [ ] Check the Exif reader on real Nikon / Sony / DNG files (tested on synthetic TIFF and CR3 structures only); ORF / RW2 headers are not read
+- [ ] `calotype-folder apply` cannot send a Look (`base_preset`) yet
+
 ## Phase 8 — Calotype 2.0 (next milestone)
 
 Sources and what we take from each: [`docs/RESEARCH.md`](docs/RESEARCH.md).
