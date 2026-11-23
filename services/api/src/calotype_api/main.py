@@ -7,9 +7,8 @@ from uuid import UUID, uuid4
 
 from botocore.client import BaseClient
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
-from sqlalchemy.orm import Session
 
-from calotype_api.deps import get_publisher, get_session, get_storage
+from calotype_api.deps import get_publisher, get_storage, get_store
 from calotype_api.middleware import RateLimitMiddleware, RequestIdMiddleware
 from calotype_observability import configure_logging, get_request_id
 from calotype_queue.publisher import QueueFullError, redis_from_env
@@ -29,11 +28,7 @@ from calotype_api.storage import upload_photo
 from calotype_api.training import merged_training
 from calotype_domain.jobs import JobKind
 from calotype_domain.profiles import ProfileStatus
-from calotype_persistence.repositories.cull_results import CullResultRepository
-from calotype_persistence.repositories.edit_results import EditResultRepository
-from calotype_persistence.repositories.jobs import JobRepository
-from calotype_persistence.repositories.photos import PhotoRepository
-from calotype_persistence.repositories.profiles import ProfileRepository
+from calotype_persistence.stores import Store
 from calotype_queue.envelope import JobEnvelopeV1
 from calotype_queue.publisher import RedisQueuePublisher
 
@@ -54,7 +49,7 @@ def health():
 async def upload_photo_endpoint(
     file: UploadFile = File(...),
     metadata: str = Form(...),
-    session: Session = Depends(get_session),
+    store: Store = Depends(get_store),
     storage: BaseClient = Depends(get_storage),
 ):
     try:
@@ -62,12 +57,11 @@ async def upload_photo_endpoint(
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"invalid metadata: {exc}") from exc
 
-    existing = PhotoRepository.get_by_lr_catalog_uuid(session, meta.lr_catalog_uuid)
+    existing = store.photos.get_by_lr_catalog_uuid(meta.lr_catalog_uuid)
     if existing:
         # Same photo again: keep the stored preview, take the current edits and decisions
         # (the photographer may have re-edited or re-rated it since the first upload).
-        PhotoRepository.refresh(
-            session,
+        store.photos.refresh(
             existing,
             exif_snapshot=meta.exif_snapshot,
             lr_develop_settings=meta.lr_develop_settings,
@@ -84,8 +78,7 @@ async def upload_photo_endpoint(
     image_data = await file.read()
     upload_photo(storage, s3_key, image_data)
 
-    PhotoRepository.create(
-        session,
+    store.photos.create(
         photo_id=photo_id,
         lr_catalog_uuid=meta.lr_catalog_uuid,
         s3_key=s3_key,
@@ -97,8 +90,8 @@ async def upload_photo_endpoint(
 
 
 @app.get("/v1/profiles", response_model=list[ProfileResponse])
-def list_profiles(session: Session = Depends(get_session)):
-    profiles = ProfileRepository.list_all(session)
+def list_profiles(store: Store = Depends(get_store)):
+    profiles = store.profiles.list_all()
     return [
         ProfileResponse(
             profile_id=p.id,
@@ -116,8 +109,8 @@ def list_profiles(session: Session = Depends(get_session)):
 
 
 @app.get("/v1/profiles/{profile_id}", response_model=ProfileResponse)
-def get_profile(profile_id: UUID, session: Session = Depends(get_session)):
-    profile = ProfileRepository.get_by_id(session, profile_id)
+def get_profile(profile_id: UUID, store: Store = Depends(get_store)):
+    profile = store.profiles.get(profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="profile not found")
     return ProfileResponse(
@@ -136,13 +129,13 @@ def get_profile(profile_id: UUID, session: Session = Depends(get_session)):
 @app.post("/v1/jobs/train", status_code=202, response_model=JobAcceptedResponse)
 def create_train_job(
     body: TrainJobRequestV1,
-    session: Session = Depends(get_session),
+    store: Store = Depends(get_store),
     publisher: RedisQueuePublisher = Depends(get_publisher),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     norm_key = (idempotency_key or "").strip() or None
     if norm_key:
-        existing = JobRepository.get_by_idempotency_key(session, norm_key)
+        existing = store.jobs.get_by_idempotency_key(norm_key)
         if existing:
             if existing.kind != JobKind.TRAIN.value:
                 raise HTTPException(status_code=409, detail="idempotency key conflicts with another job kind")
@@ -151,12 +144,12 @@ def create_train_job(
     payload = body.model_dump(mode="json")
     if body.profile_id is not None:
         # Retrain: one profile that keeps learning from the photographer's corrections.
-        profile = ProfileRepository.get_by_id(session, body.profile_id)
+        profile = store.profiles.get(body.profile_id)
         if profile is None:
             raise HTTPException(status_code=404, detail=f"profile {body.profile_id} not found")
         if profile.format_type != body.format_type:
             raise HTTPException(status_code=409, detail=f"profile {profile.id} is for {profile.format_type} photos")
-        earlier = [job.payload for job in JobRepository.list_for_profile(session, profile.id, JobKind.TRAIN)]
+        earlier = [job.payload for job in store.jobs.list_for_profile(profile.id, JobKind.TRAIN)]
         photo_ids, untouched = merged_training(earlier, body.photo_ids, body.untouched)
         profile_id = profile.id
         payload.update(photo_ids=[str(p) for p in photo_ids], untouched=untouched,
@@ -164,8 +157,7 @@ def create_train_job(
     else:
         # Create Profile record in DRAFT status.
         profile_id = uuid4()
-        ProfileRepository.create(
-            session,
+        store.profiles.create(
             profile_id=profile_id,
             name=body.profile_name,
             genre=body.genre,
@@ -176,8 +168,7 @@ def create_train_job(
 
     job_id = uuid4()
     payload["profile_id"] = str(profile_id)
-    JobRepository.create(
-        session,
+    store.jobs.create(
         job_id=job_id,
         kind=JobKind.TRAIN,
         payload_schema_version=body.schema_version,
@@ -206,13 +197,13 @@ def create_train_job(
 @app.post("/v1/jobs/edit", status_code=202, response_model=JobAcceptedResponse)
 def create_edit_job(
     body: EditJobRequestV1,
-    session: Session = Depends(get_session),
+    store: Store = Depends(get_store),
     publisher: RedisQueuePublisher = Depends(get_publisher),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     norm_key = (idempotency_key or "").strip() or None
     if norm_key:
-        existing = JobRepository.get_by_idempotency_key(session, norm_key)
+        existing = store.jobs.get_by_idempotency_key(norm_key)
         if existing:
             if existing.kind != JobKind.EDIT.value:
                 raise HTTPException(status_code=409, detail="idempotency key conflicts with another job kind")
@@ -220,7 +211,7 @@ def create_edit_job(
 
     # Validate profile exists and is ready (without one, the look comes from the edits only).
     if body.profile_id is not None:
-        profile = ProfileRepository.get_by_id(session, body.profile_id)
+        profile = store.profiles.get(body.profile_id)
         if profile is None:
             raise HTTPException(status_code=422, detail="profile not found")
         if profile.status != ProfileStatus.READY.value:
@@ -233,14 +224,13 @@ def create_edit_job(
     missing = [
         str(pid)
         for pid in body.photo_ids
-        if PhotoRepository.get_by_id(session, pid) is None
+        if store.photos.get(pid) is None
     ]
     if missing:
         raise HTTPException(status_code=422, detail=f"unknown photo_ids: {missing}")
 
     job_id = uuid4()
-    JobRepository.create(
-        session,
+    store.jobs.create(
         job_id=job_id,
         kind=JobKind.EDIT,
         payload_schema_version=body.schema_version,
@@ -269,25 +259,24 @@ def create_edit_job(
 @app.post("/v1/jobs/cull", status_code=202, response_model=JobAcceptedResponse)
 def create_cull_job(
     body: CullJobRequestV1,
-    session: Session = Depends(get_session),
+    store: Store = Depends(get_store),
     publisher: RedisQueuePublisher = Depends(get_publisher),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     norm_key = (idempotency_key or "").strip() or None
     if norm_key:
-        existing = JobRepository.get_by_idempotency_key(session, norm_key)
+        existing = store.jobs.get_by_idempotency_key(norm_key)
         if existing:
             if existing.kind != JobKind.CULL.value:
                 raise HTTPException(status_code=409, detail="idempotency key conflicts with another job kind")
             return JobAcceptedResponse(job_id=existing.id, kind="cull")
 
-    missing = [str(pid) for pid in body.photo_ids if PhotoRepository.get_by_id(session, pid) is None]
+    missing = [str(pid) for pid in body.photo_ids if store.photos.get(pid) is None]
     if missing:
         raise HTTPException(status_code=422, detail=f"unknown photo_ids: {missing}")
 
     job_id = uuid4()
-    JobRepository.create(
-        session,
+    store.jobs.create(
         job_id=job_id,
         kind=JobKind.CULL,
         payload_schema_version=body.schema_version,
@@ -308,8 +297,8 @@ def create_cull_job(
 
 
 @app.get("/v1/jobs/{job_id}/cull-result", response_model=list[CullResultResponse])
-def get_cull_result(job_id: UUID, session: Session = Depends(get_session)):
-    record = JobRepository.get_by_id(session, job_id)
+def get_cull_result(job_id: UUID, store: Store = Depends(get_store)):
+    record = store.jobs.get(job_id)
     if record is None:
         raise HTTPException(status_code=404, detail="job not found")
     if record.kind != JobKind.CULL.value:
@@ -319,13 +308,13 @@ def get_cull_result(job_id: UUID, session: Session = Depends(get_session)):
     return [
         CullResultResponse(job_id=r.job_id, photo_id=r.photo_id, bucket=r.bucket, score=r.score,
                            reason=r.reason, method=r.method)
-        for r in CullResultRepository.get_all_by_job_id(session, job_id)
+        for r in store.cull_results.for_job(job_id)
     ]
 
 
 @app.get("/v1/jobs/{job_id}", response_model=JobSnapshotResponse)
-def get_job(job_id: UUID, session: Session = Depends(get_session)):
-    record = JobRepository.get_by_id(session, job_id)
+def get_job(job_id: UUID, store: Store = Depends(get_store)):
+    record = store.jobs.get(job_id)
     if record is None:
         raise HTTPException(status_code=404, detail="job not found")
     return JobSnapshotResponse(
@@ -339,14 +328,14 @@ def get_job(job_id: UUID, session: Session = Depends(get_session)):
 
 
 @app.get("/v1/jobs/{job_id}/result", response_model=list[EditResultResponse])
-def get_job_result(job_id: UUID, session: Session = Depends(get_session)):
-    record = JobRepository.get_by_id(session, job_id)
+def get_job_result(job_id: UUID, store: Store = Depends(get_store)):
+    record = store.jobs.get(job_id)
     if record is None:
         raise HTTPException(status_code=404, detail="job not found")
     if record.status != "completed":
         raise HTTPException(status_code=409, detail=f"job not yet completed (status: {record.status})")
 
-    results = EditResultRepository.get_all_by_job_id(session, job_id)
+    results = store.edit_results.for_job(job_id)
     if not results:
         raise HTTPException(status_code=404, detail="no results found for this job")
     return [

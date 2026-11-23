@@ -109,6 +109,8 @@ TODO.md                # Completed + open work items — keep up to date
 | `libs/domain/src/calotype_domain/profiles.py` | `ProfileStatus` enum |
 | `libs/persistence/src/calotype_persistence/models.py` | All SQLAlchemy models |
 | `libs/persistence/src/calotype_persistence/repositories/` | One repo file per model |
+| `libs/persistence/src/calotype_persistence/stores.py` | `Store` interface (jobs, photos, profiles, edit/cull results) the API routes use via `Depends(get_store)`; `SqlStore` = the repositories in one session |
+| `libs/persistence/src/calotype_persistence/memory.py` | `MemoryStore`: the same interface over real ORM records in dicts — for API (and later worker) tests; `tests/test_store_contract.py` runs one suite against both (Postgres only with `CALOTYPE_TEST_DATABASE_URL`) |
 | `libs/inference-pipeline/src/calotype_inference_pipeline/features.py` | `extract_features()` — 128-dim histogram |
 | `libs/inference-pipeline/src/calotype_inference_pipeline/model.py` | `train_model()` / `run_inference()` |
 | `libs/edit-serializer/src/calotype_edit_serializer/sliders.py` | `from_lightroom()` / `to_lightroom()` — LR names, ranges, RAW vs JPEG white balance |
@@ -118,7 +120,7 @@ TODO.md                # Completed + open work items — keep up to date
 | `libs/queue/src/calotype_queue/consumer.py` | `blpop_envelope()`, `push_dead_letter()` |
 | `services/api/src/calotype_api/main.py` | FastAPI app + all routes |
 | `services/api/src/calotype_api/schemas.py` | Pydantic request/response models |
-| `services/api/src/calotype_api/deps.py` | FastAPI dependencies (DB session, publisher, S3) |
+| `services/api/src/calotype_api/deps.py` | FastAPI dependencies (store over a DB session, publisher, S3) — tests override them via `app.dependency_overrides`, never by patching import paths |
 | `services/api/src/calotype_api/storage.py` | boto3 S3 helper |
 | `packages/contracts/openapi/bridge-api.yaml` | OpenAPI spec (Bridge ↔ API contract) |
 | `packages/contracts/openapi/plugin-bridge-api.yaml` | OpenAPI spec (LR plugin ↔ Bridge, local, `X-Calotype-Token`) |
@@ -312,8 +314,8 @@ Nine jobs on push/PR to `main` (the branch itself does not trigger CI — run th
 2. **lint** — Ruff check across all Python source dirs
 3. **inference-pipeline** — `pytest libs/inference-pipeline/tests/` (incl. straighten)
 4. **edit-serializer** — `pytest libs/edit-serializer/tests/` (incl. presets in sync with the generator)
-5. **api-tests** — `pytest services/api/tests/` (mock-based, no Postgres needed)
-6. **worker-tests** — `pytest` for train / feature / inference workers + `libs/persistence/tests` (mock-based, no DB/S3)
+5. **api-tests** — `pytest services/api/tests/` (in-memory store via dependency overrides, no Postgres needed)
+6. **worker-tests** — `pytest` for train / feature / inference workers + `libs/persistence/tests` (mock-based, no DB/S3; the store contract's Postgres half is skipped without `CALOTYPE_TEST_DATABASE_URL`)
 7. **bridge-core** — `cargo fmt --check`, `clippy -D warnings`, `cargo test -p calotype-bridge-core` (incl. end-to-end against a fake API)
 8. **lr-plugin** — `luajit apps/lr-plugin/tests/run.lua` (Lightroom SDK faked)
 9. **culling** — `pytest libs/culling/tests/` (synthetic images, no models needed)
