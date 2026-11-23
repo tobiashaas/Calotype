@@ -361,7 +361,8 @@ end
 test("every UI text has a German translation with the same placeholders", function()
   local english = {}
   for _, file in ipairs({ "Info.lua", "BridgeClient.lua", "JobWait.lua", "Actions.lua", "TrainProfile.lua",
-                          "ApplyProfile.lua", "BridgeStatus.lua", "AutomationCommands.lua", "CullPhotos.lua", "Retouch.lua", "Fresh.lua" }) do
+                          "ApplyProfile.lua", "BridgeStatus.lua", "AutomationCommands.lua", "CullPhotos.lua", "Retouch.lua",
+                          "RetouchKinds.lua", "Fresh.lua" }) do
     local src = readFile(PLUGIN .. file)
     for key, value in src:gmatch('"(%$%$%$/Calotype/[%w/]+)=(.-[^\\])"') do english[key] = value end
   end
@@ -669,6 +670,16 @@ test("cull: decisions become collections, nothing else is touched", function()
   eq(photos[1].applied, nil, "develop settings untouched")
 end)
 
+test("retouch kinds: the plugin's list is the manifest's (ids, titles, order)", function()
+  local Retouch = require "Retouch"
+  local manifest = Json.decode(readFile("presets/retouch/retouch.json"))
+  eq(#Retouch.ITEMS, #manifest, "as many kinds as presets")
+  for i, kind in ipairs(manifest) do
+    eq(Retouch.ITEMS[i].id, kind.id, "id " .. i)
+    eq(Retouch.ITEMS[i].title, kind.title, "title of " .. kind.id)
+  end
+end)
+
 test("retouch: masks added, empty ones removed, snapshot kept, re-apply replaces", function()
   local Retouch = require "Retouch"
   local function preset(id)
@@ -881,7 +892,7 @@ end)
 
 test("menu scripts compile", function()
   for _, file in ipairs({ "Info.lua", "TrainProfile.lua", "ApplyProfile.lua", "BridgeStatus.lua", "CullPhotos.lua",
-                          "Actions.lua", "Automation.lua", "AutomationCommands.lua", "Retouch.lua", "Fresh.lua" }) do
+                          "Actions.lua", "Automation.lua", "AutomationCommands.lua", "Retouch.lua", "RetouchKinds.lua", "Fresh.lua" }) do
     assert(loadfile(PLUGIN .. file))
   end
   local info = assert(loadfile(PLUGIN .. "Info.lua"))()

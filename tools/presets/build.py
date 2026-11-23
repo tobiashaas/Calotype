@@ -1,6 +1,6 @@
 """Build the project's own looks as Lightroom Classic / Camera Raw presets.
 
-    python tools/presets/build.py            # writes presets/*.xmp and presets/looks.json
+    python tools/presets/build.py   # writes presets/ (looks, retouch) and the files generated from RETOUCH
 
 Every look is designed here from scratch (no values from other products): a tone curve for
 contrast and black level, HSL, color grading, texture/clarity, grain and vignette. Exposure,
@@ -335,10 +335,17 @@ LOOKS: list[dict] = [
 # Mask types (Lightroom's format): subtype 1 = subject, 2 = sky, 0 + category 22 = background,
 # 3 + category = part of a person (2 face skin, 3 iris and pupil, 8 eye sclera, 12 teeth).
 # Local values are stored as -1…1 (slider value / 100).
+#
+# This list is the one place that defines the retouch kinds. `main()` writes from it: the presets,
+# the manifest presets/retouch/retouch.json, the mask kinds edit-serializer learns
+# (calotype_edit_serializer/retouch_kinds.py), the plugin's list (RetouchKinds.lua) and its German
+# titles (TranslatedStrings_de.txt). "name" is the preset's name and the plugin's English title,
+# "title_de" the plugin's German title; "name_de" is the preset's German name.
 RETOUCH_GROUP = "Calotype Retouch"
+RETOUCH_PREFIX = "Calotype "   # correction name = prefix + id: how the plugin finds our masks
 RETOUCH: list[dict] = [
     {
-        "id": "subject", "name": "Lift subject", "name_de": "Lift subject",
+        "id": "subject", "name": "Lift subject", "name_de": "Lift subject", "title_de": "Person hervorheben",
         "about": "Brightens the people a little and opens their shadows, so they stand out from the scene.",
         "about_de": "Hellt die Personen leicht auf und öffnet ihre Schatten, damit sie sich vom Umfeld abheben.",
         "masks": [(1, None, "Subject")],
@@ -347,20 +354,21 @@ RETOUCH: list[dict] = [
     },
     {
         "id": "background", "name": "Calm background", "name_de": "Calm background",
+        "title_de": "Hintergrund beruhigen",
         "about": "Slightly darker, less saturated and softer background.",
         "about_de": "Hintergrund etwas dunkler, weniger gesättigt und weicher.",
         "masks": [(0, 22, "Background")],
         "local": {"LocalExposure2012": -0.08, "LocalSaturation": -0.08, "LocalClarity2012": -0.05},
     },
     {
-        "id": "skin", "name": "Soften skin", "name_de": "Soften skin",
+        "id": "skin", "name": "Soften skin", "name_de": "Soften skin", "title_de": "Haut sanfter",
         "about": "Reduces fine skin texture without making faces look plastic.",
         "about_de": "Mildert feine Hautstruktur, ohne Gesichter künstlich wirken zu lassen.",
         "masks": [(3, 2, "Face Skin")],
         "local": {"LocalTexture": -0.15, "LocalClarity2012": -0.05},
     },
     {
-        "id": "eyes", "name": "Clearer eyes", "name_de": "Clearer eyes",
+        "id": "eyes", "name": "Clearer eyes", "name_de": "Clearer eyes", "title_de": "Augen klarer",
         "about": "A touch of brightness and clarity in the eyes.",
         "about_de": "Etwas mehr Helligkeit und Klarheit in den Augen.",
         "masks": [(3, 8, "Eye Sclera"), (3, 3, "Iris and Pupil")],
@@ -368,13 +376,14 @@ RETOUCH: list[dict] = [
     },
     {
         "id": "teeth", "name": "Brighten teeth", "name_de": "Brighten teeth",
+        "title_de": "Zähne aufhellen",
         "about": "Slightly brighter, less yellow teeth.",
         "about_de": "Zähne etwas heller und weniger gelb.",
         "masks": [(3, 12, "Teeth")],
         "local": {"LocalExposure2012": 0.06, "LocalSaturation": -0.25},
     },
     {
-        "id": "sky", "name": "Deepen sky", "name_de": "Deepen sky",
+        "id": "sky", "name": "Deepen sky", "name_de": "Deepen sky", "title_de": "Himmel vertiefen",
         "about": "Holds back bright skies and gives them a little more color.",
         "about_de": "Hält helle Himmel zurück und gibt ihnen etwas mehr Farbe.",
         "masks": [(2, None, "Sky")],
@@ -409,7 +418,7 @@ def retouch_xmp(r: dict) -> str:
     lines += [
         "   <crs:MaskGroupBasedCorrections>", "    <rdf:Seq>", "     <rdf:li>", "      <rdf:Description",
         '       crs:What="Correction"', '       crs:CorrectionAmount="1"', '       crs:CorrectionActive="true"',
-        f'       crs:CorrectionName="Calotype {r["id"]}"',
+        f'       crs:CorrectionName="{RETOUCH_PREFIX}{r["id"]}"',
         f'       crs:CorrectionSyncID="{uid("group-" + r["id"])}"{local}>',
         "      <crs:CorrectionMasks>", "       <rdf:Seq>",
     ]
@@ -434,6 +443,79 @@ def _alt(tag: str, text: str, de: str | None = None) -> list[str]:
     if de:   # Lightroom shows the German name when it runs in German
         items.append(f'     <rdf:li xml:lang="de-DE">{escape(de)}</rdf:li>')
     return [f"   <crs:{tag}>", "    <rdf:Alt>", *items, "    </rdf:Alt>", f"   </crs:{tag}>"]
+
+
+# Files generated from RETOUCH besides the presets (see the comment above RETOUCH).
+PY_KINDS = ROOT / "libs/edit-serializer/src/calotype_edit_serializer/retouch_kinds.py"
+LUA_KINDS = ROOT / "apps/lr-plugin/Calotype.lrplugin/RetouchKinds.lua"
+DE_STRINGS = ROOT / "apps/lr-plugin/Calotype.lrplugin/TranslatedStrings_de.txt"
+GENERATED = "Generated by tools/presets/build.py from its RETOUCH list — do not edit, run the script."
+
+
+def loc_key(r: dict) -> str:
+    """The plugin's text key: "subject" → "$$$/Calotype/Retouch/Subject"."""
+    return "$$$/Calotype/Retouch/" + "".join(p.capitalize() for p in r["id"].replace("-", "_").split("_"))
+
+
+def retouch_manifest() -> list[dict]:
+    """presets/retouch/retouch.json: every retouch kind for programs and other converters."""
+    return [{k: r[k] for k in ("id", "name", "name_de", "about", "about_de", "local")}
+            | {"group": RETOUCH_GROUP, "file": f"{r['id']}.xmp", "correction": RETOUCH_PREFIX + r["id"],
+               "title": r["name"], "title_de": r["title_de"],
+               "masks": [{"subtype": sub, "category": cat, "name": name} for sub, cat, name in r["masks"]]}
+            for r in RETOUCH]
+
+
+def retouch_kinds_py() -> str:
+    """edit-serializer's module: Lightroom's AI mask type → our retouch id."""
+    kinds = [((sub, cat), r["id"]) for r in RETOUCH for sub, cat, _ in r["masks"]]
+    assert len({k for k, _ in kinds}) == len(kinds), "one AI mask type in two retouch kinds"
+    lines = [
+        f'"""{GENERATED}', "",
+        "The retouch kinds (presets/retouch): Lightroom's AI mask types (MaskSubType,",
+        "MaskSubCategoryID or None) → our retouch id. A kind made of several masks (eyes: sclera,",
+        'iris and pupil) lists each; either alone counts as that kind.', '"""', "",
+        "from __future__ import annotations", "",
+        "RETOUCH_IDS: tuple[str, ...] = (",
+        *[f'    "{r["id"]}",' for r in RETOUCH],
+        ")", "",
+        "AI_KINDS: dict[tuple[int, int | None], str] = {",
+        *[f'    ({sub}, {cat}): "{kind}",' for (sub, cat), kind in kinds],
+        "}", "",
+    ]
+    return "\n".join(lines)
+
+
+def retouch_kinds_lua() -> str:
+    """The plugin's list (Retouch.ITEMS): id and title, in the order of the apply dialog."""
+    for r in RETOUCH:
+        assert '"' not in r["name"] + r["title_de"] and "\\" not in r["name"], r["id"]
+    lines = [
+        f"-- {GENERATED}",
+        "-- The retouch kinds in the order of the apply dialog; the German titles are in",
+        "-- TranslatedStrings_de.txt (written by the same script).",
+        "return {",
+        *[f'  {{ id = "{r["id"]}", title = LOC "{loc_key(r)}={r["name"]}" }},' for r in RETOUCH],
+        "}", "",
+    ]
+    return "\n".join(lines)
+
+
+def update_german_titles(text: str) -> str:
+    """TranslatedStrings_de.txt with every retouch kind's German title: a line that exists is
+    replaced, a new kind goes after the last one."""
+    lines = text.splitlines()
+    last = None
+    for r in RETOUCH:
+        key, line = loc_key(r), f'"{loc_key(r)}={r["title_de"]}"'
+        at = next((i for i, x in enumerate(lines) if x.startswith(f'"{key}=')), None)
+        if at is None:
+            at = len(lines) if last is None else last + 1
+            lines.insert(at, line)
+        else:
+            lines[at] = line
+        last = at
+    return "\n".join(lines) + "\n"
 
 
 def slug(name: str) -> str:
@@ -500,9 +582,13 @@ def main() -> int:
         path = retouch_dir / f"{r['id']}.xmp"
         path.write_text(retouch_xmp(r), encoding="utf-8")
         print(f"wrote {path.relative_to(ROOT)}")
-    (retouch_dir / "retouch.json").write_text(json.dumps(
-        [{k: r[k] for k in ("id", "name", "name_de", "about", "about_de", "local")} | {"group": RETOUCH_GROUP}
-         for r in RETOUCH], indent=1, ensure_ascii=False), encoding="utf-8")
+    (retouch_dir / "retouch.json").write_text(json.dumps(retouch_manifest(), indent=1, ensure_ascii=False),
+                                              encoding="utf-8")
+    PY_KINDS.write_text(retouch_kinds_py(), encoding="utf-8")
+    LUA_KINDS.write_text(retouch_kinds_lua(), encoding="utf-8")
+    DE_STRINGS.write_text(update_german_titles(DE_STRINGS.read_text(encoding="utf-8")), encoding="utf-8")
+    for path in (retouch_dir / "retouch.json", PY_KINDS, LUA_KINDS, DE_STRINGS):
+        print(f"wrote {path.relative_to(ROOT)}")
     return 0
 
 

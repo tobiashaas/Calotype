@@ -138,12 +138,12 @@ TODO.md                # Completed + open work items — keep up to date
 | `libs/inference-pipeline/src/calotype_inference_pipeline/straighten.py` | Tilt from the photo's own lines (keystone-aware) + Lightroom crop keys |
 | `libs/culling/src/calotype_culling/cull.py` | `cull()`: learned from decided photos (≥ 8 per class) else rules; `decision_from_metadata` |
 | `apps/lr-plugin/Calotype.lrplugin/CullPhotos.lua` | Menu: sort selected photos into collections (stars/flags untouched) |
-| `apps/lr-plugin/Calotype.lrplugin/Retouch.lua` | AI-mask retouch: find our presets by correction name, snapshot, apply, `updateAISettings`, remove empty masks |
+| `apps/lr-plugin/Calotype.lrplugin/Retouch.lua` | AI-mask retouch: find our presets by correction name, snapshot, apply, `updateAISettings`, remove empty masks; the kinds come from the generated `RetouchKinds.lua` |
 | `apps/lr-plugin/Calotype.lrplugin/Fresh.lua` | Start from zero: reset the selected photos (neutral sliders, curves, colors, crop, no masks) before a profile is applied; dated snapshot of the state before |
 | `apps/bridge/core/src/presets.rs` | Embeds `presets/` and installs them into Camera Raw's settings folder on start |
-| `tools/presets/build.py` | Generates the looks and retouch presets (CC0) |
+| `tools/presets/build.py` | Generates the looks and retouch presets (CC0); its `RETOUCH` list is the one definition of the retouch kinds and also writes the manifest `presets/retouch/retouch.json`, `calotype_edit_serializer/retouch_kinds.py`, the plugin's `RetouchKinds.lua` and the kinds' German titles in `TranslatedStrings_de.txt` (a test fails when any is out of sync) |
 | `tools/lr_e2e/retouch_check.py` | Retouch end-to-end in Lightroom (masks computed, own masks kept, no duplicates, restore) |
-| `libs/edit-serializer/src/calotype_edit_serializer/masks.py` | Learned mask strengths: AI-mask kind per correction (subject, sky, background, skin, eyes, teeth), `shared_masks()` = median local values the edited photos share |
+| `libs/edit-serializer/src/calotype_edit_serializer/masks.py` | Learned mask strengths: AI-mask kind per correction (subject, sky, background, skin, eyes, teeth — `AI_KINDS` from the generated `retouch_kinds.py`), `shared_masks()` = median local values the edited photos share |
 | `tools/lr_e2e/mask_strength_check.py` | Learned mask strengths end-to-end in Lightroom (examples' subject mask → targets, computed, values exact, restore) |
 | `tools/lr_e2e/cull_check.py` | Culling end-to-end in a real Lightroom (collections, nothing else touched, cleanup) |
 | `tools/lr_e2e/straighten_check.py` | Straighten end-to-end in a real Lightroom (angle + crop arrive, own crops stay, restore) |

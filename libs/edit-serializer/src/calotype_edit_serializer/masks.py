@@ -4,9 +4,9 @@ An AI mask is semantic: Lightroom finds the subject, sky … on every photo agai
 correction values transfer to other photos — the strength the photographer gives the subject's
 shadows on the edited photos of a shoot is what the other photos of the shoot should get.
 
-The masks are named by our retouch ids (`presets/retouch`, `Retouch.lua`): the plugin adds our
-mask of that kind and then sets the learned values on it. Values are Lightroom's local values
-(-1 … 1 = slider / 100), already multiplied by the correction's amount.
+The masks are named by our retouch ids (defined once in `tools/presets/build.py`, which writes
+`retouch_kinds.py`, the presets and the plugin's list): the plugin adds our mask of that kind
+and then sets the learned values on it. Values are Lightroom's local values (-1 … 1 = slider / 100), already multiplied by the correction's amount.
 """
 
 from __future__ import annotations
@@ -15,17 +15,8 @@ import statistics
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-# Lightroom's AI mask types → our retouch id: (MaskSubType, MaskSubCategoryID or None).
-# Eyes are two masks (sclera, iris and pupil) in our preset; either alone counts as eyes.
-AI_KINDS: dict[tuple[int, int | None], str] = {
-    (1, None): "subject",
-    (2, None): "sky",
-    (0, 22): "background",
-    (3, 2): "skin",
-    (3, 3): "eyes",
-    (3, 8): "eyes",
-    (3, 12): "teeth",
-}
+# Lightroom's AI mask types → our retouch id, generated from tools/presets/build.py.
+from calotype_edit_serializer.retouch_kinds import AI_KINDS
 
 # Local corrections learned per mask (all 0 when untouched). Not: curves, point colors, range
 # masks — they are not simple numbers — and LocalCurveRefineSaturation (default 100).
