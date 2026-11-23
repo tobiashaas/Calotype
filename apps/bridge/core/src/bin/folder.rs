@@ -193,10 +193,12 @@ impl Bridge {
         for (i, photo) in photos.into_iter().enumerate() {
             let id = folder::file_id(&photo.path)?;
             let path = std::path::absolute(&photo.path)?;
+            // Photos to edit send only their crop: the server keeps an own crop (no example
+            // look comes from them — their sliders stay unknown to it).
             let settings = if with_settings {
                 photo.settings.clone()
             } else {
-                Map::new()
+                crop_only(&photo.settings)
             };
             self.post(
                 "/v1/photos",
@@ -206,10 +208,9 @@ impl Bridge {
                     "file_path": path.display().to_string(),
                     "lr_develop_settings": settings,
                     "lr_metadata": photo.decisions,
-                    // Capture time: lets the shoot calibration follow series of the same scene.
-                    "exif_snapshot": json!({
-                        "date_time_original": calotype_bridge_core::preview::capture_time(&photo.path),
-                    }),
+                    // Capture time, exposure settings, measured light (exif-snapshot-v1):
+                    // features of the shoot calibration, as the plugin sends them.
+                    "exif_snapshot": calotype_bridge_core::exif::snapshot(&photo.path),
                 }),
             )
             .await
@@ -340,7 +341,7 @@ async fn cull(
     Ok(())
 }
 
-/// Crop keys a straighten result may carry.
+/// The keys of a crop / straighten in the develop settings.
 const CROP_KEYS: &[&str] = &[
     "CropAngle",
     "CropLeft",
@@ -350,27 +351,17 @@ const CROP_KEYS: &[&str] = &[
     "HasCrop",
 ];
 
+/// Only the crop keys of a sidecar's settings.
+fn crop_only(settings: &Map<String, Value>) -> Map<String, Value> {
+    CROP_KEYS
+        .iter()
+        .filter_map(|k| settings.get(*k).map(|v| (k.to_string(), v.clone())))
+        .collect()
+}
+
 /// Sidecar written by an earlier `apply`: our own prediction, not an example of the look.
 fn written_by_calotype(photo: &FolderPhoto) -> bool {
     std::fs::read_to_string(&photo.sidecar).is_ok_and(|x| x.contains("calotype:Profile=\""))
-}
-
-/// The sidecar already holds a crop or straighten of its own: keep it.
-fn has_own_crop(settings: &Map<String, Value>) -> bool {
-    let num = |k: &str, default: f64| {
-        settings
-            .get(k)
-            .and_then(|v| {
-                v.as_f64()
-                    .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
-            })
-            .unwrap_or(default)
-    };
-    num("CropAngle", 0.0) != 0.0
-        || num("CropLeft", 0.0) != 0.0
-        || num("CropTop", 0.0) != 0.0
-        || num("CropRight", 1.0) != 1.0
-        || num("CropBottom", 1.0) != 1.0
 }
 
 /// Scan the folder, optionally keeping only the files named in a list.
@@ -642,7 +633,7 @@ async fn apply(
     let done = bridge
         .wait(job["job_id"].as_str().unwrap_or_default())
         .await?;
-    let mut written = 0;
+    let (mut written, mut kept_crop) = (0, 0);
     for result in done["results"].as_array().into_iter().flatten() {
         let (Some(id), Some(settings)) = (
             result["lr_catalog_uuid"].as_str(),
@@ -651,13 +642,10 @@ async fn apply(
             continue;
         };
         if let Some(photo) = by_id.get(id) {
-            let mut settings = settings.clone();
-            if has_own_crop(&photo.settings) {
-                for key in CROP_KEYS {
-                    settings.remove(*key);
-                }
+            // The server leaves out our crop where the photo has its own.
+            if result["kept_crop"].as_bool() == Some(true) {
+                kept_crop += 1;
             }
-            let settings = &settings;
             match out {
                 Some(out) => {
                     let mut target = photo.clone();
@@ -673,6 +661,9 @@ async fn apply(
         "wrote {written} XMP sidecars ({} photos without result)",
         by_id.len() - written
     );
+    if kept_crop > 0 {
+        println!("{kept_crop} photos kept their own crop");
+    }
     Ok(())
 }
 
@@ -758,13 +749,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn own_crop_is_detected_in_numbers_and_strings() {
+    fn photos_to_edit_send_only_their_crop() {
         let map = |v: Value| v.as_object().unwrap().clone();
-        assert!(!has_own_crop(&map(json!({"Exposure2012": 0.3}))));
-        assert!(!has_own_crop(&map(
-            json!({"CropAngle": "0", "CropLeft": 0, "CropRight": "1"})
-        )));
-        assert!(has_own_crop(&map(json!({"CropAngle": "1.2"}))));
-        assert!(has_own_crop(&map(json!({"CropRight": 0.97}))));
+        let own = map(json!({"Exposure2012": 0.3, "CropAngle": "1.2", "CropRight": 0.97}));
+        assert_eq!(
+            Value::Object(crop_only(&own)),
+            json!({"CropAngle": "1.2", "CropRight": 0.97})
+        );
+        assert!(crop_only(&map(json!({"Exposure2012": 0.3}))).is_empty());
     }
 }

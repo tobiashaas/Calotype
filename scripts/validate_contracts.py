@@ -10,9 +10,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def run(cmd: list[str]) -> None:
+def run(cmd: list[str], cwd: Path | None = None) -> None:
     print("+", " ".join(cmd), flush=True)
-    subprocess.check_call(cmd)
+    subprocess.check_call(cmd, cwd=cwd)
 
 
 def main() -> None:
@@ -41,6 +41,10 @@ def main() -> None:
             "examples/job-cull-request.example.json",
         ),
         (
+            "json-schema/exif-snapshot-v1.schema.json",
+            "examples/exif-snapshot.example.json",
+        ),
+        (
             "json-schema/photo-upload-v1.schema.json",
             "examples/photo-upload.example.json",
         ),
@@ -62,7 +66,9 @@ def main() -> None:
                 "--schemafile",
                 str(schema_path),
                 str(example_path),
-            ]
+            ],
+            # Schemas reference each other by file name (photo-upload → exif-snapshot).
+            cwd=schema_path.parent,
         )
 
     # 3. All schema files must be valid JSON (no parse errors)

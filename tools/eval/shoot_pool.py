@@ -15,26 +15,26 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-for lib in ("inference-pipeline", "edit-serializer"):
-    sys.path.insert(0, str(ROOT / "libs" / lib / "src"))
+for src in ("libs/inference-pipeline/src", "libs/edit-serializer/src", "services/workers/inference_worker/src"):
+    sys.path.insert(0, str(ROOT / src))
 from calotype_edit_serializer import from_lightroom  # noqa: E402
 from calotype_inference_pipeline import CURRENT_FEATURE_VERSION, compute_features  # noqa: E402
+from calotype_inference_worker.plan import ExifSnapshot  # noqa: E402
 
 SLIDERS = ["exposure", "temp", "tint", "contrast", "highlights", "shadows", "whites", "blacks",
            "vibrance", "saturation"]
 
 
-def camera_settings(files: list[str]) -> dict[str, list[float]]:
-    """ISO, shutter, aperture and exposure compensation per file, read with ExifTool."""
+def camera_settings(files: list[str]) -> dict[str, dict]:
+    """ISO, shutter, aperture and exposure compensation per file, read with ExifTool, as the
+    keys of an EXIF snapshot (exif-snapshot-v1)."""
     # The file names go through stdin: a whole shoot does not fit on a command line.
     out = subprocess.run(
         ["exiftool", "-j", "-n", "-ISO", "-ExposureTime", "-FNumber", "-ExposureCompensation",
@@ -42,12 +42,9 @@ def camera_settings(files: list[str]) -> dict[str, list[float]]:
         input=chr(10).join(files), capture_output=True, text=True, encoding="utf-8", check=False).stdout
     rows = {}
     for row in json.loads(out or "[]"):
-        try:
-            rows[Path(row["SourceFile"]).stem] = [
-                math.log2(float(row["ISO"])), math.log2(float(row["ExposureTime"])),
-                math.log2(float(row["FNumber"])), float(row.get("ExposureCompensation") or 0.0)]
-        except (KeyError, ValueError):
-            continue
+        rows[Path(row["SourceFile"]).stem] = {
+            "iso": row.get("ISO"), "shutter_speed": row.get("ExposureTime"),
+            "aperture": row.get("FNumber"), "exposure_bias": row.get("ExposureCompensation")}
     return rows
 
 
@@ -62,15 +59,16 @@ def main() -> None:
     X, Y, names, light, cam, times = [], [], [], [], [], []
     for p in photos:
         values = from_lightroom(p["settings"], "raw")
-        if any(s not in values for s in SLIDERS) or (args.exiftool and p["name"] not in camera):
+        # The same parser as the edit job: capture time, measured light, camera exposure.
+        exif = ExifSnapshot.from_snapshot({**p, **camera.get(p["name"], {})})
+        if any(s not in values for s in SLIDERS) or (args.exiftool and exif.camera_exposure is None):
             continue
         X.append(compute_features((args.dir / "previews" / f"{p['name']}.jpg").read_bytes(), CURRENT_FEATURE_VERSION))
         Y.append([float(values[s]) for s in SLIDERS])
         names.append(p["name"])
-        light.append(float(p["wb_measured_kelvin"] or np.nan))
-        cam.append(camera.get(p["name"], [np.nan] * 4))
-        taken = p.get("date_time_original")
-        times.append(datetime.fromisoformat(taken[:19]).timestamp() if taken else np.nan)
+        light.append(exif.measured_kelvin or np.nan)
+        cam.append(exif.camera_exposure or [np.nan] * 4)
+        times.append(np.nan if exif.capture_time is None else exif.capture_time)
     extra = {"camera": np.array(cam)} if args.exiftool else {}
     if not np.isnan(light).any():
         extra["light"] = np.array(light)

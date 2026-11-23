@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -127,6 +127,8 @@ class EditResult(Base):
     )
     # Migration 014: AI masks to add with these values, {retouch id: {Local… key: value}}.
     retouch: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # Migration 015: straightened, but the photo's own crop stays (no crop keys in lr_settings).
+    kept_crop: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

@@ -106,19 +106,6 @@ function Actions.train(photos, choice, progress)
     { job_id = job.job_id, profile_id = final.profile_id, photos = #reg.uuids })
 end
 
---- Apply `profile` (a ready profile from Actions.readyProfiles) to `photos`.
--- Crop keys a straighten result may carry. A photo the photographer has already cropped or
--- straightened keeps its own crop.
-local CROP_KEYS = { "CropAngle", "CropLeft", "CropTop", "CropRight", "CropBottom", "HasCrop" }
-
-local function hasOwnCrop(photo)
-  local s = photo:getDevelopSettings() or {}
-  local angle = tonumber(s.CropAngle) or 0
-  local full = (tonumber(s.CropLeft) or 0) == 0 and (tonumber(s.CropTop) or 0) == 0
-    and (tonumber(s.CropRight) or 1) == 1 and (tonumber(s.CropBottom) or 1) == 1
-  return angle ~= 0 or not full
-end
-
 --- Apply `profile` to `photos`. options.straighten: also level photos with clear lines;
 -- options.retouch: ids of Lightroom AI-mask retouches to add (see Retouch.lua);
 -- options.learnFromEdits: photos of the selection already edited set the shoot's look and
@@ -227,13 +214,12 @@ function Actions.apply(catalog, photos, profile, progress, options)
       local photo = reg.photosByUuid[r.lr_catalog_uuid]
       if photo and type(r.lr_settings) == "table" then
         local settings = r.lr_settings
-        if settings.CropAngle ~= nil then
-          if hasOwnCrop(photo) then
-            for _, k in ipairs(CROP_KEYS) do settings[k] = nil end
-            keptCrop = keptCrop + 1
-          else
-            straightened = straightened + 1
-          end
+        -- A photo already cropped or straightened keeps its own crop: the server leaves our
+        -- crop keys out and says so (kept_crop).
+        if r.kept_crop == true then
+          keptCrop = keptCrop + 1
+        elseif settings.CropAngle ~= nil then
+          straightened = straightened + 1
         end
         photo:applyDevelopSettings(PhotoData.prepareSettings(settings))
         local ids = Retouch.idsFor(retouchIds, r.retouch)

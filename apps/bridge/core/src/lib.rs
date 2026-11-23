@@ -9,6 +9,7 @@ pub mod automation;
 pub mod catalog;
 pub mod config;
 pub mod db;
+pub mod exif;
 pub mod folder;
 pub mod outbox;
 pub mod presets;

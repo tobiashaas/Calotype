@@ -474,7 +474,7 @@ test("automation: apply runs the same flow as the menu and writes the results", 
   eq(Json.decode(fake.requests[4].body).profile_id, "p1", "edit job for the chosen profile")
 end)
 
-test("apply with straighten: crop for uncropped photos, own crops stay", function()
+test("apply with straighten: crop for uncropped photos, own crops counted as kept", function()
   local Commands = require "AutomationCommands"
   fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
   local own = { Exposure2012 = 0.1, CropAngle = 1.2, CropLeft = 0.02, CropTop = 0, CropRight = 0.98, CropBottom = 1 }
@@ -490,7 +490,8 @@ test("apply with straighten: crop for uncropped photos, own crops stay", functio
   respond(202, { job_id = "j2", status = "waiting_for_photos" })
   respond(200, { job_id = "j2", status = "completed", results = {
     { lr_catalog_uuid = "a", lr_settings = crop() },
-    { lr_catalog_uuid = "b", lr_settings = crop() },
+    -- The server leaves our crop out for a photo with its own and says so.
+    { lr_catalog_uuid = "b", lr_settings = { Exposure2012 = 0.3 }, kept_crop = true },
   } })
   local ok, r = Commands.run(catalog, { command = "apply",
     args = { profile = "Test", uuids = { "a", "b" }, straighten = true } })

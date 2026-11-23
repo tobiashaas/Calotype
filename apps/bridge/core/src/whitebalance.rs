@@ -82,14 +82,14 @@ fn kelvin(data: &[u16]) -> Option<u32> {
     ((1500..=20000).contains(&value) && sane_levels).then_some(value)
 }
 
-/// A TIFF structure (byte order + bounds-checked reads).
-struct Tiff<'a> {
+/// A TIFF structure (byte order + bounds-checked reads). Shared with [`crate::exif`].
+pub(crate) struct Tiff<'a> {
     bytes: &'a [u8],
     little: bool,
 }
 
 impl<'a> Tiff<'a> {
-    fn new(bytes: &'a [u8]) -> Option<Self> {
+    pub(crate) fn new(bytes: &'a [u8]) -> Option<Self> {
         let little = match bytes.get(0..4)? {
             [b'I', b'I', 42, 0] => true,
             [b'M', b'M', 0, 42] => false,
@@ -98,7 +98,7 @@ impl<'a> Tiff<'a> {
         Some(Self { bytes, little })
     }
 
-    fn u16(&self, at: usize) -> Option<u16> {
+    pub(crate) fn u16(&self, at: usize) -> Option<u16> {
         let b = self.bytes.get(at..at.checked_add(2)?)?;
         Some(if self.little {
             u16::from_le_bytes([b[0], b[1]])
@@ -107,7 +107,7 @@ impl<'a> Tiff<'a> {
         })
     }
 
-    fn u32(&self, at: usize) -> Option<u32> {
+    pub(crate) fn u32(&self, at: usize) -> Option<u32> {
         let b = self.bytes.get(at..at.checked_add(4)?)?;
         let b = [b[0], b[1], b[2], b[3]];
         Some(if self.little {
@@ -118,7 +118,7 @@ impl<'a> Tiff<'a> {
     }
 
     /// Position of the entry with `tag` in the IFD at `ifd`.
-    fn entry(&self, ifd: usize, tag: u16) -> Option<usize> {
+    pub(crate) fn entry(&self, ifd: usize, tag: u16) -> Option<usize> {
         let count = usize::from(self.u16(ifd)?).min(1024);
         (0..count)
             .map(|i| ifd + 2 + i * 12)

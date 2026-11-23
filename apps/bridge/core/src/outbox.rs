@@ -333,6 +333,9 @@ fn map_results(
             {
                 out["retouch"] = retouch;
             }
+            if r.kept_crop == Some(true) {
+                out["kept_crop"] = json!(true);
+            }
             Some(out)
         })
         .collect();

@@ -4,9 +4,10 @@
   "exif_snapshot": {
     "camera": "Sony A7 IV",
     "iso": 400,
-    "shutter_speed": "1/500",
-    "aperture": "f/2.8",
-    "focal_length_mm": 85
+    "shutter_speed": 0.002,
+    "aperture": 2.8,
+    "focal_length": 85,
+    "date_time_original": "2026-06-13T14:05:33"
   },
   "lr_develop_settings": {
     "Exposure2012": 0.3,

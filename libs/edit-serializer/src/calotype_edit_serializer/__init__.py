@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 
+from calotype_edit_serializer.compose import CROP_KEYS, Composition, compose, has_own_crop
 from calotype_edit_serializer.edits import edit_signature, edited_photos, keeps_as_shot
 from calotype_edit_serializer.masks import mask_values, shared_masks
 from calotype_edit_serializer.training import TrainingTarget, training_target
@@ -15,6 +16,10 @@ from calotype_edit_serializer.sliders import (
 )
 
 __all__ = [
+    "CROP_KEYS",
+    "Composition",
+    "compose",
+    "has_own_crop",
     "PHOTO_DEPENDENT",
     "apply_preset",
     "apply_style",

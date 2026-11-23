@@ -34,6 +34,10 @@ _Avoid_: auto, default WB
 A Kelvin and tint the photographer (or Calotype) set instead of As shot.
 _Avoid_: custom WB, manual WB
 
+**EXIF snapshot**:
+What the camera recorded for a Photo: capture time, exposure settings (ISO, shutter time, aperture, exposure compensation) and the Measured colour temperature.
+_Avoid_: metadata (that also covers the photographer's Decisions)
+
 **Measured colour temperature**:
 The camera's automatic estimate of the light for each frame, recorded even when the camera was set to a fixed white balance.
 _Avoid_: as-shot Kelvin (that is the camera's setting, not its measurement)
@@ -120,6 +124,14 @@ _Avoid_: reset
 **Straighten**:
 Levelling a Photo from its own lines and cropping it the way Lightroom would.
 _Avoid_: rotate, auto-upright
+
+**Own crop**:
+A crop or Straighten the photographer already gave a Photo; Straighten never replaces it, the Photo keeps it.
+_Avoid_: existing crop
+
+**Edit plan**:
+What each Photo of an Apply gets — its Develop settings and Mask strengths — decided from the Profile, the Examples, the Look and the chosen options, in a fixed order.
+_Avoid_: pipeline, inference (the prediction is only its first step)
 
 ## Culling
 
