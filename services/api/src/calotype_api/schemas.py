@@ -47,6 +47,12 @@ class TrainJobRequestV1(TolerantRequest):
     color_type: Literal["color", "bw"]
     photo_ids: Annotated[list[UUID], Field(min_length=1)]
     base_preset: dict[str, Any] | None = None
+    # Retrain this profile instead of creating one: its earlier training photos (with their
+    # current settings) and these photos together; the profile keeps its id and stays usable.
+    profile_id: UUID | None = None
+    # Values only a preset left on the photos (Lightroom key → value), not the photographer's
+    # decision: such a slider is left out of that photo's training target.
+    untouched: dict[str, float] | None = None
 
 
 class EditJobRequestV1(TolerantRequest):

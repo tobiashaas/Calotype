@@ -21,6 +21,13 @@ class JobRepository:
         return session.execute(stmt).scalar_one_or_none()
 
     @staticmethod
+    def list_for_profile(session: Session, profile_id: uuid.UUID, kind: JobKind) -> list[Job]:
+        """A profile's jobs of one kind, oldest first."""
+        stmt = (select(Job).where(Job.profile_id == profile_id, Job.kind == kind.value)
+                .order_by(Job.created_at))
+        return list(session.execute(stmt).scalars())
+
+    @staticmethod
     def create(
         session: Session,
         *,

@@ -1,5 +1,5 @@
 """A profile keeps the photographer's recipe: sliders most training photos share stay constant,
-and the camera's white balance stays when the training photos kept it."""
+and the camera's white balance stays where the light is what the camera expected."""
 
 import numpy as np
 
@@ -50,8 +50,60 @@ def test_the_recipe_wins_over_the_model_and_exposure_is_still_predicted():
     assert "temp" in out                    # without as_shot the white balance is predicted
 
 
-def test_a_profile_from_photos_on_the_cameras_white_balance_predicts_none():
+def _hut_wedding(n: int = 80, seed: int = 5):
+    """Camera fixed at 5899 K. Daylight photos stay as shot; under the hut's lamps (feature 1
+    high) the photographer sets ~2850 K. Highlights: -100 is the import preset's placeholder."""
+    rng = np.random.default_rng(seed)
+    X = rng.normal(size=(n, 153))
+    rows, as_shot = [], []
+    for i in range(n):
+        hut = i % 4 == 0
+        X[i, 1] = 3.0 if hut else -1.0
+        rows.append({"exposure": float(0.4 * X[i, 0]), "temp": 2850.0 if hut else 5899.0,
+                     "tint": -21.0 if hut else 3.0, "contrast": -36.0, "shadows": 45.0,
+                     "highlights": -100.0 if i % 2 else float(-40 + 10 * X[i, 2])})
+        as_shot.append(not hut)
+    return X.tolist(), rows, as_shot
+
+
+def test_daylight_keeps_the_cameras_white_balance_and_the_hut_gets_its_kelvin():
+    X, rows, as_shot = _hut_wedding()
+    model = train_for_version(X, rows, VERSION, as_shot=as_shot)
+    daylight, hut = run_inference(model, X[1], as_shot_temp=5899.0), run_inference(model, X[0])
+    assert "temp" not in daylight and "tint" not in daylight
+    assert abs(hut["temp"] - 2850) < 300 and hut["tint"] < -10
+
+
+def test_a_placeholder_left_out_of_the_targets_is_not_learned():
+    X, rows, as_shot = _hut_wedding()
+    decided = [{k: v for k, v in r.items() if not (k == "highlights" and v == -100.0)} for r in rows]
+    # X[1] is one of the photos that still carry the placeholder
+    with_placeholder = run_inference(train_for_version(X, rows, VERSION, as_shot=as_shot), X[1])
+    without = run_inference(train_for_version(X, decided, VERSION, as_shot=as_shot), X[1])
+    assert with_placeholder["highlights"] < -90      # the preset was learned
+    assert -70 < without["highlights"] < -10         # the photographer's range was learned
+    assert "highlights" not in recipe_constants(decided)
+
+
+def test_a_slider_no_photo_decided_is_not_predicted():
+    X, rows, as_shot = _hut_wedding(n=20)  # small set: Ridge
+    rows = [{k: v for k, v in r.items() if k != "highlights"} for r in rows]
+    out = run_inference(train_for_version(X, rows, VERSION, as_shot=as_shot), X[1])
+    assert "highlights" not in out and "exposure" in out
+
+
+def test_an_artifact_from_before_keeps_its_as_shot_flag():
+    import io
+
+    import joblib
+
+    from calotype_inference_pipeline.model import _load
     X, rows = _shoot()
-    out = run_inference(train_for_version(X, rows, VERSION, as_shot=True), X[0])
+    artifact = _load(train_for_version(X, rows, VERSION))
+    for key in ("as_shot_share", "as_shot_temp"):
+        artifact.pop(key)
+    artifact["as_shot"] = True
+    buf = io.BytesIO()
+    joblib.dump(artifact, buf)
+    out = run_inference(buf.getvalue(), X[0])
     assert "temp" not in out and "tint" not in out
-    assert "exposure" in out and out["contrast"] == 4.0

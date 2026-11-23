@@ -76,6 +76,10 @@ tools/
 
 ## Getting started
 
+Quickest on Windows: `uv sync` (one `.venv` for every package and dev tool), then
+`powershell scripts/dev.ps1` starts infrastructure, migrations, API, workers and Bridge
+(ports from `infra/compose/.env`, logs in `%LOCALAPPDATA%\Calotype\dev-logs`). Step by step:
+
 ```bash
 # infrastructure
 cp infra/compose/env.example infra/compose/.env

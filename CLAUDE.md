@@ -173,7 +173,7 @@ TODO.md                # Completed + open work items — keep up to date
 | POST | `/v1/photos` | Upload JPEG preview + metadata (idempotent by `lr_catalog_uuid`) |
 | GET | `/v1/profiles` | List all profiles |
 | GET | `/v1/profiles/{id}` | Get single profile with status |
-| POST | `/v1/jobs/train` | Enqueue train job (creates Profile in DRAFT, returns `profile_id`) |
+| POST | `/v1/jobs/train` | Enqueue train job (creates Profile in DRAFT, returns `profile_id`); with `profile_id` retrains that profile (earlier photos + new, same id); `untouched` = a preset's placeholder values not to learn |
 | POST | `/v1/jobs/edit` | Enqueue edit job (profile must be READY, photo_ids must exist; without `profile_id`: `learn_from_edits` + `format_type`, the look comes from the selection's edited photos only) |
 | GET | `/v1/jobs/{id}` | Get job status snapshot (incl. `profile_id`, short `failure_reason`) |
 | GET | `/v1/jobs/{id}/result` | Get edit results (only when job is COMPLETED) |
@@ -192,7 +192,7 @@ Cull job:   API → calotype:jobs:cull    → cull_worker    → CullResult → 
 
 Train flow detail:
 1. API creates Profile (DRAFT) + Job, enqueues to `calotype:jobs:train`
-2. `train_worker`: Profile → TRAINING; per photo: maps `lr_develop_settings` (LR names) to internal params via `from_lightroom`, computes the feature vector if missing (download preview from S3); photos without usable preview or settings are skipped; needs ≥ 3 usable photos; trains the current model (boosting, < 30 photos Ridge), saves `.joblib` to S3, Profile → READY
+2. `train_worker`: Profile → TRAINING (a retrain stays READY); per photo: `training_target` maps `lr_develop_settings` to internal params, leaving out sliders that hold a preset placeholder (`untouched`) — each slider learns only from photos that decided it; photos on the camera's white balance teach their Kelvin and are flagged as shot; computes the feature vector if missing (download preview from S3); photos without usable preview or settings are skipped; needs ≥ 3 usable photos; trains the current model (boosting, < 30 photos Ridge), saves `.joblib` to S3, Profile → READY
 
 Edit flow detail:
 1. API validates Profile is READY (if given) + all photo_ids exist, enqueues to `calotype:jobs:feature`
@@ -252,6 +252,13 @@ On error at any stage: Job → FAILED, envelope pushed to `{queue}:dlq`.
 ## Local Development
 
 ```bash
+# Everything at once (Windows): one venv for all packages, then the whole stack
+uv sync                                   # root pyproject.toml = uv workspace of libs/* + services/*
+powershell scripts/dev.ps1                # compose + migrations + API + 4 workers + Bridge; -Stop, -NoBridge
+# Ports/credentials: infra/compose/.env (COMPOSE_PROJECT_NAME, LR_FF_*); API port from bridge.json api_base_url
+# Logs: %LOCALAPPDATA%\Calotype\dev-logs
+
+# Step by step:
 # Start infrastructure
 cp infra/compose/env.example infra/compose/.env
 # Edit .env to set port overrides if needed (Postgres 5433, S3 9100/9101)

@@ -56,7 +56,8 @@ function Actions.ownEditsProfile(photos)
 end
 
 --- Train a profile from `photos` (their current develop settings are the target).
--- choice = { name, genre, colorType, basePreset } (basePreset: a look, see LookPresets.lua).
+-- choice = { name, genre, colorType, basePreset, profileId, untouched } (basePreset: a look, see
+-- LookPresets.lua; profileId: retrain that profile; untouched: Lightroom key -> a preset's placeholder).
 function Actions.train(photos, choice, progress)
   local reg, regErr = JobWait.registerPhotos(photos, progress)
   if not reg then
@@ -81,6 +82,8 @@ function Actions.train(photos, choice, progress)
     color_type = choice.colorType,
     lr_catalog_uuids = reg.uuids,
     base_preset = choice.basePreset,
+    profile_id = choice.profileId,             -- retrain this profile; only sent when set
+    untouched = choice.untouched,              -- a preset's placeholders; only sent when set
   }
   if not job then return result(false, "Calotype", jobErr) end
   Log.info("train job %s queued with %d photos", job.job_id, #reg.uuids)

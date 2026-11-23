@@ -157,3 +157,32 @@ def test_edit_job_carries_a_chosen_look(client, mock_publisher):
     assert client.post("/v1/jobs/edit", json=body).status_code == 202
     payload = mock_publisher.enqueue.call_args[0][0].payload
     assert payload["base_preset"]["GrainAmount"] == 25
+
+
+def test_retraining_keeps_the_profile_and_learns_from_all_its_photos(client, store, mock_publisher):
+    """One living profile: a retrain adds new photos to the earlier ones under the same id."""
+    first = client.post("/v1/jobs/train", json=_train_body(untouched={"Highlights2012": -100})).json()
+    profile_id = first["profile_id"]
+    store.profiles[profile_id].model_artifact_key = f"models/{profile_id}/model.joblib"
+    new_photo = str(uuid.uuid4())
+
+    resp = client.post("/v1/jobs/train", json=_train_body(profile_id=profile_id, photo_ids=[new_photo, _PHOTO_ID]))
+
+    assert resp.status_code == 202
+    assert resp.json()["profile_id"] == profile_id
+    assert len(store.profiles) == 1
+    payload = mock_publisher.enqueue.call_args.args[0].payload
+    assert payload["photo_ids"] == [_PHOTO_ID, new_photo]       # earlier photos first, each once
+    assert payload["untouched"] == {"Highlights2012": -100}      # placeholders carry over
+    assert payload["retrain"] is True
+
+
+def test_retraining_an_unknown_profile_is_404(client):
+    resp = client.post("/v1/jobs/train", json=_train_body(profile_id=str(uuid.uuid4())))
+    assert resp.status_code == 404
+
+
+def test_retraining_with_another_format_is_409(client):
+    profile_id = client.post("/v1/jobs/train", json=_train_body()).json()["profile_id"]
+    resp = client.post("/v1/jobs/train", json=_train_body(profile_id=profile_id, format_type="jpeg_tiff"))
+    assert resp.status_code == 409

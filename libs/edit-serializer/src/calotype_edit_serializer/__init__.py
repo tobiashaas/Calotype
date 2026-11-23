@@ -4,6 +4,7 @@ from collections.abc import Mapping
 
 from calotype_edit_serializer.edits import edit_signature, edited_photos, keeps_as_shot
 from calotype_edit_serializer.masks import mask_values, shared_masks
+from calotype_edit_serializer.training import TrainingTarget, training_target
 from calotype_edit_serializer.style import PHOTO_DEPENDENT, apply_preset, apply_style, is_style_key, shared_style, style_settings
 from calotype_edit_serializer.sliders import (
     FormatType,
@@ -31,6 +32,8 @@ __all__ = [
     "serialize_for_lightroom",
     "slider_specs",
     "to_lightroom",
+    "TrainingTarget",
+    "training_target",
     "ping",
 ]
 

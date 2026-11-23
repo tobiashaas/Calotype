@@ -289,6 +289,15 @@ components:
         base_preset:
           type: object
           additionalProperties: true
+        profile_id:
+          type: string
+          format: uuid
+          description: Retrain this profile instead of creating one — its earlier training photos (with their current settings) and photo_ids together; the profile keeps its id and stays usable while training.
+        untouched:
+          type: object
+          additionalProperties:
+            type: number
+          description: Values only a preset left on the photos (Lightroom key → value), e.g. Highlights2012 -100; a slider holding one is left out of that photo's training target.
     EditJobRequestV1:
       type: object
       description: Without profile_id the look comes only from the selection's edited photos; then learn_from_edits and format_type are required.

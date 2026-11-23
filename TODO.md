@@ -203,8 +203,16 @@ Sources and what we take from each: [`docs/RESEARCH.md`](docs/RESEARCH.md).
 - [ ] Other ColorData versions (only 13 and 48 are checked on real files), other makers (Nikon, Sony, Fuji) and DNG `AsShotNeutral`
 - [ ] The measurement in training a profile (today only in shoot calibration)
 - [ ] Target = mired offset from as-shot instead of absolute Kelvin
+- [x] White balance per photo instead of per profile (2026-11-23): photos on the camera's white balance teach their Kelvin too; at apply time a photo keeps "As Shot" when the prediction is within 15 mired of the camera's (`AS_SHOT_MIRED`), else gets its own Kelvin. Marryween (camera fixed at 5899 K, hut lit by lamps at ~2850 K): hut photos the model never saw 2624 → 491 K off, daylight 11 / 11 stays as shot. Old artifacts keep their profile-wide flag
+- [ ] Measure the per-photo decision across the maintainer's weddings with `tools/eval` (the profile-wide rule of #23 came from such a measurement: predicted Kelvin on unseen weddings within 150 K for only 13-27 %) before merging to main; 30 of 1,673 Marryween photos got 5,300-5,900 K just outside the tolerance
 - [ ] Map neutral to the photographer's preferred white balance with a tiny model (Zhao, Afifi & Brown: ~500 parameters)
 - [ ] Adapt to the camera from the shoot's unlabeled photos (C5) or from the colour matrices in the RAW / DNG metadata (CCMNet)
+
+### 8.4b One living profile
+- [x] Retrain a profile in place (2026-11-23): train request `profile_id` merges the profile's earlier training photos (read with their *current* settings, so corrections are learned) with the new ones; the profile keeps its id and stays usable, a failed retrain keeps the old model. `untouched` (Lightroom key -> value) names a preset's placeholders (Marryween: highlights -100 on 128 of 300 photos): such a slider is left out of that photo's target, every other slider still learns from it (`calotype_edit_serializer.training`, per-slider masks in `train_model_v2`)
+- [ ] Plugin: "keep training an existing profile" in the train dialog (today only via the automation channel, `profile_id` / `untouched` args)
+- [ ] Accepted photos as feedback: photos the photographer reviewed and left unchanged (needs a marker, e.g. a star or label) — today only changed photos are added
+- [ ] Delete / rename profiles (API has neither)
 
 ### 8.5 Look from few examples
 - [x] Choose the closest examples by image content, not only capture time (RefRetouch), first version 2026-11-21: without a profile `shoot.calibrate` uses `blend` (half ridge, half the three references closest in feature space) and only chooses between it and `series`. Two shoots edited by other tools (internal yardstick, `tools/eval/shoot_lab.py`), all six sliders within tolerance with 10 / 20 / 50 examples: wedding 6.1 / 9.6 / 14.5 → 8.5 / 12.7 / 21.0 %, kindergarten 12.8 / 17.2 / 23.4 → 15.7 / 21.8 / 35.6 %

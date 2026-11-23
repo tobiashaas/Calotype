@@ -198,7 +198,8 @@ end
 function Commands.train(catalog, args)
   local photos, missing = photosByUuid(catalog, args.uuids)
   local choice = { name = args.name, genre = args.genre or "other", colorType = args.color_type or "color",
-    basePreset = args.look and LookPresets.settings(args.look) or nil }
+    basePreset = args.look and LookPresets.settings(args.look) or nil,
+    profileId = args.profile_id, untouched = args.untouched }
   if args.look and not choice.basePreset then error("no develop preset " .. tostring(args.look)) end
   local progress = progressScope(tostring(choice.name))
   local ok, r = pcall(Actions.train, photos, choice, progress)

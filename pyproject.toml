@@ -1,0 +1,58 @@
+# Development workspace: one environment with every library, service and dev tool.
+#
+#   uv sync                      # creates .venv with all packages editable
+#   powershell scripts/dev.ps1   # infrastructure, migrations, API, workers, Bridge
+#
+# Each package keeps its own pyproject.toml (CI still installs them one by one); this file
+# only ties them together for local work.
+
+[project]
+name = "calotype-dev"
+version = "0.0.0"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "calotype-domain",
+    "calotype-queue",
+    "calotype-persistence",
+    "calotype-observability",
+    "calotype-inference-pipeline",
+    "calotype-edit-serializer",
+    "calotype-culling",
+    "calotype-io",
+    "calotype-api",
+    "calotype-worker-feature",
+    "calotype-worker-train",
+    "calotype-worker-inference",
+    "calotype-worker-cull",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff==0.8.1",  # same pin as CI
+    "alembic>=1.14",
+    "openapi-spec-validator",
+    "check-jsonschema",
+    "httpx",  # FastAPI TestClient
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["libs/*", "services/api", "services/workers/*"]
+
+[tool.uv.sources]
+calotype-domain = { workspace = true }
+calotype-queue = { workspace = true }
+calotype-persistence = { workspace = true }
+calotype-observability = { workspace = true }
+calotype-inference-pipeline = { workspace = true }
+calotype-edit-serializer = { workspace = true }
+calotype-culling = { workspace = true }
+calotype-io = { workspace = true }
+calotype-api = { workspace = true }
+calotype-worker-feature = { workspace = true }
+calotype-worker-train = { workspace = true }
+calotype-worker-inference = { workspace = true }
+calotype-worker-cull = { workspace = true }

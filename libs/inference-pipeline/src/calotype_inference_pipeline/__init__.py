@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from calotype_inference_pipeline.features import (
     FEATURE_DIM,
     FEATURE_MODEL_VERSION,
@@ -42,11 +44,12 @@ def compute_features(image_bytes: bytes, version: str = CURRENT_FEATURE_VERSION)
 
 def train_for_version(
     feature_vectors: list[list[float]], targets: list[dict[str, float]], version: str,
-    as_shot: bool = False,
+    as_shot: Sequence[bool] | bool = False,
 ) -> bytes:
     """v1 → Ridge as before; v2 → gradient boosting (Ridge for small sets).
 
-    as_shot: most training photos kept the camera's white balance (v2 only)."""
+    targets may leave sliders out (never decided by the photographer, v2 only); as_shot: per
+    training photo, whether it kept the camera's white balance (v2 only)."""
     if version == FEATURE_MODEL_VERSION:
         return train_model(feature_vectors, targets)
     return train_model_v2(feature_vectors, targets, version, as_shot=as_shot)

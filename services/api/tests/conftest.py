@@ -161,6 +161,9 @@ def client(store, mock_publisher, mock_storage) -> Generator[TestClient, None, N
         patch("calotype_api.main.JobRepository.create", side_effect=_job_create),
         patch("calotype_api.main.JobRepository.get_by_id", side_effect=_job_get_by_id),
         patch("calotype_api.main.JobRepository.get_by_idempotency_key", side_effect=_job_get_by_idempotency_key),
+        patch("calotype_api.main.JobRepository.list_for_profile",
+              side_effect=lambda session, profile_id, kind: [
+                  j for j in store.jobs.values() if j.profile_id == profile_id and j.kind == kind.value]),
         patch("calotype_api.main.ProfileRepository.create", side_effect=_profile_create),
         patch("calotype_api.main.ProfileRepository.get_by_id", side_effect=_profile_get_by_id),
         patch("calotype_api.main.ProfileRepository.list_all", side_effect=_profile_list_all),

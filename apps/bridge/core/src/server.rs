@@ -169,6 +169,12 @@ struct TrainReq {
     lr_catalog_uuids: Vec<String>,
     #[serde(default)]
     base_preset: Option<Map<String, Value>>,
+    /// Retrain this profile (its earlier photos + these) instead of creating one.
+    #[serde(default)]
+    profile_id: Option<uuid::Uuid>,
+    /// Values only a preset left (Lightroom key → value): not taught as the photographer's.
+    #[serde(default)]
+    untouched: Option<Map<String, Value>>,
 }
 
 #[derive(Deserialize)]
@@ -266,6 +272,8 @@ async fn queue_train(State(state): State<Shared>, Json(body): Json<Value>) -> Re
         "format_type": req.format_type,
         "color_type": req.color_type,
         "base_preset": req.base_preset,
+        "profile_id": req.profile_id,
+        "untouched": req.untouched,
     });
     accept_job(&state, "train", request, &uuids)
 }

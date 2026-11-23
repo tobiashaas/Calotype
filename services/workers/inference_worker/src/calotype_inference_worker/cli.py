@@ -313,7 +313,11 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
                                 feature_version, photo_id, job_uuid)
                     continue
                 vectors[photo_id] = list(fv.vector)
-                predictions[photo_id] = run_inference(model_bytes, vectors[photo_id]) if model_bytes else {}
+                own = settings[photo_id]
+                # The camera's Kelvin of a photo still on it decides whether it keeps it.
+                camera_temp = own.get("Temperature") if keeps_as_shot(own, format_type) else None
+                predictions[photo_id] = (run_inference(model_bytes, vectors[photo_id], as_shot_temp=camera_temp)
+                                         if model_bytes else {})
 
         targets = list(predictions)
         look: dict = {}

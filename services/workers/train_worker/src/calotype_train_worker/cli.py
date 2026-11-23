@@ -13,12 +13,11 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.orm import Session, sessionmaker
 
-from calotype_edit_serializer import from_lightroom, keeps_as_shot, shared_masks
+from calotype_edit_serializer import shared_masks, training_target
 from calotype_domain.jobs import JobStatus
 from calotype_domain.profiles import ProfileStatus
 from calotype_inference_pipeline import (
     CURRENT_FEATURE_VERSION,
-    LR_PARAMS,
     MIN_SAMPLES,
     compute_features,
     train_for_version,
@@ -37,12 +36,6 @@ from calotype_queue.publisher import RedisQueuePublisher, redis_from_env
 log = get_logger("calotype.train_worker")
 
 
-# Share of the training photos still on the camera's white balance from which a profile keeps
-# it as shot. Leaving it is exactly right for every photo the photographer leaves, while a
-# Kelvin value predicted for an unseen wedding was within 150 K for only 13-27 % of the photos
-# (three of the maintainer's weddings of one recipe, each predicted from the other two). So
-# keeping the camera's white balance wins as soon as more photos than that are left as shot.
-AS_SHOT_SHARE = 0.3
 
 
 def _s3_client():
@@ -112,12 +105,16 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
     job_uuid = UUID(envelope.job_id)
     profile_id_str = envelope.payload.get("profile_id")
     photo_ids = [UUID(pid) for pid in envelope.payload.get("photo_ids", [])]
+    # Values only a preset left (Lightroom key -> value): not the photographer's decision.
+    untouched = envelope.payload.get("untouched") or {}
+    # Retraining a profile that already has a model: a failure must not take that model away.
+    retrain = bool(envelope.payload.get("retrain"))
     set_request_id(envelope.trace_context.get("request_id", ""))
 
     try:
         with session_scope(factory) as session:
             JobRepository.set_status(session, job_uuid, JobStatus.RUNNING)
-            if profile_id_str:
+            if profile_id_str and not retrain:  # a retrained profile stays usable meanwhile
                 ProfileRepository.set_status(session, UUID(profile_id_str), ProfileStatus.TRAINING)
 
         format_type = "raw"
@@ -134,6 +131,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         # Features are computed here when missing — freshly uploaded photos have none yet.
         feature_vectors: list[list[float]] = []
         targets: list[dict[str, float]] = []
+        as_shot: list[bool] = []
         used_settings: list[dict] = []
         skipped: list[str] = []
         for photo_id in photo_ids:
@@ -143,17 +141,17 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
                 if photo is None:
                     skipped.append(f"{photo_id}: not found")
                     continue
-                row = from_lightroom(photo.lr_develop_settings or {}, format_type)
-                missing = [p for p in LR_PARAMS if p not in row]
-                if missing:
-                    skipped.append(f"{photo_id}: missing LR settings {missing}")
+                target = training_target(photo.lr_develop_settings or {}, format_type, untouched)
+                if not target.sliders:
+                    skipped.append(f"{photo_id}: no slider the photographer decided")
                     continue
                 vector = _ensure_feature_vector(session, s3, bucket, photo)
                 if vector is None:
                     skipped.append(f"{photo_id}: preview unavailable")
                     continue
                 feature_vectors.append(vector)
-                targets.append(row)
+                targets.append(target.sliders)
+                as_shot.append(target.as_shot)
                 used_settings.append(dict(photo.lr_develop_settings or {}))
 
         if skipped:
@@ -163,13 +161,11 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
                 f"only {len(feature_vectors)} usable training photos, need at least {MIN_SAMPLES}"
             )
 
-        # Train real model and save bytes to MinIO
-        # Most photos still on the camera's white balance: the photographer's way is to leave
-        # it, so the profile leaves it too instead of predicting a Kelvin value.
-        kept = sum(1 for s in used_settings if keeps_as_shot(s, format_type))
-        as_shot = kept / len(used_settings) >= AS_SHOT_SHARE
-        log.info("white balance: %d of %d training photos as shot -> %s", kept, len(used_settings),
-                 "kept as shot" if as_shot else "predicted")
+        # Photos on the camera's white balance teach their Kelvin too; at apply time a photo
+        # keeps the camera's white balance when the prediction is close to it (model.py).
+        undecided = {k: sum(1 for t in targets if k not in t) for k in ("highlights", "exposure", "temp")}
+        log.info("white balance: %d of %d training photos as shot; undecided values %s untouched=%s",
+                 sum(as_shot), len(as_shot), undecided, untouched)
         model_bytes = train_for_version(feature_vectors, targets, CURRENT_FEATURE_VERSION, as_shot=as_shot)
         profile_id = UUID(profile_id_str) if profile_id_str else None
         artifact_name = f"model-{CURRENT_FEATURE_VERSION}.joblib"
@@ -197,7 +193,9 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         with session_scope(factory) as session:
             JobRepository.set_status(session, job_uuid, JobStatus.FAILED, failure_reason=reason)
             if profile_id_str:
-                ProfileRepository.set_status(session, UUID(profile_id_str), ProfileStatus.FAILED, failure_reason=reason)
+                # A retrained profile keeps its earlier model and stays usable.
+                status = ProfileStatus.READY if retrain else ProfileStatus.FAILED
+                ProfileRepository.set_status(session, UUID(profile_id_str), status, failure_reason=reason)
         if raw is not None:
             consumer.push_dead_letter(redis, primary_queue_name=QUEUE_TRAIN, raw_payload=raw, reason="processing_error")
         log.exception("train worker failure job_id=%s", job_uuid)

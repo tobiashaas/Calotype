@@ -208,6 +208,8 @@ components:
         color_type: { type: string, enum: [color, bw] }
         lr_catalog_uuids: { type: array, minItems: 1, items: { type: string } }
         base_preset: { type: object, additionalProperties: true, nullable: true }
+        profile_id: { type: string, format: uuid, nullable: true, description: "Retrain this profile: its earlier training photos and these together, same id." }
+        untouched: { type: object, additionalProperties: { type: number }, nullable: true, description: "Values only a preset left (Lightroom key -> value), e.g. Highlights2012 -100: not taught." }
     BridgeEditV1:
       type: object
       additionalProperties: false
