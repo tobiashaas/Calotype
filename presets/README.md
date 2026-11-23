@@ -42,6 +42,26 @@ nothing, keeps the photographer's own masks and saves the original as the snapsh
 *Calotype: before*. The approach (mask presets + `updateAISettings`) follows
 [Retoucan](https://github.com/joemalott/retoucan) (MIT) — thanks!
 
+`retouch/retouch.json` is the manifest of the retouch kinds: id, preset file, correction name
+(`Calotype <id>`), Lightroom mask types (`MaskSubType` / `MaskSubCategoryID`), English and German
+titles and the local values.
+
+### Adding a retouch kind
+
+The kinds are defined in **one place**: the `RETOUCH` list in
+[`tools/presets/build.py`](../tools/presets/build.py). To add one:
+
+1. Add an entry there (id, preset names, German plugin title `title_de`, descriptions, the AI
+   masks as `(MaskSubType, MaskSubCategoryID or None, name)`, local values).
+2. Run `python tools/presets/build.py`. It writes the preset, the manifest, the mask kinds
+   edit-serializer learns (`libs/edit-serializer/src/calotype_edit_serializer/retouch_kinds.py`),
+   the plugin's list (`apps/lr-plugin/Calotype.lrplugin/RetouchKinds.lua`) and the German title
+   (`TranslatedStrings_de.txt`).
+3. Add the new `.xmp` to the Bridge's embed list (`apps/bridge/core/src/presets.rs`; its test
+   `presets_on_disk_are_all_embedded` fails until you do).
+4. Commit everything. `libs/edit-serializer/tests/test_presets.py` fails while a generated file
+   is out of sync.
+
 ## Use
 
 - **Automatic:** the Bridge installs all presets on start (`install_presets` in `bridge.json`,

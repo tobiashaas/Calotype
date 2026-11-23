@@ -77,8 +77,11 @@ _Avoid_: base preset
 **Import preset**:
 The develop preset Lightroom applies on import; the source of Placeholders.
 
+**Retouch kind**:
+One kind of AI mask Calotype retouches and learns: subject, sky, background, skin, eyes, teeth. Each has one Retouch preset and one title in the plugin.
+
 **Retouch preset**:
-A Calotype preset that adds one AI-mask Correction (subject, sky, background, skin, eyes, teeth) with Mask strengths.
+A Calotype preset that adds one AI-mask Correction (one Retouch kind) with Mask strengths.
 _Avoid_: mask preset
 
 **Mask strength**:
