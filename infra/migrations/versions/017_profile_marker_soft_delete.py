@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "017_profile_marker_and_soft_delete"
+revision = "017_profile_marker_soft_delete"
 down_revision = "016_jobs_failure_code"
 branch_labels = None
 depends_on = None
