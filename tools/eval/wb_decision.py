@@ -14,6 +14,12 @@ scores the white balance on the unseen photos for
   * predict   — always the predicted Kelvin;
   * per photo — keep As shot when the prediction is within T mired of the camera's Kelvin.
 
+The shipped rule (model.py) is "profile", except in a Scene the profile saw corrected (a training
+photo with an own white balance within SCENE_SECONDS) where it is "per photo 15 mired"; photos of
+unseen weddings never share a Scene with the training photos, so on them it scores as "profile".
+Result 2026-11-24, 3 held-out weddings (3,191 photos): profile 67.6 % within 150 K, per photo
+15 mired 38 %, 40 mired 60 %, always predict 21 %.
+
 Truth is each unseen photo's own settings. A photo whose truth is As shot carries its camera Kelvin, so
 "keep" is exact for it; for a photo the photographer gave an own white balance the camera Kelvin is
 unknown here, so the decision compares with the training photos' median camera Kelvin (at apply time
@@ -81,7 +87,7 @@ def main() -> int:
     camera_median = st.median(t.sliders["temp"] for t, _ in targets if t.as_shot)
 
     cases = []  # (truth Kelvin, truth as shot?, camera Kelvin or None, predicted Kelvin)
-    model_module.AS_SHOT_MIRED = -1.0  # never keep: raw prediction
+    model_module._keeps_cameras_white_balance = lambda *args: False  # raw prediction; the rules decide below
     for settings, vec in unseen.values():
         truth = training_target(settings, "raw")
         if "temp" not in truth.sliders:

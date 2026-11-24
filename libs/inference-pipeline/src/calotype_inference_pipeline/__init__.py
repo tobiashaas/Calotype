@@ -45,14 +45,16 @@ def compute_features(image_bytes: bytes, version: str = CURRENT_FEATURE_VERSION)
 def train_for_version(
     feature_vectors: list[list[float]], targets: list[dict[str, float]], version: str,
     as_shot: Sequence[bool] | bool = False,
+    capture_times: Sequence[float | None] | None = None,
 ) -> bytes:
     """v1 → Ridge as before; v2 → gradient boosting (Ridge for small sets).
 
     targets may leave sliders out (never decided by the photographer, v2 only); as_shot: per
-    training photo, whether it kept the camera's white balance (v2 only)."""
+    training photo, whether it kept the camera's white balance; capture_times: per training photo
+    (seconds or None), the Scenes a photo may get its own Kelvin in (v2 only)."""
     if version == FEATURE_MODEL_VERSION:
         return train_model(feature_vectors, targets)
-    return train_model_v2(feature_vectors, targets, version, as_shot=as_shot)
+    return train_model_v2(feature_vectors, targets, version, as_shot=as_shot, capture_times=capture_times)
 
 
 __all__ = [

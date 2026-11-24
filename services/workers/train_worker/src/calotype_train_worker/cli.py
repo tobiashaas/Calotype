@@ -24,6 +24,7 @@ from calotype_inference_pipeline import (
     compute_features,
     train_for_version,
 )
+from calotype_inference_pipeline.exif import ExifSnapshot
 from calotype_observability import get_logger
 from calotype_persistence.stores import Store
 from calotype_queue.constants import QUEUE_TRAIN
@@ -52,6 +53,7 @@ def handle(ctx: JobContext[TrainPayloadV1]) -> None:
     feature_vectors: list[list[float]] = []
     targets: list[dict[str, float]] = []
     as_shot: list[bool] = []
+    capture_times: list[float | None] = []
     used_settings: list[dict] = []
     skipped: list[str] = []
     for photo_id in payload.photo_ids:
@@ -79,6 +81,7 @@ def handle(ctx: JobContext[TrainPayloadV1]) -> None:
             feature_vectors.append(vector)
             targets.append(target.sliders)
             as_shot.append(target.as_shot)
+            capture_times.append(ExifSnapshot.from_snapshot(photo.exif_snapshot).capture_time)
             used_settings.append(dict(photo.lr_develop_settings or {}))
 
     if skipped:
@@ -88,12 +91,13 @@ def handle(ctx: JobContext[TrainPayloadV1]) -> None:
             f"only {len(feature_vectors)} usable training photos, need at least {MIN_SAMPLES}"
         )
 
-    # Photos on the camera's white balance teach their Kelvin too; at apply time a photo
-    # keeps the camera's white balance when the prediction is close to it (model.py).
+    # Photos on the camera's white balance teach their Kelvin too; at apply time a photo gets its
+    # own Kelvin only in a Scene the profile saw corrected (capture times, model.py).
     undecided = {k: sum(1 for t in targets if k not in t) for k in ("highlights", "exposure", "temp")}
     log.info("white balance: %d of %d training photos as shot; undecided values %s untouched=%s",
              sum(as_shot), len(as_shot), undecided, untouched)
-    model_bytes = train_for_version(feature_vectors, targets, CURRENT_FEATURE_VERSION, as_shot=as_shot)
+    model_bytes = train_for_version(feature_vectors, targets, CURRENT_FEATURE_VERSION, as_shot=as_shot,
+                                    capture_times=capture_times)
     owner = profile_id if profile_id is not None else f"job-{ctx.job_id}"
     artifact_key = ctx.blobs.put_model(owner, CURRENT_FEATURE_VERSION, model_bytes)
     log.info("model artifact saved key=%s n_samples=%d", artifact_key, len(feature_vectors))

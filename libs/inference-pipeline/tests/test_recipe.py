@@ -66,12 +66,42 @@ def _hut_wedding(n: int = 80, seed: int = 5):
     return X.tolist(), rows, as_shot
 
 
+# The hut photos (every fourth) were taken in the evening, minutes apart; daylight in the afternoon.
+HUT_EVENING, AFTERNOON = 72_000.0, 50_000.0
+
+
+def _times(n: int = 80) -> list[float]:
+    return [HUT_EVENING + 60 * i if i % 4 == 0 else AFTERNOON + 30 * i for i in range(n)]
+
+
 def test_daylight_keeps_the_cameras_white_balance_and_the_hut_gets_its_kelvin():
     X, rows, as_shot = _hut_wedding()
-    model = train_for_version(X, rows, VERSION, as_shot=as_shot)
-    daylight, hut = run_inference(model, X[1], as_shot_temp=5899.0), run_inference(model, X[0])
+    model = train_for_version(X, rows, VERSION, as_shot=as_shot, capture_times=_times())
+    daylight = run_inference(model, X[1], as_shot_temp=5899.0, capture_time=AFTERNOON + 30)
+    hut = run_inference(model, X[0], as_shot_temp=5899.0, capture_time=HUT_EVENING + 90)
     assert "temp" not in daylight and "tint" not in daylight
     assert abs(hut["temp"] - 2850) < 300 and hut["tint"] < -10
+
+
+def test_light_the_profile_never_saw_corrected_keeps_the_cameras_white_balance():
+    """Measured on three unseen weddings: a predicted Kelvin for unseen light is mostly wrong."""
+    X, rows, as_shot = _hut_wedding()
+    model = train_for_version(X, rows, VERSION, as_shot=as_shot, capture_times=_times())
+    another_wedding = run_inference(model, X[0], as_shot_temp=5899.0, capture_time=HUT_EVENING + 86_400 * 30)
+    no_time = run_inference(model, X[0], as_shot_temp=5899.0)
+    assert "temp" not in another_wedding and "temp" not in no_time
+
+
+def test_a_profile_trained_without_capture_times_keeps_the_cameras_white_balance():
+    X, rows, as_shot = _hut_wedding()
+    out = run_inference(train_for_version(X, rows, VERSION, as_shot=as_shot), X[0], capture_time=HUT_EVENING)
+    assert "temp" not in out
+
+
+def test_a_photographer_who_sets_white_balance_everywhere_gets_it_predicted():
+    X, rows, _ = _hut_wedding()
+    out = run_inference(train_for_version(X, rows, VERSION, as_shot=False), X[1])
+    assert "temp" in out
 
 
 def test_a_placeholder_left_out_of_the_targets_is_not_learned():

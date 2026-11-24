@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import bisect
 import io
 from collections.abc import Sequence
 
@@ -65,12 +66,19 @@ RECIPE_SHARE = 0.6
 # White balance is never a recipe constant: a Kelvin value belongs to the light of one photo.
 NEVER_CONSTANT = ("temp", "tint")
 # From this share of training photos on the camera's white balance, the photographer's way is to
-# leave it — unless the light calls for more: then the profile sets its own Kelvin.
+# leave it: the profile keeps the camera's white balance (#23) — except in a Scene the profile saw
+# the photographer correct (below).
 AS_SHOT_SHARE = 0.3
-# A prediction this close to the camera's Kelvin (in mired: ~500 K at 5900 K, ~180 K at 3500 K)
-# keeps the camera's white balance. A hut lit by lamps (camera 5900 K, photographer 2850 K) is
-# far outside it; daylight is inside.
+# A photo gets its own Kelvin only when (a) a training photo with the photographer's own white
+# balance was taken within SCENE_SECONDS of it — the profile saw this light corrected — and (b) the
+# prediction is more than AS_SHOT_MIRED from the camera's Kelvin (~500 K at 5900 K, ~180 K at
+# 3500 K). Measured 2026-11-24 (`tools/eval/wb_decision.py`): on three weddings the model never saw
+# (3,191 photos) a per-photo decision without (a) fell from 67.6 % to 38 % within 150 K — predicted
+# Kelvin does not transfer to unseen light, and gating by the nearest training photos in feature
+# space did not separate a lamp-lit hut from daylight; on Marryween's hut (photos taken minutes
+# after corrected ones) only the time tells: 1,628 K -> ~300 K off.
 AS_SHOT_MIRED = 15.0
+SCENE_SECONDS = 600.0  # like the white balance window of shoot calibration (shoot.py)
 
 
 def _present(rows: list[dict[str, float]], p: str) -> list[float]:
@@ -107,6 +115,7 @@ def train_model_v2(
     lr_settings_list: list[dict[str, float]],
     feature_version: str,
     as_shot: Sequence[bool] | bool = False,
+    capture_times: Sequence[float | None] | None = None,
 ) -> bytes:
     """Gradient boosting per slider (falls back to Ridge for small sets).
 
@@ -117,8 +126,9 @@ def train_model_v2(
 
     A row may leave sliders out — values the photographer never decided: each slider learns
     only from the rows that carry it. as_shot: per row, whether the photo kept the camera's
-    white balance. Its Kelvin is still a target (the camera got that light right); at
-    inference a prediction close to the camera's keeps the camera's white balance.
+    white balance. Its Kelvin is still a target (the camera got that light right).
+    capture_times: per row (seconds, None unknown) — the artifact keeps those of photos with the
+    photographer's own white balance, the Scenes where a photo may get its own Kelvin.
     """
     if len(feature_vectors) < MIN_SAMPLES:
         raise ValueError(f"need at least {MIN_SAMPLES} training photos")
@@ -150,11 +160,17 @@ def train_model_v2(
                 fallbacks[p] = float(np.median(Y[decided, j]))
         artifact = {"type": "gbr_v2", "models": models, "fallbacks": fallbacks}
     camera_temps = [row["temp"] for row, f in zip(lr_settings_list, flags) if f and row.get("temp") is not None]
+    times = list(capture_times) if capture_times is not None else [None] * len(flags)
+    if len(times) != len(flags):
+        raise ValueError(f"{len(times)} capture times for {len(flags)} training photos")
+    own_wb_times = sorted(float(t) for t, f, row in zip(times, flags, lr_settings_list)
+                          if t is not None and not f and row.get("temp") is not None)
     artifact.update(
         lr_params=LR_PARAMS, feature_version=feature_version, n_features=X.shape[1], n_samples=len(X),
         constants=recipe_constants(lr_settings_list),
         as_shot_share=sum(flags) / len(flags),
         as_shot_temp=float(np.median(camera_temps)) if camera_temps else None,
+        own_wb_times=own_wb_times,
     )
     buf = io.BytesIO()
     joblib.dump(artifact, buf)
@@ -182,23 +198,37 @@ def _mired(kelvin: float) -> float:
     return 1e6 / max(float(kelvin), 1.0)
 
 
-def _keeps_cameras_white_balance(artifact: dict, out: dict[str, float], as_shot_temp: float | None) -> bool:
+def _in_corrected_scene(artifact: dict, capture_time: float | None) -> bool:
+    times = artifact.get("own_wb_times") or []
+    if capture_time is None or not times:
+        return False
+    i = bisect.bisect_left(times, capture_time)
+    near = [times[j] for j in (i - 1, i) if 0 <= j < len(times)]
+    return any(abs(t - capture_time) <= SCENE_SECONDS for t in near)
+
+
+def _keeps_cameras_white_balance(artifact: dict, out: dict[str, float], as_shot_temp: float | None,
+                                 capture_time: float | None) -> bool:
     if "as_shot_share" not in artifact:  # artifacts before the per-photo decision
         return bool(artifact.get("as_shot"))
     if artifact["as_shot_share"] < AS_SHOT_SHARE or "temp" not in out:
         return False
+    if not _in_corrected_scene(artifact, capture_time):
+        return True  # light the profile never saw corrected: the camera's (measured best on unseen shoots)
     camera = as_shot_temp if as_shot_temp is not None else artifact.get("as_shot_temp")
     return camera is not None and abs(_mired(out["temp"]) - _mired(camera)) <= AS_SHOT_MIRED
 
 
 def run_inference(
     model_bytes: bytes, feature_vector: list[float], as_shot_temp: float | None = None,
+    capture_time: float | None = None,
 ) -> dict[str, float]:
     """Apply a trained model to a feature vector and return LR settings.
 
     Returns a dict of {param: value} — without temperature and tint when the photographer
-    mostly keeps the camera's white balance and the predicted Kelvin is close to the camera's
-    (``as_shot_temp``: this photo's as-shot Kelvin if known, else the training photos'), and
+    mostly keeps the camera's white balance — unless the photo was taken (``capture_time``, seconds)
+    in a Scene the profile saw corrected and the predicted Kelvin is far from the camera's
+    (``as_shot_temp``: this photo's as-shot Kelvin if known, else the training photos') — and
     without sliders the training photos never decided.
 
     Raises ``ValueError`` for an unreadable artifact or a vector of the wrong size:
@@ -226,7 +256,7 @@ def run_inference(
         out = {p: float(v) for p, v in zip(params, pred) if p not in untrained}
     # The recipe wins over the model (artifacts before this field have none).
     out.update(artifact.get("constants") or {})
-    if _keeps_cameras_white_balance(artifact, out, as_shot_temp):
+    if _keeps_cameras_white_balance(artifact, out, as_shot_temp, capture_time):
         for p in NEVER_CONSTANT:
             out.pop(p, None)
     return out
