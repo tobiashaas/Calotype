@@ -29,6 +29,13 @@ class EditResultRepository:
         return session.execute(stmt).scalar_one_or_none()
 
     @staticmethod
+    def for_photo(session: Session, photo_id: uuid.UUID) -> list[EditResult]:
+        """Every result Calotype wrote for this photo, newest first."""
+        stmt = (select(EditResult).where(EditResult.photo_id == photo_id)
+                .order_by(EditResult.created_at.desc()))
+        return list(session.execute(stmt).scalars().all())
+
+    @staticmethod
     def create(
         session: Session,
         *,

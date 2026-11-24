@@ -257,6 +257,8 @@ def test_latest_edit_result_of_a_photo_over_all_jobs(h):
                                 lr_settings={"Exposure2012": -1.0})
     h.commit()
     assert h.store.edit_results.latest_for_photo(photo.id).lr_settings == {"Exposure2012": 0.6}
+    assert [r.lr_settings for r in h.store.edit_results.for_photo(photo.id)] == [
+        {"Exposure2012": 0.6}, {"Exposure2012": 0.1}]
 
 
 def test_edit_result_keeps_the_photos_own_crop_flag(h):
