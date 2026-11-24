@@ -1,7 +1,13 @@
 """Training worker — trains a profile model from photo feature vectors.
 
 Training rows: the features of each photo's preview (computed here when missing — freshly
-uploaded photos have none yet) and the photographer's Lightroom settings as targets. The loop
+uploaded photos have none yet) and the photographer's Lightroom settings as targets.
+
+No self-learning: a photo whose current settings still hold Calotype's latest result for it —
+of any job and any profile, because whichever profile set them, they are not the
+photographer's — is left out unless the photographer marked it as accepted (``accepted``).
+A photo changed since is a Correction and is learned; a photo Calotype never edited is a
+normal training photo. Earlier training photos merged into a retrain pass the same check. The loop
 around the job (envelope, DLQ, job status) is the worker runtime's; the profile's status is
 this worker's: TRAINING while it runs, READY with the new model, FAILED on error — except a
 retrained profile, which keeps its earlier model and stays READY.
@@ -11,13 +17,14 @@ from __future__ import annotations
 
 from calotype_domain.failures import TooFewPhotosError
 from calotype_domain.profiles import ProfileStatus
-from calotype_edit_serializer import shared_masks, training_target
+from calotype_edit_serializer import shared_masks, training_target, unchanged_since
 from calotype_inference_pipeline import (
     CURRENT_FEATURE_VERSION,
     MIN_SAMPLES,
     compute_features,
     train_for_version,
 )
+from calotype_inference_pipeline.exif import ExifSnapshot
 from calotype_observability import get_logger
 from calotype_persistence.stores import Store
 from calotype_queue.constants import QUEUE_TRAIN
@@ -32,6 +39,7 @@ def handle(ctx: JobContext[TrainPayloadV1]) -> None:
     profile_id = payload.profile_id
     # Values only a preset left (Lightroom key -> value): not the photographer's decision.
     untouched = payload.untouched or {}
+    accepted = set(payload.accepted)
 
     format_type = "raw"
     if profile_id is not None:
@@ -45,6 +53,7 @@ def handle(ctx: JobContext[TrainPayloadV1]) -> None:
     feature_vectors: list[list[float]] = []
     targets: list[dict[str, float]] = []
     as_shot: list[bool] = []
+    capture_times: list[float | None] = []
     used_settings: list[dict] = []
     skipped: list[str] = []
     for photo_id in payload.photo_ids:
@@ -54,6 +63,13 @@ def handle(ctx: JobContext[TrainPayloadV1]) -> None:
             if photo is None:
                 skipped.append(f"{photo_id}: not found")
                 continue
+            if photo_id not in accepted:
+                applied = store.edit_results.latest_for_photo(photo_id)
+                if applied is not None and unchanged_since(
+                    applied.lr_settings or {}, photo.lr_develop_settings or {}, format_type
+                ):
+                    skipped.append(f"{photo_id}: still Calotype's result of job {applied.job_id}, not accepted")
+                    continue
             target = training_target(photo.lr_develop_settings or {}, format_type, untouched)
             if not target.sliders:
                 skipped.append(f"{photo_id}: no slider the photographer decided")
@@ -65,6 +81,7 @@ def handle(ctx: JobContext[TrainPayloadV1]) -> None:
             feature_vectors.append(vector)
             targets.append(target.sliders)
             as_shot.append(target.as_shot)
+            capture_times.append(ExifSnapshot.from_snapshot(photo.exif_snapshot).capture_time)
             used_settings.append(dict(photo.lr_develop_settings or {}))
 
     if skipped:
@@ -74,12 +91,13 @@ def handle(ctx: JobContext[TrainPayloadV1]) -> None:
             f"only {len(feature_vectors)} usable training photos, need at least {MIN_SAMPLES}"
         )
 
-    # Photos on the camera's white balance teach their Kelvin too; at apply time a photo
-    # keeps the camera's white balance when the prediction is close to it (model.py).
+    # Photos on the camera's white balance teach their Kelvin too; at apply time a photo gets its
+    # own Kelvin only in a Scene the profile saw corrected (capture times, model.py).
     undecided = {k: sum(1 for t in targets if k not in t) for k in ("highlights", "exposure", "temp")}
     log.info("white balance: %d of %d training photos as shot; undecided values %s untouched=%s",
              sum(as_shot), len(as_shot), undecided, untouched)
-    model_bytes = train_for_version(feature_vectors, targets, CURRENT_FEATURE_VERSION, as_shot=as_shot)
+    model_bytes = train_for_version(feature_vectors, targets, CURRENT_FEATURE_VERSION, as_shot=as_shot,
+                                    capture_times=capture_times)
     owner = profile_id if profile_id is not None else f"job-{ctx.job_id}"
     artifact_key = ctx.blobs.put_model(owner, CURRENT_FEATURE_VERSION, model_bytes)
     log.info("model artifact saved key=%s n_samples=%d", artifact_key, len(feature_vectors))

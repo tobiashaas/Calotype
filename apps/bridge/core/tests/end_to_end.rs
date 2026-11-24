@@ -25,6 +25,8 @@ struct FakeApi {
     fail_jobs: Option<(String, String)>,
     uploads: Vec<Value>,
     jobs: Vec<(Option<String>, Value)>,
+    /// Profile requests the server got: (method, profile id, body).
+    profile_calls: Vec<(String, String, Value)>,
 }
 
 type Fake = Arc<Mutex<FakeApi>>;
@@ -111,6 +113,43 @@ async fn fake_cull_results(State(fake): State<Fake>) -> Json<Value> {
     ))
 }
 
+const KNOWN_PROFILE: &str = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+
+async fn fake_update_profile(
+    State(fake): State<Fake>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> (StatusCode, Json<Value>) {
+    fake.lock()
+        .unwrap()
+        .profile_calls
+        .push(("PATCH".into(), id.clone(), body.clone()));
+    if id != KNOWN_PROFILE {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"detail": "profile not found"})),
+        );
+    }
+    (
+        StatusCode::OK,
+        Json(
+            json!({"profile_id": id, "name": body["name"], "accepted_marker": body["accepted_marker"]}),
+        ),
+    )
+}
+
+async fn fake_delete_profile(State(fake): State<Fake>, Path(id): Path<String>) -> StatusCode {
+    fake.lock()
+        .unwrap()
+        .profile_calls
+        .push(("DELETE".into(), id.clone(), Value::Null));
+    if id == KNOWN_PROFILE {
+        StatusCode::NO_CONTENT
+    } else {
+        StatusCode::NOT_FOUND
+    }
+}
+
 async fn spawn_fake_api(fake: Fake) -> String {
     let app = Router::new()
         .route("/health", get(|| async { Json(json!({"status": "ok"})) }))
@@ -121,6 +160,10 @@ async fn spawn_fake_api(fake: Fake) -> String {
         .route("/v1/jobs/{id}/cull-result", get(fake_cull_results))
         .route("/v1/jobs/{id}", get(fake_job_state))
         .route("/v1/jobs/{id}/result", get(fake_results))
+        .route(
+            "/v1/profiles/{id}",
+            axum::routing::patch(fake_update_profile).delete(fake_delete_profile),
+        )
         .with_state(fake);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -578,6 +621,70 @@ fn sample(prop: &Value) -> Value {
     }
 }
 
+/// A newer plugin's photo field reaches the server without a Bridge change; an old-style
+/// registration uploads exactly the fields it always did.
+#[tokio::test]
+async fn unknown_photo_fields_reach_the_server() {
+    let dir = tempfile::tempdir().unwrap();
+    let fake: Fake = Arc::new(Mutex::new(FakeApi::default()));
+    let api = spawn_fake_api(fake.clone()).await;
+    let st = state(&api, dir.path());
+    let jpg = dir.path().join("a.jpg");
+    write_jpeg(&jpg, 1600, 1200);
+
+    let mut newer = photo_body("lr-new", &jpg);
+    newer["lr_keywords"] = json!(["wedding", "ceremony"]);
+    newer["capture_device"] = json!({"serial": "123"});
+    newer["left_out"] = Value::Null;
+    let (s, err) = call(&st, "POST", "/v1/photos", Some(TOKEN), Some(newer)).await;
+    assert_eq!(s, StatusCode::ACCEPTED, "{err}");
+    let (s, err) = call(
+        &st,
+        "POST",
+        "/v1/photos",
+        Some(TOKEN),
+        Some(photo_body("lr-old", &jpg)),
+    )
+    .await;
+    assert_eq!(s, StatusCode::ACCEPTED, "{err}");
+    outbox::tick(&st).await;
+
+    let f = fake.lock().unwrap();
+    let sent = |uuid: &str| {
+        f.uploads
+            .iter()
+            .find(|u| u["lr_catalog_uuid"] == uuid)
+            .unwrap()
+            .clone()
+    };
+    let new = sent("lr-new");
+    assert_eq!(new["schema_version"], "photo-upload-v1");
+    assert_eq!(new["lr_keywords"], json!(["wedding", "ceremony"]));
+    assert_eq!(new["capture_device"], json!({"serial": "123"}));
+    assert_eq!(new["lr_metadata"], json!({"rating": 4, "pick_status": 1}));
+    assert!(new.get("left_out").is_none(), "null fields are left out");
+    assert!(new.get("file_path").is_none(), "the local path stays local");
+
+    let old = sent("lr-old");
+    let mut keys: Vec<&str> = old
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        [
+            "exif_snapshot",
+            "lr_catalog_uuid",
+            "lr_develop_settings",
+            "lr_metadata",
+            "schema_version"
+        ]
+    );
+}
+
 /// Every field of the server's train and edit requests (`packages/contracts/json-schema`,
 /// kept equal to the API's models by a Python test) goes through the Bridge untouched — a new
 /// server option needs no Bridge change. This is what `consistent_series` once lacked.
@@ -739,4 +846,69 @@ async fn cull_job_reads_lightroom_culling_scores_from_the_catalog() {
     .await;
     outbox::tick(&st).await;
     assert_eq!(fake.lock().unwrap().uploads.len(), uploads);
+}
+
+/// Rename / marker / delete go to the server as they are; its status reaches the plugin.
+#[tokio::test]
+async fn profile_rename_and_delete_are_forwarded_to_the_server() {
+    let dir = tempfile::tempdir().unwrap();
+    let fake: Fake = Arc::new(Mutex::new(FakeApi::default()));
+    let api = spawn_fake_api(fake.clone()).await;
+    let st = state(&api, dir.path());
+    let uri = format!("/v1/profiles/{KNOWN_PROFILE}");
+    let body = json!({"schema_version": "profile-update-v1", "name": "Matte",
+                      "accepted_marker": {"kind": "label", "value": "green"}});
+
+    let (s, _) = call(&st, "PATCH", &uri, None, Some(body.clone())).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    let (s, profile) = call(&st, "PATCH", &uri, Some(TOKEN), Some(body.clone())).await;
+    assert_eq!(s, StatusCode::OK, "{profile}");
+    assert_eq!(profile["name"], "Matte");
+    assert_eq!(profile["accepted_marker"]["value"], "green");
+
+    let (s, _) = call(&st, "DELETE", &uri, Some(TOKEN), None).await;
+    assert_eq!(s, StatusCode::NO_CONTENT);
+
+    let unknown = "/v1/profiles/00000000-0000-0000-0000-000000000000";
+    let (s, _) = call(&st, "DELETE", unknown, Some(TOKEN), None).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, err2) = call(&st, "PATCH", unknown, Some(TOKEN), Some(body.clone())).await;
+    assert_eq!(
+        (s, err2["error"].as_str()),
+        (StatusCode::NOT_FOUND, Some("profile not found"))
+    );
+
+    // Nothing that is not a UUID reaches the server's URL.
+    let (s, _) = call(&st, "DELETE", "/v1/profiles/..%2Fjobs", Some(TOKEN), None).await;
+    assert_eq!(s, StatusCode::UNPROCESSABLE_ENTITY);
+
+    let f = fake.lock().unwrap();
+    let calls: Vec<(&str, &str)> = f
+        .profile_calls
+        .iter()
+        .map(|(m, id, _)| (m.as_str(), id.as_str()))
+        .collect();
+    assert_eq!(
+        calls,
+        vec![
+            ("PATCH", KNOWN_PROFILE),
+            ("DELETE", KNOWN_PROFILE),
+            ("DELETE", "00000000-0000-0000-0000-000000000000"),
+            ("PATCH", "00000000-0000-0000-0000-000000000000"),
+        ]
+    );
+    assert_eq!(
+        f.profile_calls[0].2, body,
+        "the body reaches the server unchanged"
+    );
+}
+
+/// Without a server the plugin learns that, instead of a hang or a 500.
+#[tokio::test]
+async fn profile_changes_without_a_server_are_502() {
+    let dir = tempfile::tempdir().unwrap();
+    let st = state("http://127.0.0.1:9", dir.path());
+    let uri = format!("/v1/profiles/{KNOWN_PROFILE}");
+    let (s, _) = call(&st, "DELETE", &uri, Some(TOKEN), None).await;
+    assert_eq!(s, StatusCode::BAD_GATEWAY);
 }

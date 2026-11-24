@@ -66,8 +66,14 @@ class Profile(Base):
     retouch: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     model_artifact_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     lr_output_keys: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    # Migration 017: how the photographer marks accepted photos ({"kind": "label", "value":
+    # "green"} / {"kind": "rating", "min": 4}; None = no marker).
+    accepted_marker: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     failure_reason: Mapped[str | None] = mapped_column(String(4096), nullable=True)
+    # Migration 017: deleted profiles are only hidden (soft delete); jobs, results and the
+    # model artifacts stay.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

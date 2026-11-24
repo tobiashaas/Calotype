@@ -54,6 +54,10 @@ calotype-folder profiles
 # Style layer: the model sets exposure/WB/tone per photo, the preset sets the look
 calotype-folder train  <folder> --name "Business + Look" --style my-preset.xmp
 
+# One of your presets as this job's Look (like the plugin's Look popup): an .xmp file or the
+# name of a preset installed in Camera Raw's settings folder; masks are left out
+calotype-folder apply  <folder> --profile "Business Warm" --look "My Warm Preset"
+
 # Train/test split and output to another folder (source stays untouched)
 calotype-folder train  <folder> --name X --files-from train.txt
 calotype-folder apply  <folder> --profile X --files-from test.txt --out <output>

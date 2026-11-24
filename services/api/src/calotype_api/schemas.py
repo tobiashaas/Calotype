@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 # The job requests live with the queue payloads (one definition per field, read by the
 # workers too); re-exported here as the API's request models.
+from calotype_queue.payloads import AcceptedMarker as AcceptedMarker
 from calotype_queue.payloads import CullJobRequestV1 as CullJobRequestV1
 from calotype_queue.payloads import EditJobRequestV1 as EditJobRequestV1
 from calotype_queue.payloads import TolerantModel as TolerantRequest
@@ -61,6 +62,18 @@ class ProfileResponse(BaseModel):
     version: int
     model_artifact_key: str | None = None
     failure_reason: str | None = None
+    # How the photographer marks accepted photos ({"kind": "label", "value": "green"} /
+    # {"kind": "rating", "min": 4}); None = no marker.
+    accepted_marker: dict[str, Any] | None = None
+
+
+class ProfileUpdateV1(TolerantRequest):
+    """Rename a profile and/or change its marker (``profile-update-v1``). Only the fields sent
+    change; ``accepted_marker`` null or ``{"kind": "none"}`` removes the marker."""
+
+    schema_version: Literal["profile-update-v1"]
+    name: str | None = Field(default=None, min_length=1, max_length=256)
+    accepted_marker: AcceptedMarker | None = None
 
 
 class CullResultResponse(BaseModel):

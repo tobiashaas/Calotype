@@ -53,7 +53,7 @@ paths:
   /v1/profiles:
     get:
       operationId: listProfiles
-      summary: List all profiles
+      summary: List all profiles (deleted ones are hidden)
       responses:
         "200":
           description: List of profiles
@@ -81,6 +81,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProfileResponse"
+        "404":
+          description: Profile not found (or deleted)
+    patch:
+      operationId: updateProfile
+      summary: Rename a profile and/or change its marker for accepted photos (only the fields sent change)
+      parameters:
+        - name: profile_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdateV1"
+      responses:
+        "200":
+          description: The updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+        "404":
+          description: Profile not found (or deleted)
+        "422":
+          description: Invalid body (blank name, incomplete marker)
+    delete:
+      operationId: deleteProfile
+      summary: >-
+        Soft delete: the profile is hidden from the list, from apply and from retraining; its
+        jobs, results and model artifacts stay. Deleting it again changes nothing.
+      parameters:
+        - name: profile_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted (hidden)
         "404":
           description: Profile not found
   /v1/jobs/train:
@@ -298,6 +342,16 @@ components:
           additionalProperties:
             type: number
           description: Values only a preset left on the photos (Lightroom key → value), e.g. Highlights2012 -100; a slider holding one is left out of that photo's training target.
+        accepted_lr_catalog_uuids:
+          type: array
+          items:
+            type: string
+          description: >-
+            Accepted photos (catalog uuids of selected photos carrying the photographer's marker).
+            A photo still holding Calotype's latest result for it is learned only when accepted;
+            a photo changed since is a correction and always learned.
+        accepted_marker:
+          $ref: "#/components/schemas/AcceptedMarker"
     EditJobRequestV1:
       type: object
       description: Without profile_id the look comes only from the selection's edited photos; then learn_from_edits and format_type are required.
@@ -413,6 +467,43 @@ components:
         failure_reason:
           type: string
           nullable: true
+        accepted_marker:
+          allOf:
+            - $ref: "#/components/schemas/AcceptedMarker"
+          nullable: true
+          description: How the photographer marks accepted photos; null = no marker.
+    AcceptedMarker:
+      type: object
+      description: >-
+        How the photographer marks accepted photos (reviewed after Calotype applied the profile
+        and left unchanged): kind none, a colour label (value) or a minimum star rating (min).
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [none, label, rating]
+        value:
+          type: string
+          enum: [red, yellow, green, blue, purple]
+        min:
+          type: integer
+          minimum: 1
+          maximum: 5
+    ProfileUpdateV1:
+      type: object
+      required: [schema_version]
+      properties:
+        schema_version:
+          type: string
+          enum: [profile-update-v1]
+        name:
+          type: string
+          minLength: 1
+        accepted_marker:
+          allOf:
+            - $ref: "#/components/schemas/AcceptedMarker"
+          nullable: true
+          description: null or kind none removes the marker.
     CullJobRequestV1:
       type: object
       required: [schema_version, photo_ids]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -17,7 +18,8 @@ class ProfileRepository:
 
     @staticmethod
     def list_all(session: Session) -> list[Profile]:
-        stmt = select(Profile).order_by(Profile.created_at.desc())
+        """Profiles not deleted, newest first."""
+        stmt = select(Profile).where(Profile.deleted_at.is_(None)).order_by(Profile.created_at.desc())
         return list(session.execute(stmt).scalars().all())
 
     @staticmethod
@@ -30,6 +32,7 @@ class ProfileRepository:
         format_type: str,
         color_type: str,
         base_preset: dict[str, Any] | None,
+        accepted_marker: dict[str, Any] | None = None,
     ) -> Profile:
         profile = Profile(
             id=profile_id,
@@ -39,6 +42,7 @@ class ProfileRepository:
             color_type=color_type,
             status=ProfileStatus.DRAFT.value,
             base_preset=base_preset,
+            accepted_marker=accepted_marker,
         )
         session.add(profile)
         session.flush()
@@ -76,5 +80,36 @@ class ProfileRepository:
         profile.retouch = retouch or None
         if lr_output_keys is not None:
             profile.lr_output_keys = lr_output_keys
+        session.flush()
+        return profile
+
+    @staticmethod
+    def rename(session: Session, profile_id: uuid.UUID, name: str) -> Profile | None:
+        profile = session.get(Profile, profile_id)
+        if profile is None:
+            return None
+        profile.name = name
+        session.flush()
+        return profile
+
+    @staticmethod
+    def set_accepted_marker(
+        session: Session, profile_id: uuid.UUID, marker: dict[str, Any] | None
+    ) -> Profile | None:
+        profile = session.get(Profile, profile_id)
+        if profile is None:
+            return None
+        profile.accepted_marker = marker
+        session.flush()
+        return profile
+
+    @staticmethod
+    def delete(session: Session, profile_id: uuid.UUID) -> Profile | None:
+        """Soft delete: hidden from now on, nothing removed (a second delete keeps the first time)."""
+        profile = session.get(Profile, profile_id)
+        if profile is None:
+            return None
+        if profile.deleted_at is None:
+            profile.deleted_at = datetime.now(timezone.utc)
         session.flush()
         return profile

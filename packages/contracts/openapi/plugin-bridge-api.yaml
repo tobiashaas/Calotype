@@ -147,6 +147,42 @@ paths:
               schema: { type: array, items: { type: object, additionalProperties: true } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "502": { description: Server API not reachable }
+  /v1/profiles/{profile_id}:
+    patch:
+      operationId: updateProfileViaBridge
+      summary: Rename a profile and/or change its marker — forwarded to the server unchanged
+      security: [{ token: [] }]
+      parameters:
+        - { name: profile_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              description: The server's profile-update-v1 body (schema_version, name, accepted_marker).
+      responses:
+        "200":
+          description: The server's updated profile
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { description: Unknown or deleted profile }
+        "422": { $ref: "#/components/responses/Invalid" }
+        "502": { description: Server API not reachable }
+    delete:
+      operationId: deleteProfileViaBridge
+      summary: Soft-delete a profile on the server (hidden; nothing removed)
+      security: [{ token: [] }]
+      parameters:
+        - { name: profile_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Deleted (hidden) }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { description: Unknown profile }
+        "502": { description: Server API not reachable }
 components:
   securitySchemes:
     token:
@@ -167,7 +203,13 @@ components:
   schemas:
     BridgePhotoV1:
       type: object
-      additionalProperties: false
+      additionalProperties: true
+      description: |
+        The Bridge builds the upload (photo-upload-v1) itself: it reads the fields below, and
+        every other top-level field is stored with the photo and forwarded into the upload
+        metadata unchanged (null fields left out) — a newer plugin's field reaches the server
+        without a Bridge change; the server, a tolerant reader, ignores what it does not know.
+        `file_path` stays local; the Bridge's own fields win over a forwarded one of the same name.
       required: [schema_version, lr_catalog_uuid, file_path]
       properties:
         schema_version: { type: string, enum: [bridge-photo-v1] }
@@ -217,6 +259,8 @@ components:
         base_preset: { type: object, additionalProperties: true, nullable: true }
         profile_id: { type: string, format: uuid, nullable: true, description: "Retrain this profile: its earlier training photos and these together, same id." }
         untouched: { type: object, additionalProperties: { type: number }, nullable: true, description: "Values only a preset left (Lightroom key -> value), e.g. Highlights2012 -100: not taught." }
+        accepted_lr_catalog_uuids: { type: array, items: { type: string }, nullable: true, description: "Accepted photos: selected photos carrying the photographer's marker. A photo still holding Calotype's last result is learned only when accepted." }
+        accepted_marker: { type: object, additionalProperties: true, nullable: true, description: "The photographer's marker, kept on the profile: {kind: none} / {kind: label, value: green} / {kind: rating, min: 4}." }
     BridgeEditV1:
       type: object
       additionalProperties: true

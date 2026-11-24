@@ -277,7 +277,7 @@ fn escape(s: &str) -> String {
         .replace('>', "&gt;")
 }
 
-fn unescape(s: &str) -> String {
+pub(crate) fn unescape(s: &str) -> String {
     s.replace("&quot;", "\"")
         .replace("&lt;", "<")
         .replace("&gt;", ">")

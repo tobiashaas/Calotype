@@ -24,7 +24,7 @@ LEVEL = {"preview_size": [800, 1200], "straighten": {"crop_angle": 3.0, "lines":
 
 def _profile(predicted=None, **kwargs) -> EditProfile:
     values = PREDICTED if predicted is None else predicted
-    return EditProfile("raw", lambda vector, as_shot: dict(values), **kwargs)
+    return EditProfile("raw", lambda vector, as_shot, *_: dict(values), **kwargs)
 
 
 def _shoot(edited_exposures, untouched, times=None, **extra):
@@ -104,7 +104,7 @@ def test_without_a_profile_only_the_edited_sliders_are_set():
 
 def test_a_photo_on_the_cameras_white_balance_passes_its_as_shot_kelvin():
     seen = []
-    profile = EditProfile("raw", lambda vector, as_shot: seen.append(as_shot) or dict(PREDICTED))
+    profile = EditProfile("raw", lambda vector, as_shot, *_: seen.append(as_shot) or dict(PREDICTED))
     custom = {**UNTOUCHED, "WhiteBalance": "Custom", "Temperature": 6100}
     photos = [ShootPhoto(uuid4(), dict(UNTOUCHED), [0.0]), ShootPhoto(uuid4(), custom, [1.0])]
     plan_edit(EditRequest(), profile, photos)
@@ -134,7 +134,7 @@ def _burst(exposures, times):
         v = next(vectors)
         by_vector[tuple(v)] = {"exposure": e, "temp": 5200.0, "tint": 0.0}
         photos.append(ShootPhoto(uuid4(), dict(UNTOUCHED), v, ExifSnapshot(capture_time=t)))
-    return photos, EditProfile("raw", lambda vector, as_shot: dict(by_vector[tuple(vector)]))
+    return photos, EditProfile("raw", lambda vector, as_shot, *_: dict(by_vector[tuple(vector)]))
 
 
 def test_a_burst_is_pulled_together():

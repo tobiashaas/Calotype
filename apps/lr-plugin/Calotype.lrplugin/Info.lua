@@ -25,6 +25,7 @@ return {
     { title = LOC "$$$/Calotype/Menu/Train=Train profile from selected photos...", file = "TrainProfile.lua" },
     { title = LOC "$$$/Calotype/Menu/Apply=Apply profile to selected photos...", file = "ApplyProfile.lua" },
     { title = LOC "$$$/Calotype/Menu/Cull=Sort selected photos (culling)...", file = "CullPhotos.lua" },
+    { title = LOC "$$$/Calotype/Menu/Manage=Manage profiles...", file = "ManageProfiles.lua" },
     { title = LOC "$$$/Calotype/Menu/Status=Bridge status...", file = "BridgeStatus.lua" },
   },
 
@@ -33,8 +34,9 @@ return {
     { title = LOC "$$$/Calotype/Menu/TrainFile=Calotype: Train profile...", file = "TrainProfile.lua" },
     { title = LOC "$$$/Calotype/Menu/ApplyFile=Calotype: Apply profile...", file = "ApplyProfile.lua" },
     { title = LOC "$$$/Calotype/Menu/CullFile=Calotype: Sort photos (culling)...", file = "CullPhotos.lua" },
+    { title = LOC "$$$/Calotype/Menu/ManageFile=Calotype: Manage profiles...", file = "ManageProfiles.lua" },
     { title = LOC "$$$/Calotype/Menu/StatusFile=Calotype: Bridge status...", file = "BridgeStatus.lua" },
   },
 
-  VERSION = { major = 0, minor = 3, revision = 2 },
+  VERSION = { major = 0, minor = 4, revision = 0 },
 }

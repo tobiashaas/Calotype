@@ -10,7 +10,7 @@ use axum::extract::{Path, Request, State};
 use axum::http::StatusCode;
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{get, patch, post};
 use axum::{Json, Router};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -33,6 +33,10 @@ pub fn router(state: Shared) -> Router {
         .route("/v1/jobs/cull", post(queue_cull))
         .route("/v1/jobs/{job_id}", get(job_state))
         .route("/v1/profiles", get(profiles))
+        .route(
+            "/v1/profiles/{profile_id}",
+            patch(update_profile).delete(delete_profile),
+        )
         .route("/v1/automation/status", get(automation_status))
         .route("/v1/automation/commands", post(automation_enqueue))
         .route("/v1/automation/commands/{id}", get(automation_get))
@@ -106,8 +110,12 @@ async fn health() -> Json<Value> {
     Json(json!({ "status": "ok", "version": env!("CARGO_PKG_VERSION") }))
 }
 
+/// A photo registration. The Bridge builds the upload itself (preview, measured light), so it
+/// types what it acts on; every other top-level field is kept with the photo and forwarded
+/// into the upload metadata unchanged (null ones left out) — a newer plugin's field reaches
+/// the server without a Bridge change, and the server, a tolerant reader, decides about it.
+/// `file_path` stays local; the typed fields win over a forwarded one of the same name.
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct PhotoReq {
     schema_version: String,
     lr_catalog_uuid: String,
@@ -119,6 +127,8 @@ struct PhotoReq {
     /// Rating, pick/reject flag, color label (culling labels).
     #[serde(default)]
     lr_metadata: Map<String, Value>,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
 }
 
 async fn register_photo(State(state): State<Shared>, Json(body): Json<Value>) -> Response {
@@ -135,12 +145,15 @@ async fn register_photo(State(state): State<Shared>, Json(body): Json<Value>) ->
             "lr_catalog_uuid and file_path are required",
         );
     }
+    let mut extra = req.extra;
+    extra.retain(|_, v| !v.is_null());
     let row = state.db().upsert_photo(
         &req.lr_catalog_uuid,
         &req.file_path,
         &Value::Object(req.exif_snapshot),
         &Value::Object(req.lr_develop_settings),
         &Value::Object(req.lr_metadata),
+        &Value::Object(extra),
     );
     match row {
         Ok(row) => (StatusCode::ACCEPTED, Json(row)).into_response(),
@@ -298,6 +311,70 @@ async fn profiles(State(state): State<Shared>) -> Response {
         Ok(v) => Json(v).into_response(),
         Err(e) => error(StatusCode::BAD_GATEWAY, format!("server API: {e}")),
     }
+}
+
+/// A profile id goes into the server's URL: only a UUID's characters, nothing that could
+/// change the path.
+fn checked_profile_id(profile_id: &str) -> Result<(), Response> {
+    let ok = !profile_id.is_empty()
+        && profile_id.len() <= 64
+        && profile_id
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() || c == '-');
+    if ok {
+        Ok(())
+    } else {
+        Err(error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "profile_id must be a UUID",
+        ))
+    }
+}
+
+/// The server's answer for the plugin: success as it is (204 without body), a rejection with
+/// its status and the server's `detail` as our `error`, a server failure as 502.
+fn forwarded(answer: Result<crate::api_client::ServerAnswer, reqwest::Error>) -> Response {
+    let answer = match answer {
+        Ok(a) => a,
+        Err(e) => return error(StatusCode::BAD_GATEWAY, format!("server API: {e}")),
+    };
+    if answer.status == reqwest::StatusCode::NO_CONTENT {
+        return StatusCode::NO_CONTENT.into_response();
+    }
+    let status = StatusCode::from_u16(answer.status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    if status.is_success() {
+        return (status, Json(answer.body)).into_response();
+    }
+    let detail = match &answer.body["detail"] {
+        Value::String(s) => s.clone(),
+        Value::Null => format!("server API answered {status}"),
+        other => other.to_string(),
+    };
+    if status.is_client_error() {
+        error(status, detail)
+    } else {
+        error(StatusCode::BAD_GATEWAY, format!("server API: {detail}"))
+    }
+}
+
+/// Rename a profile and/or change its marker: the body goes to the server unchanged.
+async fn update_profile(
+    State(state): State<Shared>,
+    Path(profile_id): Path<String>,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Err(resp) = checked_profile_id(&profile_id) {
+        return resp;
+    }
+    forwarded(state.api.update_profile(&profile_id, &body).await)
+}
+
+/// Soft-delete a profile on the server (hidden from list and apply; nothing removed).
+async fn delete_profile(State(state): State<Shared>, Path(profile_id): Path<String>) -> Response {
+    if let Err(resp) = checked_profile_id(&profile_id) {
+        return resp;
+    }
+    forwarded(state.api.delete_profile(&profile_id).await)
 }
 
 // ---- automation (opt-in end-to-end test channel, see automation.rs) -------------

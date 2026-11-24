@@ -83,23 +83,47 @@ fn kelvin(data: &[u16]) -> Option<u32> {
 }
 
 /// A TIFF structure (byte order + bounds-checked reads). Shared with [`crate::exif`].
+#[derive(Clone, Copy)]
 pub(crate) struct Tiff<'a> {
     bytes: &'a [u8],
     little: bool,
+    /// Offset of `bytes` in the TIFF: offsets stay absolute when only a window was read.
+    base: usize,
 }
 
 impl<'a> Tiff<'a> {
     pub(crate) fn new(bytes: &'a [u8]) -> Option<Self> {
+        // TIFF, and the TIFF-shaped RAWs with their own magic number: Olympus ORF ("IIRO",
+        // "IIRS", "MMOR") and Panasonic RW2 ("IIU\0").
         let little = match bytes.get(0..4)? {
-            [b'I', b'I', 42, 0] => true,
-            [b'M', b'M', 0, 42] => false,
+            [b'I', b'I', 42, 0] | [b'I', b'I', b'R', b'O' | b'S'] | [b'I', b'I', b'U', 0] => true,
+            [b'M', b'M', 0, 42] | [b'M', b'M', b'O', b'R'] => false,
             _ => return None,
         };
-        Some(Self { bytes, little })
+        Some(Self {
+            bytes,
+            little,
+            base: 0,
+        })
+    }
+
+    /// The same TIFF, read through `bytes` found at offset `base` (a part beyond the head).
+    pub(crate) fn window<'b>(&self, bytes: &'b [u8], base: usize) -> Tiff<'b> {
+        Tiff {
+            bytes,
+            little: self.little,
+            base,
+        }
+    }
+
+    /// `len` bytes at the absolute offset `at`.
+    pub(crate) fn bytes(&self, at: usize, len: usize) -> Option<&'a [u8]> {
+        let start = at.checked_sub(self.base)?;
+        self.bytes.get(start..start.checked_add(len)?)
     }
 
     pub(crate) fn u16(&self, at: usize) -> Option<u16> {
-        let b = self.bytes.get(at..at.checked_add(2)?)?;
+        let b = self.bytes(at, 2)?;
         Some(if self.little {
             u16::from_le_bytes([b[0], b[1]])
         } else {
@@ -108,7 +132,7 @@ impl<'a> Tiff<'a> {
     }
 
     pub(crate) fn u32(&self, at: usize) -> Option<u32> {
-        let b = self.bytes.get(at..at.checked_add(4)?)?;
+        let b = self.bytes(at, 4)?;
         let b = [b[0], b[1], b[2], b[3]];
         Some(if self.little {
             u32::from_le_bytes(b)

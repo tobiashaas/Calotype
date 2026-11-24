@@ -22,10 +22,8 @@ Order, later steps building on earlier ones:
 
 from __future__ import annotations
 
-import math
 from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any
 
 from calotype_domain.failures import FailureCode, JobFailure
@@ -38,12 +36,13 @@ from calotype_edit_serializer import (
     shared_style,
 )
 from calotype_inference_pipeline import run_inference
+from calotype_inference_pipeline.exif import ExifSnapshot, _number  # noqa: F401  (ExifSnapshot re-exported)
 from calotype_inference_pipeline.series import smooth
 from calotype_inference_pipeline.shoot import calibrate
 from calotype_inference_pipeline.straighten import MIN_LINES, crop_settings
 
 # A prediction: (feature vector, the photo's as-shot Kelvin or None) → internal slider values.
-Predict = Callable[[Sequence[float], float | None], dict[str, float]]
+Predict = Callable[..., dict[str, float]]  # (vector, as_shot_temp, capture_time=None) -> sliders
 
 
 class NoExamplesError(JobFailure, ValueError):
@@ -53,56 +52,6 @@ class NoExamplesError(JobFailure, ValueError):
 
     def __init__(self) -> None:
         super().__init__("no edited photos in the selection to learn the look from")
-
-
-def _number(value: Any) -> float | None:
-    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
-
-
-@dataclass(frozen=True)
-class ExifSnapshot:
-    """What the camera recorded for a photo (``exif-snapshot-v1``), typed. The one parser of
-    the snapshot the plugin and the Bridge send."""
-
-    capture_time: float | None = None       # seconds; only differences within a shoot matter
-    measured_kelvin: float | None = None    # the camera's measured colour temperature
-    iso: float | None = None
-    shutter_speed: float | None = None      # seconds
-    aperture: float | None = None           # f-number
-    exposure_bias: float | None = None      # EV
-
-    @classmethod
-    def from_snapshot(cls, snapshot: Mapping[str, Any] | None) -> ExifSnapshot:
-        s = snapshot or {}
-        kelvin = _number(s.get("wb_measured_kelvin"))
-        return cls(
-            capture_time=_capture_time(s.get("date_time_original")),
-            measured_kelvin=kelvin if kelvin and kelvin > 0 else None,
-            iso=_number(s.get("iso")),
-            shutter_speed=_number(s.get("shutter_speed")),
-            aperture=_number(s.get("aperture")),
-            exposure_bias=_number(s.get("exposure_bias")),
-        )
-
-    @property
-    def camera_exposure(self) -> list[float] | None:
-        """The camera's exposure settings as features: log2 of ISO, shutter time and f-number,
-        plus the exposure compensation (0 when not recorded) — None unless ISO, time and
-        aperture are known."""
-        iso, shutter, aperture = self.iso, self.shutter_speed, self.aperture
-        if not iso or not shutter or not aperture or min(iso, shutter, aperture) <= 0:
-            return None
-        return [math.log2(iso), math.log2(shutter), math.log2(aperture), self.exposure_bias or 0.0]
-
-
-def _capture_time(raw: Any) -> float | None:
-    """Seconds of an ISO 8601 capture time; a time zone offset is ignored."""
-    if not isinstance(raw, str) or not raw:
-        return None
-    try:
-        return datetime.fromisoformat(raw[:19]).timestamp()
-    except ValueError:
-        return None
 
 
 @dataclass(frozen=True)
@@ -131,8 +80,9 @@ class EditProfile:
     @classmethod
     def from_model(cls, model_bytes: bytes, format_type: str, base_preset: Mapping[str, Any] | None = None,
                    retouch: Mapping[str, Any] | None = None) -> EditProfile:
-        def predict(vector: Sequence[float], as_shot_temp: float | None) -> dict[str, float]:
-            return run_inference(model_bytes, list(vector), as_shot_temp=as_shot_temp)
+        def predict(vector: Sequence[float], as_shot_temp: float | None,
+                    capture_time: float | None = None) -> dict[str, float]:
+            return run_inference(model_bytes, list(vector), as_shot_temp=as_shot_temp, capture_time=capture_time)
 
         return cls(format_type, predict, dict(base_preset or {}), dict(retouch or {}))
 
@@ -268,7 +218,9 @@ def plan_edit(request: EditRequest, profile: EditProfile, photos: Sequence[Shoot
     for p in usable:
         # The camera's Kelvin of a photo still on it decides whether it keeps it.
         as_shot = _number(p.settings.get("Temperature")) if keeps_as_shot(p.settings, fmt) else None
-        predictions[p.photo_id] = profile.predict(p.vector, as_shot) if profile.predict else {}
+        # Its capture time tells whether the profile saw the photographer correct this light.
+        predictions[p.photo_id] = (profile.predict(p.vector, as_shot, p.exif.capture_time)
+                                   if profile.predict else {})
 
     targets = usable
     shoot_look: dict[str, Any] = {}

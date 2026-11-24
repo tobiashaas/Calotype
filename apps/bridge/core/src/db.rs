@@ -12,7 +12,7 @@ use serde_json::{json, Map, Value};
 /// Key in `lr_metadata` for Lightroom's assisted-culling scores (read from the catalog).
 pub const CULLING_KEY: &str = "lr_culling";
 
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 
 pub fn now() -> i64 {
     SystemTime::now()
@@ -38,6 +38,10 @@ pub struct PhotoRow {
     /// Rating, pick/reject flag, color label (culling labels).
     #[serde(skip)]
     pub lr_metadata: Value,
+    /// Top-level fields of the plugin's request the Bridge does not know (a newer plugin's):
+    /// forwarded into the upload metadata unchanged, the server is the tolerant reader.
+    #[serde(skip)]
+    pub extra: Value,
     pub status: String,
     pub remote_photo_id: Option<String>,
     pub attempts: i64,
@@ -85,6 +89,7 @@ fn photo_from_row(r: &Row) -> rusqlite::Result<PhotoRow> {
         attempts: r.get(6)?,
         last_error: r.get(7)?,
         lr_metadata: json(r.get(8)?),
+        extra: json(r.get(9)?),
     })
 }
 
@@ -107,7 +112,7 @@ fn job_from_row(r: &Row) -> rusqlite::Result<JobRow> {
 }
 
 const PHOTO_COLS: &str = "lr_catalog_uuid, file_path, exif_json, settings_json, status, \
-                          remote_photo_id, attempts, last_error, metadata_json";
+                          remote_photo_id, attempts, last_error, metadata_json, extra_json";
 const JOB_COLS: &str = "job_id, kind, request_json, uuids_json, idempotency_key, status, \
                         remote_job_id, attempts, last_error, results_json, profile_id,                         failure_code";
 
@@ -169,6 +174,11 @@ impl Db {
         if version < 4 {
             conn.execute_batch("ALTER TABLE jobs ADD COLUMN failure_code TEXT;")?;
         }
+        if version < 5 {
+            conn.execute_batch(
+                "ALTER TABLE photos ADD COLUMN extra_json TEXT NOT NULL DEFAULT '{}';",
+            )?;
+        }
         if version < SCHEMA_VERSION {
             conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         }
@@ -178,8 +188,8 @@ impl Db {
     // ---- photos -------------------------------------------------------------
 
     /// Insert, or refresh a known photo. An uploaded photo is sent again only when its
-    /// settings, EXIF or decisions (rating, flag, label) changed — re-edits and re-ratings
-    /// must reach the server, unchanged re-registrations cost nothing.
+    /// settings, EXIF, decisions (rating, flag, label) or extra fields changed — re-edits and
+    /// re-ratings must reach the server, unchanged re-registrations cost nothing.
     pub fn upsert_photo(
         &self,
         uuid: &str,
@@ -187,6 +197,7 @@ impl Db {
         exif: &Value,
         settings: &Value,
         metadata: &Value,
+        extra: &Value,
     ) -> Result<PhotoRow> {
         let existing = self.photo(uuid)?;
         // Lightroom's culling scores come from the catalog, not from the plugin: a
@@ -204,7 +215,8 @@ impl Db {
         if let Some(existing) = existing {
             let unchanged = existing.exif_snapshot == *exif
                 && existing.lr_develop_settings == *settings
-                && existing.lr_metadata == *metadata;
+                && existing.lr_metadata == *metadata
+                && existing.extra == *extra;
             if existing.status == "uploaded" && unchanged {
                 return Ok(existing);
             }
@@ -212,13 +224,14 @@ impl Db {
         let t = now();
         self.conn.execute(
             "INSERT INTO photos (lr_catalog_uuid, file_path, exif_json, settings_json,
-                                 metadata_json, status, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6, ?6)
+                                 metadata_json, extra_json, status, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7, ?7)
              ON CONFLICT(lr_catalog_uuid) DO UPDATE SET
                  file_path = excluded.file_path,
                  exif_json = excluded.exif_json,
                  settings_json = excluded.settings_json,
                  metadata_json = excluded.metadata_json,
+                 extra_json = excluded.extra_json,
                  status = 'pending',
                  attempts = 0,
                  next_attempt_at = 0,
@@ -230,6 +243,7 @@ impl Db {
                 exif.to_string(),
                 settings.to_string(),
                 metadata.to_string(),
+                extra.to_string(),
                 t
             ],
         )?;
@@ -254,6 +268,7 @@ impl Db {
             &p.exif_snapshot,
             &p.lr_develop_settings,
             &metadata,
+            &p.extra,
         )?;
         Ok(())
     }
@@ -457,16 +472,16 @@ mod tests {
         let db = Db::open_in_memory().unwrap();
         let s1 = json!({"Exposure2012": 0.1});
         let m1 = json!({"rating": 3});
-        db.upsert_photo("u1", "a.cr3", &json!({}), &s1, &m1)
+        db.upsert_photo("u1", "a.cr3", &json!({}), &s1, &m1, &json!({}))
             .unwrap();
         let p = db
-            .upsert_photo("u1", "b.cr3", &json!({}), &s1, &m1)
+            .upsert_photo("u1", "b.cr3", &json!({}), &s1, &m1, &json!({}))
             .unwrap();
         assert_eq!(p.file_path, "b.cr3", "pending photo takes the new path");
 
         db.mark_photo_uploaded("u1", "remote-1").unwrap();
         let same = db
-            .upsert_photo("u1", "c.cr3", &json!({}), &s1, &m1)
+            .upsert_photo("u1", "c.cr3", &json!({}), &s1, &m1, &json!({}))
             .unwrap();
         assert_eq!(
             (same.status.as_str(), same.file_path.as_str()),
@@ -474,18 +489,50 @@ mod tests {
         );
 
         let rerated = db
-            .upsert_photo("u1", "b.cr3", &json!({}), &s1, &json!({"rating": 5}))
+            .upsert_photo(
+                "u1",
+                "b.cr3",
+                &json!({}),
+                &s1,
+                &json!({"rating": 5}),
+                &json!({}),
+            )
             .unwrap();
         assert_eq!(rerated.status, "pending", "new rating goes to the server");
         assert_eq!(rerated.remote_photo_id.as_deref(), Some("remote-1"));
         assert_eq!(rerated.lr_metadata, json!({"rating": 5}));
+
+        db.mark_photo_uploaded("u1", "remote-1").unwrap();
+        let extra = json!({"new_plugin_field": true});
+        let newer = db
+            .upsert_photo(
+                "u1",
+                "b.cr3",
+                &json!({}),
+                &s1,
+                &json!({"rating": 5}),
+                &extra,
+            )
+            .unwrap();
+        assert_eq!(
+            newer.status, "pending",
+            "a new extra field goes to the server"
+        );
+        assert_eq!(newer.extra, extra);
     }
 
     #[test]
     fn retry_pushes_photo_out_of_due_list() {
         let db = Db::open_in_memory().unwrap();
-        db.upsert_photo("u1", "a.cr3", &json!({}), &json!({}), &json!({}))
-            .unwrap();
+        db.upsert_photo(
+            "u1",
+            "a.cr3",
+            &json!({}),
+            &json!({}),
+            &json!({}),
+            &json!({}),
+        )
+        .unwrap();
         assert_eq!(db.due_photos(10).unwrap().len(), 1);
         db.retry_photo_later("u1", "offline").unwrap();
         assert!(db.due_photos(10).unwrap().is_empty());
@@ -524,9 +571,27 @@ mod tests {
         }
         let db = Db::open(&path).unwrap();
         let photo = db
-            .upsert_photo("p", "a.cr3", &json!({}), &json!({}), &json!({"rating": 2}))
+            .upsert_photo(
+                "p",
+                "a.cr3",
+                &json!({}),
+                &json!({}),
+                &json!({"rating": 2}),
+                &json!({}),
+            )
             .unwrap();
         assert_eq!(photo.lr_metadata, json!({"rating": 2}), "v3 column exists");
+        let photo = db
+            .upsert_photo(
+                "p",
+                "a.cr3",
+                &json!({}),
+                &json!({}),
+                &json!({}),
+                &json!({"x": 1}),
+            )
+            .unwrap();
+        assert_eq!(photo.extra, json!({"x": 1}), "v5 column exists");
         let job = db.insert_job("train", &json!({}), &["u".into()]).unwrap();
         db.set_job_profile(&job.job_id, "p-1").unwrap();
         db.fail_job_with_code(&job.job_id, "no examples", Some("no_examples"))

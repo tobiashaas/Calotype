@@ -50,7 +50,7 @@ def _photo(store, services, i: int, *, preview: bool = True, settings=None):
                                lr_develop_settings={**EDITED, "Exposure2012": 0.2 * i} if settings is None else settings)
 
 
-def _run(store, services, photos, *, retrain=False):
+def _run(store, services, photos, *, retrain=False, accepted=()):
     profile = store.profiles.create(profile_id=uuid.uuid4(), name="Golden Hour", genre="wedding",
                                     format_type="raw", color_type="color", base_preset=None)
     if retrain:
@@ -58,7 +58,7 @@ def _run(store, services, photos, *, retrain=False):
         store.profiles.set_status(profile.id, ProfileStatus.READY)
     payload = {"schema_version": "train-request-v1", "profile_name": "Golden Hour", "genre": "wedding",
                "format_type": "raw", "color_type": "color", "photo_ids": [str(p.id) for p in photos],
-               "profile_id": str(profile.id), "retrain": retrain}
+               "profile_id": str(profile.id), "retrain": retrain, "accepted": [str(p.id) for p in accepted]}
     job = store.jobs.create(job_id=uuid.uuid4(), kind=JobKind.TRAIN, payload_schema_version="train-request-v1",
                             payload=payload, correlation_id=None, idempotency_key=None, profile_id=profile.id)
     services.redis.rpush(QUEUE_TRAIN, JobEnvelopeV1(job_id=str(job.id), job_kind="train", payload=payload).dumps())
@@ -103,3 +103,44 @@ def test_a_failed_retrain_keeps_the_profile_ready_with_its_model(store, services
     assert (job.status, job.failure_code) == ("failed", "too_few_photos")
     assert profile.status == "ready"
     assert profile.model_artifact_key == "models/old/model-v1.joblib"
+
+
+# --- no self-learning ---------------------------------------------------------------------------
+
+
+def _applied(store, photo, lr_settings):
+    """Calotype's edit job wrote this result for the photo (and the plugin applied it)."""
+    job = store.jobs.create(job_id=uuid.uuid4(), kind=JobKind.EDIT, payload_schema_version="edit-request-v1",
+                            payload={}, correlation_id=None, idempotency_key=None)
+    store.edit_results.upsert(result_id=uuid.uuid4(), job_id=job.id, photo_id=photo.id, profile_id=None,
+                              lr_settings=lr_settings)
+
+
+def test_a_photo_still_holding_calotypes_result_is_not_learned(store, services):
+    photos = [_photo(store, services, i) for i in range(3)]
+    _applied(store, photos[0], {"Exposure2012": photos[0].lr_develop_settings["Exposure2012"], "Contrast2012": 12})
+    job, profile = _run(store, services, photos)
+    assert (job.status, job.failure_code) == ("failed", "too_few_photos")
+    assert job.failure_reason == "TooFewPhotosError: only 2 usable training photos, need at least 3"
+
+
+def test_an_accepted_photo_holding_calotypes_result_is_learned(store, services):
+    photos = [_photo(store, services, i) for i in range(3)]
+    _applied(store, photos[0], {"Exposure2012": photos[0].lr_develop_settings["Exposure2012"]})
+    job, profile = _run(store, services, photos, accepted=[photos[0]])
+    assert (job.status, profile.status) == ("completed", "ready")
+
+
+def test_a_correction_after_calotype_applied_is_learned(store, services):
+    photos = [_photo(store, services, i) for i in range(3)]
+    _applied(store, photos[0], {"Exposure2012": 1.5, "Contrast2012": 12})  # the photographer moved exposure since
+    job, profile = _run(store, services, photos)
+    assert (job.status, profile.status) == ("completed", "ready")
+
+
+def test_only_calotypes_latest_result_counts(store, services):
+    photos = [_photo(store, services, i) for i in range(3)]
+    _applied(store, photos[0], {"Exposure2012": photos[0].lr_develop_settings["Exposure2012"]})
+    _applied(store, photos[0], {"Exposure2012": 2.0})  # applied again later, then corrected back by hand
+    job, profile = _run(store, services, photos)
+    assert (job.status, profile.status) == ("completed", "ready")
