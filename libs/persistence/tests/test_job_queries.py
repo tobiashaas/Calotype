@@ -1,4 +1,4 @@
-"""Stuck-job detection: progress counts, and each job kind has one owner (no DB needed)."""
+"""SQL the job queries emit: stuck = no progress, filtered by kind; results upsert (no DB needed)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 
 from sqlalchemy.dialects import postgresql
 
-from calotype_persistence import reaper
 from calotype_persistence.models import EditResult, Job
 from calotype_persistence.repositories.edit_results import EditResultRepository
 from calotype_persistence.repositories.jobs import JobRepository
@@ -54,26 +53,6 @@ def test_touch_records_progress():
     session = CaptureSession({job.id: job})
     JobRepository.touch(session, job.id)
     assert job.last_progress_at is not None
-
-
-def test_reaper_only_takes_its_own_kinds(monkeypatch):
-    seen = {}
-
-    def fake_find_stuck(_session, older_than, kinds=None):
-        seen["kinds"] = kinds
-        return []
-
-    class FakeScope:
-        def __enter__(self):
-            return CaptureSession()
-
-        def __exit__(self, *exc):
-            return False
-
-    monkeypatch.setattr(reaper.JobRepository, "find_stuck", staticmethod(fake_find_stuck))
-    monkeypatch.setattr(reaper, "session_scope", lambda _factory: FakeScope())
-    assert reaper.reap_stuck_jobs(None, queue_name="q", publisher=None, kinds=["train"]) == 0
-    assert seen["kinds"] == ["train"]
 
 
 def test_edit_result_rerun_replaces_instead_of_adding():

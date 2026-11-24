@@ -153,13 +153,25 @@ _Avoid_: label, rating
 The local program on the photographer's machine that reads Photos, keeps the outbox and talks to the server; the Lightroom plugin talks only to it.
 _Avoid_: agent, daemon, desktop app (the app is the Bridge with a window)
 
+**Dead-letter queue**:
+Where a job message goes that a worker cannot run (unreadable, wrong kind, or failed), with the reason, so nothing is dropped silently.
+_Avoid_: error queue, trash
+
 **Failure code**:
 Why a job failed, as a short fixed word (for example "no examples") that the plugin turns into its own hint; the failure reason is the text for people.
 _Avoid_: error type, status
 
+**Stuck job**:
+A running job that has shown no progress for ten minutes; it goes back to the queue where its work starts.
+_Avoid_: hung job, zombie
+
 **Folder mode**:
 Working on plain RAW + XMP folders without Lightroom.
 _Avoid_: standalone, CLI mode
+
+**Preview**:
+The unedited image of a Photo the server learns and predicts from (the RAW's embedded JPEG or the original JPEG / TIFF), stored once per Photo.
+_Avoid_: thumbnail, render, export
 
 **Sidecar**:
 The XMP file next to a RAW that carries its Develop settings in folder mode.

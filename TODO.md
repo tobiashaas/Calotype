@@ -40,7 +40,7 @@ Update it whenever a phase is finished or new tasks are identified.
 
 ### Phase 4 — Production Hardening
 - [x] **Redis AOF persistence**: `appendonly yes --appendfsync everysec` in compose + `redis_data` volume
-- [x] **Stuck job recovery**: `libs/persistence/src/calotype_persistence/reaper.py` — resets `running` jobs after 10 min timeout, re-enqueues on the correct queue; runs at startup + every 60s in daemon thread in all 3 workers
+- [x] **Stuck job recovery**: `libs/persistence/src/calotype_persistence/reaper.py` (since ADR 007 `calotype_worker_runtime.reaper`) — resets `running` jobs after 10 min timeout, re-enqueues on the correct queue; runs at startup + every 60s in daemon thread in all 3 workers
 - [x] **At-least-once delivery**: `set_status(RUNNING)` now sets `started_at`; reaper uses `enqueue_to(queue_name)` to push back on the exact worker queue; feature_worker `forward_to_inference` is idempotent (FeatureVectors skipped if already exist)
 - [x] **Worker health checks**: `libs/observability/src/calotype_observability/heartbeat.py` — writes Unix timestamp file every 15s; all 3 workers start heartbeat thread; docker-compose has HEALTHCHECK comment template
 - [x] **CI linting**: Ruff check step added to CI for all Python source dirs
@@ -193,6 +193,13 @@ Checked against the "What's new" page and Lightroom 16.0's own presets (`Resourc
 - [x] Drift tests: `libs/queue/tests/test_payloads.py` (JSON schemas list exactly the request models' fields and required set) and the Bridge's `every_server_request_field_passes_through_the_bridge` (every schema field reaches the fake server)
 - [ ] The photo upload (`bridge-photo-v1`) still has `deny_unknown_fields` in the Bridge — it builds the upload itself, so a pass-through needs a decision on what is forwarded
 
+### Worker runtime, blob store, feature store (2026-11-24)
+- [x] `libs/worker-runtime` (ADR 007): `run_worker(Worker(...))` owns the loop every worker repeated — envelope / wrong kind / payload → DLQ, RUNNING → COMPLETED or FAILED with short reason + failure code (+ the worker's `on_failure` in the same unit of work), progress, heartbeat (`/tmp/lr_ff_<name>_worker.heartbeat`), reaper per owned job kind, Redis retry. Each worker's `cli.py` is its handler + a short main; queue names, entry points, DLQ reasons and the job / profile status semantics unchanged
+- [x] Stuck-job reaper moved from `calotype_persistence.reaper` (which imported the queue lib against the import matrix) to `calotype_worker_runtime.reaper`, over the `Store` interface
+- [x] Blob store in `libs/io` (`S3BlobStore`, `MemoryBlobStore`): the one S3 client config (same env vars and defaults), the key layout (`photos/{id}.jpg`, `models/{profile}/model-{version}.joblib`, unchanged) and bucket creation; used by the API and all workers
+- [x] Feature store (`calotype_worker_runtime.FeatureStore`): a photo's vector of a version — stored, or computed from the preview and stored (never a zero vector); used by the feature and the train worker
+- [x] Workers on the `Store` interface (+ `feature_vectors`, job status / touch / stuck, photo analysis, profile status / artifact, `kept_crop`; `store_scope`, `MemoryStore.scope`); tests across the seams: the runner on `fakeredis` + `MemoryStore` + `MemoryBlobStore`, one handler suite per worker through the runner (the cull worker's tests run in CI for the first time)
+
 ## Phase 8 — Calotype 2.0 (next milestone)
 
 Sources and what we take from each: [`docs/RESEARCH.md`](docs/RESEARCH.md).
@@ -275,7 +282,7 @@ Sources and what we take from each: [`docs/RESEARCH.md`](docs/RESEARCH.md).
 ### Backlog / Nice-to-have
 - [x] **API tests across a real seam** (2026-11-24): routes get their data through `Depends(get_store)` (`calotype_persistence.stores`); tests override it with `MemoryStore` (real ORM records) instead of patching ~15 repository methods by import path; store contract suite runs against memory and — with `CALOTYPE_TEST_DATABASE_URL` — Postgres
 - [ ] CI Postgres service (`services: postgres` with pgvector + `alembic upgrade head`) and `CALOTYPE_TEST_DATABASE_URL` set, so the Postgres half of `libs/persistence/tests/test_store_contract.py` runs in CI
-- [ ] Workers on the `Store` interface: they still call the repositories' static methods with a session, so `services/workers/train_worker/tests/test_feature_backfill.py` still monkeypatches `FeatureVectorRepository` / `PhotoRepository`; a worker refactor (and a `FeatureVectorStore` in the interface) would let it use `MemoryStore`
+- [x] Workers on the `Store` interface (2026-11-24, ADR 007): handler tests use `MemoryStore` + `MemoryBlobStore`, no monkeypatching
 - [ ] **Idea: a pixel step — sharpen, restore, upscale** (2026-11-22, not started; what exists today comes first). A new building block: Calotype so far only writes sliders, this would render a new file next to the original and add it to the catalog. First look at the field, licences read from the repositories, quality claims from the papers and not measured by us: upscaling is the mature part (faithful: HAT, Apache-2.0, or DRCT, MIT; with generated detail: SeedVR2, Apache-2.0, or one-step diffusion like OSEDiff, Apache-2.0 on Stable Diffusion 2.1 weights whose own licence needs a check); restoring and denoising: NAFNet (MIT; fast) or Restormer (MIT; heavier), both trained on action-camera blur and phone noise, so weak on lens softness and missed focus — denoising belongs on the RAW data, which Lightroom already does; sharpening real photos is the gap (DeblurDiff, MIT, NeurIPS 2025, is a diffusion model and slow). Load weights through spandrel (MIT) instead of single research repositories. Not usable for us: SUPIR, HYPIR, InvSR, CodeFormer (non-commercial), Upscayl (AGPL). First step would be a test of three or four candidates on own photos (one soft, one noisy, one small), every model through `THIRD_PARTY_MODELS.md`
 - [ ] "Start Bridge" menu item in the plugin that starts the Rust Bridge (`calotype-bridge-headless`) when it is not running
 - [ ] More sliders per photo: Texture, Clarity, Dehaze, tone curve, HSL (today only via the profile's or the shoot's look)

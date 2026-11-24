@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from uuid import UUID, uuid4
 
-from botocore.client import BaseClient
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 
 from calotype_api.deps import get_publisher, get_storage, get_store
@@ -24,10 +23,10 @@ from calotype_api.schemas import (
     ProfileResponse,
     TrainJobRequestV1,
 )
-from calotype_api.storage import upload_photo
 from calotype_api.training import merged_training
 from calotype_domain.jobs import JobKind
 from calotype_domain.profiles import ProfileStatus
+from calotype_io import BlobStore
 from calotype_persistence.stores import Store
 from calotype_queue.envelope import JobEnvelopeV1
 from calotype_queue.payloads import TrainPayloadV1
@@ -51,7 +50,7 @@ async def upload_photo_endpoint(
     file: UploadFile = File(...),
     metadata: str = Form(...),
     store: Store = Depends(get_store),
-    storage: BaseClient = Depends(get_storage),
+    storage: BlobStore = Depends(get_storage),
 ):
     try:
         meta = PhotoMetadataV1.model_validate(json.loads(metadata))
@@ -75,9 +74,8 @@ async def upload_photo_endpoint(
         )
 
     photo_id = uuid4()
-    s3_key = f"photos/{photo_id}.jpg"
     image_data = await file.read()
-    upload_photo(storage, s3_key, image_data)
+    s3_key = storage.put_preview(photo_id, image_data)
 
     store.photos.create(
         photo_id=photo_id,

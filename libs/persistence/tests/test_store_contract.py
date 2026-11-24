@@ -12,10 +12,12 @@ import os
 import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from calotype_domain.jobs import JobKind
+from calotype_domain.jobs import JobKind, JobStatus
+from calotype_domain.profiles import ProfileStatus
 from calotype_persistence.memory import MemoryStore
 from calotype_persistence.stores import Store
 
@@ -212,3 +214,95 @@ def test_cull_results_of_a_job_and_a_rerun_replaces(h):
     [result] = h.store.cull_results.for_job(job.id)
     assert (result.photo_id, result.bucket, result.score, result.reason, result.method) == (
         photo.id, "keep", 0.9, "sharp", "learned")
+
+
+def test_edit_result_keeps_the_photos_own_crop_flag(h):
+    photo, job = h.photo(), h.job(JobKind.EDIT)
+    h.commit()
+    h.store.edit_results.upsert(result_id=h.new_id(), job_id=job.id, photo_id=photo.id, profile_id=None,
+                                lr_settings={"CropAngle": 1.2}, kept_crop=True)
+    h.commit()
+    [result] = h.store.edit_results.for_job(job.id)
+    assert result.kept_crop is True
+
+
+# --- what the workers write ------------------------------------------------------------------
+
+
+def test_job_lifecycle_running_progress_failed(h):
+    job = h.job(JobKind.CULL)
+    h.commit()
+    running = h.store.jobs.set_status(job.id, JobStatus.RUNNING)
+    h.commit()
+    assert running.status == "running" and running.started_at is not None
+    started = h.store.jobs.get(job.id).last_progress_at
+    h.store.jobs.touch(job.id)
+    h.commit()
+    assert h.store.jobs.get(job.id).last_progress_at >= started
+    h.store.jobs.set_status(job.id, JobStatus.FAILED, failure_reason="ValueError: no", failure_code="too_few_photos")
+    h.commit()
+    got = h.store.jobs.get(job.id)
+    assert (got.status, got.failure_reason, got.failure_code) == ("failed", "ValueError: no", "too_few_photos")
+    assert h.store.jobs.set_status(uuid.uuid4(), JobStatus.RUNNING) is None
+
+
+def test_stuck_jobs_are_running_without_progress_of_the_given_kinds(h):
+    edit, train, queued = h.job(JobKind.EDIT), h.job(JobKind.TRAIN), h.job(JobKind.EDIT)
+    h.commit()
+    for job in (edit, train):
+        h.store.jobs.set_status(job.id, JobStatus.RUNNING)
+    h.commit()
+    later = datetime.now(timezone.utc) + timedelta(minutes=1)
+    ours = {edit.id, train.id, queued.id}
+    assert {j.id for j in h.store.jobs.find_stuck(later, ["edit"]) if j.id in ours} == {edit.id}
+    assert {j.id for j in h.store.jobs.find_stuck(later) if j.id in ours} == {edit.id, train.id}
+    earlier = datetime.now(timezone.utc) - timedelta(minutes=10)
+    assert [j for j in h.store.jobs.find_stuck(earlier) if j.id in ours] == []
+    h.store.jobs.reset_to_queued(edit.id)
+    h.commit()
+    got = h.store.jobs.get(edit.id)
+    assert (got.status, got.started_at, got.failure_reason) == ("queued", None, None)
+
+
+def test_photo_analysis_is_merged_and_vector_linked(h):
+    photo = h.photo()
+    h.commit()
+    h.store.photos.merge_analysis(photo.id, {"straighten": {"crop_angle": 0.5}})
+    h.store.photos.merge_analysis(photo.id, {"cull": {"sharpness": 3.0}})
+    vector_id = h.new_id()
+    h.store.feature_vectors.create(vector_id=vector_id, photo_id=photo.id, model_version="v-test",
+                                   vector=[0.25] * 8)
+    h.store.photos.set_feature_vector_id(photo.id, vector_id)
+    h.commit()
+    got = h.store.photos.get(photo.id)
+    assert got.analysis == {"straighten": {"crop_angle": 0.5}, "cull": {"sharpness": 3.0}}
+    assert got.feature_vector_id == vector_id
+
+
+def test_feature_vectors_per_photo_and_version(h):
+    photo = h.photo()
+    h.commit()
+    h.store.feature_vectors.create(vector_id=h.new_id(), photo_id=photo.id, model_version="v-a",
+                                   vector=[0.5] * 4)
+    h.commit()
+    assert list(h.store.feature_vectors.get(photo.id, "v-a").vector) == [0.5] * 4
+    assert h.store.feature_vectors.get(photo.id, "v-b") is None
+    assert h.store.feature_vectors.get(uuid.uuid4(), "v-a") is None
+
+
+def test_profile_training_outcome(h):
+    profile = h.profile()
+    h.commit()
+    h.store.profiles.set_status(profile.id, ProfileStatus.TRAINING)
+    h.store.profiles.set_artifact(profile.id, model_artifact_key="models/x/model-v2.joblib", retouch={})
+    h.store.profiles.set_status(profile.id, ProfileStatus.READY)
+    h.commit()
+    got = h.store.profiles.get(profile.id)
+    assert (got.status, got.model_artifact_key, got.retouch, got.failure_reason) == (
+        "ready", "models/x/model-v2.joblib", None, None)
+    h.store.profiles.set_status(profile.id, ProfileStatus.FAILED, failure_reason="TooFewPhotosError: 2")
+    h.store.profiles.set_artifact(profile.id, model_artifact_key="k", retouch={"subject": {"LocalShadows2012": 0.2}})
+    h.commit()
+    got = h.store.profiles.get(profile.id)
+    assert (got.status, got.failure_reason, got.retouch) == (
+        "failed", "TooFewPhotosError: 2", {"subject": {"LocalShadows2012": 0.2}})

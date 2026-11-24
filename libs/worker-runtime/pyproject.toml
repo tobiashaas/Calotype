@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "calotype-worker-runtime"
+version = "0.1.0"
+description = "The loop around every Calotype worker: envelope, DLQ, job status, heartbeat, reaper"
+requires-python = ">=3.11"
+readme = "README.md"
+dependencies = [
+  "calotype-domain",
+  "calotype-persistence",
+  "calotype-queue",
+  "calotype-observability",
+  "calotype-io",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.8", "fakeredis>=2.26"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
