@@ -203,7 +203,13 @@ components:
   schemas:
     BridgePhotoV1:
       type: object
-      additionalProperties: false
+      additionalProperties: true
+      description: |
+        The Bridge builds the upload (photo-upload-v1) itself: it reads the fields below, and
+        every other top-level field is stored with the photo and forwarded into the upload
+        metadata unchanged (null fields left out) — a newer plugin's field reaches the server
+        without a Bridge change; the server, a tolerant reader, ignores what it does not know.
+        `file_path` stays local; the Bridge's own fields win over a forwarded one of the same name.
       required: [schema_version, lr_catalog_uuid, file_path]
       properties:
         schema_version: { type: string, enum: [bridge-photo-v1] }

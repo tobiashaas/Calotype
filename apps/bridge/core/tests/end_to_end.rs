@@ -621,6 +621,70 @@ fn sample(prop: &Value) -> Value {
     }
 }
 
+/// A newer plugin's photo field reaches the server without a Bridge change; an old-style
+/// registration uploads exactly the fields it always did.
+#[tokio::test]
+async fn unknown_photo_fields_reach_the_server() {
+    let dir = tempfile::tempdir().unwrap();
+    let fake: Fake = Arc::new(Mutex::new(FakeApi::default()));
+    let api = spawn_fake_api(fake.clone()).await;
+    let st = state(&api, dir.path());
+    let jpg = dir.path().join("a.jpg");
+    write_jpeg(&jpg, 1600, 1200);
+
+    let mut newer = photo_body("lr-new", &jpg);
+    newer["lr_keywords"] = json!(["wedding", "ceremony"]);
+    newer["capture_device"] = json!({"serial": "123"});
+    newer["left_out"] = Value::Null;
+    let (s, err) = call(&st, "POST", "/v1/photos", Some(TOKEN), Some(newer)).await;
+    assert_eq!(s, StatusCode::ACCEPTED, "{err}");
+    let (s, err) = call(
+        &st,
+        "POST",
+        "/v1/photos",
+        Some(TOKEN),
+        Some(photo_body("lr-old", &jpg)),
+    )
+    .await;
+    assert_eq!(s, StatusCode::ACCEPTED, "{err}");
+    outbox::tick(&st).await;
+
+    let f = fake.lock().unwrap();
+    let sent = |uuid: &str| {
+        f.uploads
+            .iter()
+            .find(|u| u["lr_catalog_uuid"] == uuid)
+            .unwrap()
+            .clone()
+    };
+    let new = sent("lr-new");
+    assert_eq!(new["schema_version"], "photo-upload-v1");
+    assert_eq!(new["lr_keywords"], json!(["wedding", "ceremony"]));
+    assert_eq!(new["capture_device"], json!({"serial": "123"}));
+    assert_eq!(new["lr_metadata"], json!({"rating": 4, "pick_status": 1}));
+    assert!(new.get("left_out").is_none(), "null fields are left out");
+    assert!(new.get("file_path").is_none(), "the local path stays local");
+
+    let old = sent("lr-old");
+    let mut keys: Vec<&str> = old
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        [
+            "exif_snapshot",
+            "lr_catalog_uuid",
+            "lr_develop_settings",
+            "lr_metadata",
+            "schema_version"
+        ]
+    );
+}
+
 /// Every field of the server's train and edit requests (`packages/contracts/json-schema`,
 /// kept equal to the API's models by a Python test) goes through the Bridge untouched — a new
 /// server option needs no Bridge change. This is what `consistent_series` once lacked.

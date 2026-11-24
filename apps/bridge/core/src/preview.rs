@@ -143,6 +143,8 @@ fn raw_container_orientation(bytes: &[u8]) -> Option<Orientation> {
 
 /// Capture time from the RAW's IFD0 `DateTime` (cameras write the shutter time there) as
 /// `YYYY-MM-DDTHH:MM:SS`, like Lightroom's `dateTimeOriginalISO8601`. Reads the first MiB.
+/// A DNG Lightroom saved (merged panorama, HDR) has its own save time there: the folder
+/// mode's snapshot reads the Exif `DateTimeOriginal` first (`crate::exif`).
 pub fn capture_time(path: &Path) -> Option<String> {
     use std::io::Read;
     let mut head = Vec::with_capacity(1 << 20);
@@ -158,7 +160,12 @@ fn capture_time_from(bytes: &[u8]) -> Option<String> {
     let t = raw_tiff(bytes)?;
     let (entry, _) = ifd0_entry(t, 0x0132)?;
     let offset = tiff_u32(t, entry + 8)? as usize;
-    let raw = std::str::from_utf8(t.get(offset..offset + 19)?).ok()?;
+    exif_time(t.get(offset..offset + 19)?)
+}
+
+/// An EXIF date `YYYY:MM:DD HH:MM:SS` as `YYYY-MM-DDTHH:MM:SS`; None for blank or zero dates.
+pub(crate) fn exif_time(bytes: &[u8]) -> Option<String> {
+    let raw = std::str::from_utf8(bytes.get(..19)?).ok()?;
     let b = raw.as_bytes();
     let digits = [0..4, 5..7, 8..10, 11..13, 14..16, 17..19]
         .iter()

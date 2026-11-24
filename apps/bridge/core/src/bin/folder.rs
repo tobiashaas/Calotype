@@ -4,6 +4,7 @@
 //!                            [--recursive]
 //!     calotype-folder apply  <DIR> --profile "Business Warm" [--force] [--out <DIR>]
 //!     calotype-folder apply  <DIR> --learn-from-edits            (no profile: your edits only)
+//!     calotype-folder apply  <DIR> --profile "Business Warm" --look "My Preset"
 //!     calotype-folder profiles
 //!
 //! train: edited RAWs (RAW + XMP with develop settings) are the training material. Several
@@ -13,8 +14,12 @@
 //!        photos, read-only — for shoots whose edits never made it into XMP sidecars. Photos
 //!        the catalog lists as only imported (also with an import preset) are left out.
 //! apply: unedited RAWs get a new XMP sidecar; import the folder into Lightroom afterwards.
-//! train --style <preset.xmp>: a Lightroom preset as the profile's style layer — the model
+//! train --style <preset>: a Lightroom preset as the profile's style layer — the model
 //!              predicts exposure/white balance/tone per photo, the preset adds the look.
+//! apply --look <preset>: one of your presets as the look of this job, used as by hand (like
+//!              the plugin's Look popup): its look and tone sliders, exposure and white
+//!              balance per photo. <preset> is an .xmp file or the name of a preset installed
+//!              in Camera Raw's settings folder; masks and nested settings are left out.
 //! --files-from <list>: only these files (one name or path per line), e.g. a train/test split.
 //! train --sidecars <dir>: read the XMPs from another folder (e.g. edits exported from a
 //!              catalog) — the RAW folder stays untouched.
@@ -38,7 +43,7 @@ use serde_json::{json, Map, Value};
 
 use calotype_bridge_core::config::{self, BridgeConfig};
 use calotype_bridge_core::folder::{self, FolderPhoto};
-use calotype_bridge_core::xmp;
+use calotype_bridge_core::{looks, presets, xmp};
 
 #[derive(Parser)]
 #[command(
@@ -77,9 +82,10 @@ enum Command {
         /// Only use the files listed here (one file name or path per line).
         #[arg(long)]
         files_from: Option<PathBuf>,
-        /// Lightroom preset (.xmp) whose look is layered on every prediction.
+        /// Lightroom preset (.xmp file or installed preset name) whose look is layered on
+        /// every prediction.
         #[arg(long)]
-        style: Option<PathBuf>,
+        style: Option<String>,
         /// Read the XMP sidecars from this folder instead of next to the RAWs.
         #[arg(long)]
         sidecars: Option<PathBuf>,
@@ -110,6 +116,10 @@ enum Command {
         /// balance that agree; edited examples stay fixed.
         #[arg(long)]
         consistent_series: bool,
+        /// One of your presets (.xmp file or installed preset name) as this job's look, used
+        /// as by hand; replaces the profile's look.
+        #[arg(long)]
+        look: Option<String>,
     },
     /// Sort RAWs into keep / check / sort out: color label (green / yellow / red) and the
     /// reason in the sidecar. Stars and edits stay; sidecars with stars or a red/purple label
@@ -459,25 +469,9 @@ async fn train(
     genre: &str,
     color: &str,
     selection: Selection<'_>,
-    style: Option<&Path>,
+    style: Option<&str>,
 ) -> Result<()> {
-    let base_preset = match style {
-        Some(path) => {
-            let text = std::fs::read_to_string(path)
-                .with_context(|| format!("cannot read style preset {}", path.display()))?;
-            let settings = xmp::read_develop_settings(&text);
-            if settings.is_empty() {
-                bail!("{} holds no develop settings", path.display());
-            }
-            println!(
-                "style layer from {} ({} settings)",
-                path.display(),
-                settings.len()
-            );
-            Some(Value::Object(settings))
-        }
-        None => None,
-    };
+    let base_preset = style.map(|s| read_look(s, "style layer")).transpose()?;
     if dirs.len() > 1 && selection.sidecars.is_some() {
         bail!("--sidecars works with one folder only");
     }
@@ -560,6 +554,41 @@ async fn find_profile(bridge: &Bridge, wanted: &str) -> Result<Value> {
     }
 }
 
+/// A preset (file or installed name) as `base_preset`, announced as `what`.
+fn read_look(spec: &str, what: &str) -> Result<Value> {
+    let (name, settings) = looks::read_look(spec, presets::camera_raw_settings_dir().as_deref())?;
+    println!("{what} from \"{name}\" ({} settings)", settings.len());
+    Ok(Value::Object(settings))
+}
+
+/// The options of an edit job besides profile and photos.
+#[derive(Default)]
+struct EditOptions {
+    straighten: bool,
+    learn_from_edits: bool,
+    consistent_series: bool,
+    /// The chosen look's settings (`base_preset`), replacing the profile's for this job.
+    look: Option<Value>,
+}
+
+/// The edit request the Bridge forwards: without a profile the format comes along (the look
+/// then is the folder's own edits, see `--learn-from-edits`).
+fn edit_request(profile_id: Option<&Value>, uuids: &[&String], opts: &EditOptions) -> Value {
+    let mut body = json!({
+        "schema_version": "bridge-edit-v1",
+        "profile_id": profile_id,
+        "format_type": if profile_id.is_none() { Some("raw") } else { None },
+        "lr_catalog_uuids": uuids,
+        "straighten": opts.straighten,
+        "learn_from_edits": opts.learn_from_edits,
+        "consistent_series": opts.consistent_series,
+    });
+    if let Some(look) = &opts.look {
+        body["base_preset"] = look.clone();
+    }
+    body
+}
+
 /// Profile name in the sidecars of a job that learned only from the photographer's edits.
 const OWN_EDITS: &str = "own edits";
 
@@ -571,10 +600,9 @@ async fn apply(
     force: bool,
     files_from: Option<&Path>,
     out: Option<&Path>,
-    straighten: bool,
-    learn_from_edits: bool,
-    consistent_series: bool,
+    opts: EditOptions,
 ) -> Result<()> {
+    let learn_from_edits = opts.learn_from_edits;
     // No profile: the folder's edited RAWs alone set the look (written as "own edits").
     let (profile_id, name) = match wanted {
         Some(wanted) => {
@@ -626,15 +654,7 @@ async fn apply(
     let job = bridge
         .post(
             "/v1/jobs/edit",
-            &json!({
-                "schema_version": "bridge-edit-v1",
-                "profile_id": profile_id,
-                "format_type": if profile_id.is_none() { Some("raw") } else { None },
-                "lr_catalog_uuids": uuids,
-                "straighten": straighten,
-                "learn_from_edits": learn_from_edits,
-                "consistent_series": consistent_series,
-            }),
+            &edit_request(profile_id.as_ref(), &uuids, &opts),
         )
         .await?;
     let done = bridge
@@ -730,7 +750,14 @@ async fn main() -> Result<()> {
             straighten,
             learn_from_edits,
             consistent_series,
+            look,
         } => {
+            let opts = EditOptions {
+                straighten,
+                learn_from_edits,
+                consistent_series,
+                look: look.as_deref().map(|l| read_look(l, "look")).transpose()?,
+            };
             apply(
                 &bridge,
                 &dir,
@@ -738,9 +765,7 @@ async fn main() -> Result<()> {
                 force,
                 files_from.as_deref(),
                 out.as_deref(),
-                straighten,
-                learn_from_edits,
-                consistent_series,
+                opts,
             )
             .await
         }
@@ -766,5 +791,47 @@ mod tests {
             json!({"CropAngle": "1.2", "CropRight": 0.97})
         );
         assert!(crop_only(&map(json!({"Exposure2012": 0.3}))).is_empty());
+    }
+
+    #[test]
+    fn edit_request_carries_the_look_as_base_preset() {
+        let (a, b) = ("lr-a".to_string(), "lr-b".to_string());
+        let profile = json!("p-1");
+        let look = json!({"Contrast2012": 12, "ToneCurvePV2012": [0, 20, 255, 240]});
+        let body = edit_request(
+            Some(&profile),
+            &[&a, &b],
+            &EditOptions {
+                straighten: true,
+                look: Some(look.clone()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            body,
+            json!({
+                "schema_version": "bridge-edit-v1",
+                "profile_id": "p-1",
+                "format_type": null,
+                "lr_catalog_uuids": ["lr-a", "lr-b"],
+                "straighten": true,
+                "learn_from_edits": false,
+                "consistent_series": false,
+                "base_preset": look,
+            })
+        );
+        let own = edit_request(
+            None,
+            &[&a],
+            &EditOptions {
+                learn_from_edits: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(own["format_type"], "raw");
+        assert!(
+            own.get("base_preset").is_none(),
+            "no look: the profile's stays"
+        );
     }
 }

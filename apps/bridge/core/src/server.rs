@@ -110,8 +110,12 @@ async fn health() -> Json<Value> {
     Json(json!({ "status": "ok", "version": env!("CARGO_PKG_VERSION") }))
 }
 
+/// A photo registration. The Bridge builds the upload itself (preview, measured light), so it
+/// types what it acts on; every other top-level field is kept with the photo and forwarded
+/// into the upload metadata unchanged (null ones left out) — a newer plugin's field reaches
+/// the server without a Bridge change, and the server, a tolerant reader, decides about it.
+/// `file_path` stays local; the typed fields win over a forwarded one of the same name.
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct PhotoReq {
     schema_version: String,
     lr_catalog_uuid: String,
@@ -123,6 +127,8 @@ struct PhotoReq {
     /// Rating, pick/reject flag, color label (culling labels).
     #[serde(default)]
     lr_metadata: Map<String, Value>,
+    #[serde(flatten)]
+    extra: Map<String, Value>,
 }
 
 async fn register_photo(State(state): State<Shared>, Json(body): Json<Value>) -> Response {
@@ -139,12 +145,15 @@ async fn register_photo(State(state): State<Shared>, Json(body): Json<Value>) ->
             "lr_catalog_uuid and file_path are required",
         );
     }
+    let mut extra = req.extra;
+    extra.retain(|_, v| !v.is_null());
     let row = state.db().upsert_photo(
         &req.lr_catalog_uuid,
         &req.file_path,
         &Value::Object(req.exif_snapshot),
         &Value::Object(req.lr_develop_settings),
         &Value::Object(req.lr_metadata),
+        &Value::Object(extra),
     );
     match row {
         Ok(row) => (StatusCode::ACCEPTED, Json(row)).into_response(),

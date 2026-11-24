@@ -83,6 +83,25 @@ fn with_measured_light(exif: Value, light: Option<u32>) -> Value {
     }
 }
 
+/// The upload metadata (photo-upload-v1): the plugin's extra fields, then the Bridge's own
+/// (they win over an extra field of the same name).
+fn upload_metadata(uuid: &str, photo: crate::db::PhotoRow, light: Option<u32>) -> Value {
+    let mut metadata = photo.extra.as_object().cloned().unwrap_or_default();
+    for (key, value) in [
+        ("schema_version", json!("photo-upload-v1")),
+        ("lr_catalog_uuid", json!(uuid)),
+        (
+            "exif_snapshot",
+            with_measured_light(photo.exif_snapshot, light),
+        ),
+        ("lr_develop_settings", photo.lr_develop_settings),
+        ("lr_metadata", photo.lr_metadata),
+    ] {
+        metadata.insert(key.into(), value);
+    }
+    Value::Object(metadata)
+}
+
 async fn upload_one(state: &AppState, photo: crate::db::PhotoRow) -> Result<()> {
     let uuid = photo.lr_catalog_uuid.clone();
     let path = PathBuf::from(&photo.file_path);
@@ -104,13 +123,7 @@ async fn upload_one(state: &AppState, photo: crate::db::PhotoRow) -> Result<()> 
             return state.db().mark_photo_failed(&uuid, &e.to_string());
         }
     };
-    let metadata = json!({
-        "schema_version": "photo-upload-v1",
-        "lr_catalog_uuid": uuid,
-        "exif_snapshot": with_measured_light(photo.exif_snapshot, light),
-        "lr_develop_settings": photo.lr_develop_settings,
-        "lr_metadata": photo.lr_metadata,
-    });
+    let metadata = upload_metadata(&uuid, photo, light);
     match state.api.upload_photo(jpeg, &metadata).await {
         Ok(created) => {
             tracing::info!(%uuid, remote = %created.photo_id, "photo uploaded");
