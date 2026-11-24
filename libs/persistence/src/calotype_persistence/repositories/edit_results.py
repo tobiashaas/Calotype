@@ -22,6 +22,13 @@ class EditResultRepository:
         return list(session.execute(stmt).scalars().all())
 
     @staticmethod
+    def latest_for_photo(session: Session, photo_id: uuid.UUID) -> EditResult | None:
+        """Calotype's newest result for this photo, of any job and profile."""
+        stmt = (select(EditResult).where(EditResult.photo_id == photo_id)
+                .order_by(EditResult.created_at.desc()).limit(1))
+        return session.execute(stmt).scalar_one_or_none()
+
+    @staticmethod
     def create(
         session: Session,
         *,

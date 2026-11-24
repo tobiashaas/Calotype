@@ -146,6 +146,33 @@ def test_unknown_profile_is_none(h):
     assert h.store.profiles.get(uuid.uuid4()) is None
 
 
+def test_profile_is_renamed_and_keeps_the_photographers_marker(h):
+    profile = h.profile(accepted_marker={"kind": "label", "value": "green"})
+    h.commit()
+    assert h.store.profiles.get(profile.id).accepted_marker == {"kind": "label", "value": "green"}
+    h.store.profiles.rename(profile.id, "Matte")
+    h.store.profiles.set_accepted_marker(profile.id, {"kind": "rating", "min": 4})
+    h.commit()
+    got = h.store.profiles.get(profile.id)
+    assert (got.name, got.accepted_marker) == ("Matte", {"kind": "rating", "min": 4})
+    h.store.profiles.set_accepted_marker(profile.id, None)
+    h.commit()
+    assert h.store.profiles.get(profile.id).accepted_marker is None
+    assert h.store.profiles.rename(uuid.uuid4(), "x") is None
+
+
+def test_a_deleted_profile_is_hidden_but_kept(h):
+    kept, deleted = h.profile(name="kept"), h.profile(name="deleted")
+    h.commit()
+    h.store.profiles.delete(deleted.id)
+    h.commit()
+    listed = {p.id for p in h.store.profiles.list_all()}
+    assert kept.id in listed and deleted.id not in listed
+    got = h.store.profiles.get(deleted.id)  # still there for running jobs and results
+    assert got.deleted_at is not None and got.name == "deleted"
+    assert h.store.profiles.get(kept.id).deleted_at is None
+
+
 # --- jobs ------------------------------------------------------------------------------------
 
 
@@ -214,6 +241,22 @@ def test_cull_results_of_a_job_and_a_rerun_replaces(h):
     [result] = h.store.cull_results.for_job(job.id)
     assert (result.photo_id, result.bucket, result.score, result.reason, result.method) == (
         photo.id, "keep", 0.9, "sharp", "learned")
+
+
+def test_latest_edit_result_of_a_photo_over_all_jobs(h):
+    photo, other = h.photo(), h.photo()
+    first, second = h.job(JobKind.EDIT), h.job(JobKind.EDIT)
+    h.commit()
+    assert h.store.edit_results.latest_for_photo(photo.id) is None
+    h.store.edit_results.upsert(result_id=h.new_id(), job_id=first.id, photo_id=photo.id, profile_id=None,
+                                lr_settings={"Exposure2012": 0.1})
+    h.commit()
+    h.store.edit_results.upsert(result_id=h.new_id(), job_id=second.id, photo_id=photo.id, profile_id=None,
+                                lr_settings={"Exposure2012": 0.6})
+    h.store.edit_results.upsert(result_id=h.new_id(), job_id=second.id, photo_id=other.id, profile_id=None,
+                                lr_settings={"Exposure2012": -1.0})
+    h.commit()
+    assert h.store.edit_results.latest_for_photo(photo.id).lr_settings == {"Exposure2012": 0.6}
 
 
 def test_edit_result_keeps_the_photos_own_crop_flag(h):

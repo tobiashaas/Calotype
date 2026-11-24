@@ -1,7 +1,13 @@
 """Training worker — trains a profile model from photo feature vectors.
 
 Training rows: the features of each photo's preview (computed here when missing — freshly
-uploaded photos have none yet) and the photographer's Lightroom settings as targets. The loop
+uploaded photos have none yet) and the photographer's Lightroom settings as targets.
+
+No self-learning: a photo whose current settings still hold Calotype's latest result for it —
+of any job and any profile, because whichever profile set them, they are not the
+photographer's — is left out unless the photographer marked it as accepted (``accepted``).
+A photo changed since is a Correction and is learned; a photo Calotype never edited is a
+normal training photo. Earlier training photos merged into a retrain pass the same check. The loop
 around the job (envelope, DLQ, job status) is the worker runtime's; the profile's status is
 this worker's: TRAINING while it runs, READY with the new model, FAILED on error — except a
 retrained profile, which keeps its earlier model and stays READY.
@@ -11,7 +17,7 @@ from __future__ import annotations
 
 from calotype_domain.failures import TooFewPhotosError
 from calotype_domain.profiles import ProfileStatus
-from calotype_edit_serializer import shared_masks, training_target
+from calotype_edit_serializer import shared_masks, training_target, unchanged_since
 from calotype_inference_pipeline import (
     CURRENT_FEATURE_VERSION,
     MIN_SAMPLES,
@@ -32,6 +38,7 @@ def handle(ctx: JobContext[TrainPayloadV1]) -> None:
     profile_id = payload.profile_id
     # Values only a preset left (Lightroom key -> value): not the photographer's decision.
     untouched = payload.untouched or {}
+    accepted = set(payload.accepted)
 
     format_type = "raw"
     if profile_id is not None:
@@ -54,6 +61,13 @@ def handle(ctx: JobContext[TrainPayloadV1]) -> None:
             if photo is None:
                 skipped.append(f"{photo_id}: not found")
                 continue
+            if photo_id not in accepted:
+                applied = store.edit_results.latest_for_photo(photo_id)
+                if applied is not None and unchanged_since(
+                    applied.lr_settings or {}, photo.lr_develop_settings or {}, format_type
+                ):
+                    skipped.append(f"{photo_id}: still Calotype's result of job {applied.job_id}, not accepted")
+                    continue
             target = training_target(photo.lr_develop_settings or {}, format_type, untouched)
             if not target.sliders:
                 skipped.append(f"{photo_id}: no slider the photographer decided")

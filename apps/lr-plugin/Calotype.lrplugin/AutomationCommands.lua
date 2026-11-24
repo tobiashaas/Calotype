@@ -14,6 +14,7 @@ local Actions = require "Actions"
 local Fresh = require "Fresh"
 local LookPresets = require "LookPresets"
 local Json = require "Json"
+local Markers = require "Markers"
 local PhotoData = require "PhotoData"
 
 local Commands = {}
@@ -22,7 +23,7 @@ local Commands = {}
 -- or metamethod call", found in the first automated run). LrTasks.pcall can.
 local pcall = LrTasks.pcall or pcall
 
-local PLUGIN_VERSION = "0.3.2" -- same as Info.lua (checked by tests/run.lua)
+local PLUGIN_VERSION = "0.4.0" -- same as Info.lua (checked by tests/run.lua)
 local LIST_KEYS = { "uuid", "path", "fileFormat", "rating", "pickStatus", "isVirtualCopy" }
 
 local function photosByUuid(catalog, uuids)
@@ -196,11 +197,22 @@ function Commands.look_presets(catalog, args)
   return out
 end
 
+-- args.marker: the photographer's marker for accepted photos ({ kind = "label", value =
+-- "green" } / { kind = "rating", min = 4 } / { kind = "none" }); the selected photos carrying
+-- it are sent as accepted. args.import_preset: name or uuid of a develop preset whose slider
+-- values are placeholders (untouched), like the train dialog's "Import preset".
 function Commands.train(catalog, args)
   local photos, missing = photosByUuid(catalog, args.uuids)
+  local untouched = args.untouched
+  if args.import_preset then
+    untouched = LookPresets.placeholders(args.import_preset)
+    if not untouched then error("no develop preset with slider values " .. tostring(args.import_preset)) end
+  end
+  local marker = nil
+  if type(args.marker) == "table" then marker = Markers.fromValue(Markers.toValue(args.marker)) end
   local choice = { name = args.name, genre = args.genre or "other", colorType = args.color_type or "color",
     basePreset = args.look and LookPresets.settings(args.look) or nil,
-    profileId = args.profile_id, untouched = args.untouched }
+    profileId = args.profile_id, untouched = untouched, marker = marker }
   if args.look and not choice.basePreset then error("no develop preset " .. tostring(args.look)) end
   local progress = progressScope(tostring(choice.name))
   local ok, r = pcall(Actions.train, photos, choice, progress)
@@ -418,6 +430,41 @@ function Commands.virtual_copies(catalog, args)
     out[master and master:getRawMetadata("uuid") or "?"] = copy:getRawMetadata("uuid")
   end
   return Json.object({ copies = out, missing = missing })
+end
+
+--- Every profile the server lists (deleted ones are gone), with status and marker.
+function Commands.profiles(catalog, args)
+  local items, err = Actions.allProfiles()
+  if not items then error(err) end
+  local out = {}
+  for _, item in ipairs(items) do out[#out + 1] = item.profile end
+  return Json.object({ profiles = out })
+end
+
+local function profileId(args)
+  local items, err = Actions.allProfiles()
+  if not items then error(err) end
+  for _, item in ipairs(items) do
+    if item.profile.profile_id == args.profile or item.profile.name == args.profile then
+      return item.profile.profile_id
+    end
+  end
+  error("no profile " .. tostring(args.profile))
+end
+
+--- Rename a profile (args.profile: its id or current name; args.name: the new name).
+function Commands.rename_profile(catalog, args)
+  local profile, err = Actions.renameProfile(profileId(args), args.name)
+  if not profile then error(err) end
+  return Json.object({ profile = profile })
+end
+
+--- Delete a profile (args.profile: id or name); the server only hides it.
+function Commands.delete_profile(catalog, args)
+  local id = profileId(args)
+  local ok, err = Actions.deleteProfile(id)
+  if not ok then error(err) end
+  return Json.object({ deleted = id })
 end
 
 --- Start from zero without applying anything: reset these photos (Fresh.lua).

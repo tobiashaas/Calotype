@@ -82,7 +82,8 @@ local function request(method, path, body)
   if method == "GET" then
     raw, response = LrHttp.get(url, headers, 15)
   else
-    raw, response = LrHttp.post(url, Json.encode(body), headers, "POST", 30)
+    -- LrHttp.post sends any method (PATCH, DELETE); a DELETE has no body.
+    raw, response = LrHttp.post(url, body ~= nil and Json.encode(body) or "", headers, method, 30)
   end
 
   local status = response and response.status
@@ -135,6 +136,18 @@ end
 
 function BridgeClient.profiles()
   return request("GET", "/v1/profiles")
+end
+
+--- Rename a profile and/or change its marker (only the fields given change).
+function BridgeClient.updateProfile(profileId, fields)
+  local body = { schema_version = "profile-update-v1" }
+  for k, v in pairs(fields) do body[k] = v end
+  return request("PATCH", "/v1/profiles/" .. profileId, body)
+end
+
+--- Delete a profile (the server only hides it). Returns BridgeClient.NO_CONTENT on success.
+function BridgeClient.deleteProfile(profileId)
+  return request("DELETE", "/v1/profiles/" .. profileId)
 end
 
 function BridgeClient.automationNext()

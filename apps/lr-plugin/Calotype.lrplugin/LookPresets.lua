@@ -81,4 +81,25 @@ function LookPresets.settings(id)
   return out, name
 end
 
+-- The sliders a profile learns (Lightroom keys), see calotype_edit_serializer.sliders.
+local SLIDER_KEYS = { "Exposure2012", "Contrast2012", "Highlights2012", "Shadows2012", "Whites2012",
+  "Blacks2012", "Vibrance", "Saturation", "Temperature", "Tint", "IncrementalTemperature", "IncrementalTint" }
+
+--- Placeholders of an import preset: the slider values it leaves on every photo it is applied
+-- to (Lightroom key -> value), e.g. { Highlights2012 = -100 }. A photo still holding one did
+-- not decide that slider, so it does not teach it (train request `untouched`). Values at
+-- Lightroom's neutral 0 are left out: they are no trace of the preset. Returns nil when the
+-- preset sets no slider.
+function LookPresets.placeholders(id)
+  local settings = LookPresets.settings(id)
+  if not settings then return nil end
+  local out, n = {}, 0
+  for _, key in ipairs(SLIDER_KEYS) do
+    local v = settings[key]
+    if type(v) == "number" and v ~= 0 then out[key], n = v, n + 1 end
+  end
+  if n == 0 then return nil end
+  return out
+end
+
 return LookPresets

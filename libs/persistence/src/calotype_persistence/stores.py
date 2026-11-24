@@ -126,10 +126,12 @@ class FeatureVectorStore(Protocol):
 
 
 class ProfileStore(Protocol):
-    def get(self, profile_id: uuid.UUID) -> Profile | None: ...
+    def get(self, profile_id: uuid.UUID) -> Profile | None:
+        """Also a deleted profile (``deleted_at`` set): workers finish what they started."""
+        ...
 
     def list_all(self) -> list[Profile]:
-        """All profiles, newest first."""
+        """The profiles not deleted, newest first."""
         ...
 
     def create(
@@ -141,8 +143,20 @@ class ProfileStore(Protocol):
         format_type: str,
         color_type: str,
         base_preset: dict[str, Any] | None,
+        accepted_marker: dict[str, Any] | None = None,
     ) -> Profile:
         """A new profile in status draft, version 1, not trained yet."""
+        ...
+
+    def rename(self, profile_id: uuid.UUID, name: str) -> Profile | None: ...
+
+    def set_accepted_marker(self, profile_id: uuid.UUID, marker: dict[str, Any] | None) -> Profile | None:
+        """How the photographer marks accepted photos (None = no marker)."""
+        ...
+
+    def delete(self, profile_id: uuid.UUID) -> Profile | None:
+        """Soft delete: ``deleted_at`` is set, the profile disappears from ``list_all``; its jobs,
+        results and model artifacts stay."""
         ...
 
     def set_status(
@@ -163,6 +177,10 @@ class ProfileStore(Protocol):
 
 class EditResultStore(Protocol):
     def for_job(self, job_id: uuid.UUID) -> list[EditResult]: ...
+
+    def latest_for_photo(self, photo_id: uuid.UUID) -> EditResult | None:
+        """Calotype's newest result for this photo, of any job and any profile."""
+        ...
 
     def upsert(
         self,
@@ -293,6 +311,15 @@ class _SqlProfiles:
     def set_artifact(self, profile_id, **fields):
         return ProfileRepository.set_artifact(self._s, profile_id, **fields)
 
+    def rename(self, profile_id, name):
+        return ProfileRepository.rename(self._s, profile_id, name)
+
+    def set_accepted_marker(self, profile_id, marker):
+        return ProfileRepository.set_accepted_marker(self._s, profile_id, marker)
+
+    def delete(self, profile_id):
+        return ProfileRepository.delete(self._s, profile_id)
+
 
 class _SqlEditResults:
     def __init__(self, session: Session) -> None:
@@ -300,6 +327,9 @@ class _SqlEditResults:
 
     def for_job(self, job_id):
         return EditResultRepository.get_all_by_job_id(self._s, job_id)
+
+    def latest_for_photo(self, photo_id):
+        return EditResultRepository.latest_for_photo(self._s, photo_id)
 
     def upsert(self, **fields):
         EditResultRepository.upsert(self._s, **fields)

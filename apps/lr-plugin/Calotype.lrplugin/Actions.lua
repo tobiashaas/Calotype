@@ -9,6 +9,7 @@ local BridgeClient = require "BridgeClient"
 local Fresh = require "Fresh"
 local JobWait = require "JobWait"
 local Log = require "Log"
+local Markers = require "Markers"
 local PhotoData = require "PhotoData"
 local Retouch = require "Retouch"
 
@@ -52,6 +53,37 @@ function Actions.readyProfiles()
   return items
 end
 
+--- Every profile the photographer has (any status; deleted ones the server no longer lists),
+-- sorted by name — for "Manage profiles".
+function Actions.allProfiles()
+  local profiles, err = BridgeClient.profiles()
+  if not profiles then return nil, err end
+  local items = {}
+  for _, p in ipairs(profiles) do
+    items[#items + 1] = {
+      title = string.format("%s  (%s, %s, %s)", p.name, p.genre, formatText(p.format_type), tostring(p.status)),
+      value = p.profile_id,
+      profile = p,
+    }
+  end
+  table.sort(items, function(a, b) return a.title:lower() < b.title:lower() end)
+  return items
+end
+
+--- Give a profile a new name. Returns the updated profile or nil, error.
+function Actions.renameProfile(profileId, name)
+  name = (name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  if name == "" then return nil, LOC "$$$/Calotype/Train/NoName=Please enter a profile name." end
+  return BridgeClient.updateProfile(profileId, { name = name })
+end
+
+--- Delete a profile: it disappears from Calotype's lists; the server keeps its data.
+function Actions.deleteProfile(profileId)
+  local ok, err = BridgeClient.deleteProfile(profileId)
+  if not ok then return nil, err end
+  return true
+end
+
 --- Stand-in for "no profile": the look comes only from the photos of the selection the
 -- photographer already edited. File type: RAW if the selection has RAWs, else JPEG/TIFF.
 function Actions.ownEditsProfile(photos)
@@ -63,8 +95,10 @@ function Actions.ownEditsProfile(photos)
 end
 
 --- Train a profile from `photos` (their current develop settings are the target).
--- choice = { name, genre, colorType, basePreset, profileId, untouched } (basePreset: a look, see
--- LookPresets.lua; profileId: retrain that profile; untouched: Lightroom key -> a preset's placeholder).
+-- choice = { name, genre, colorType, basePreset, profileId, untouched, marker } (basePreset: a
+-- look, see LookPresets.lua; profileId: retrain that profile; untouched: Lightroom key -> a
+-- preset's placeholder; marker: how the photographer marks accepted photos, see Markers.lua —
+-- the photos carrying it are sent as accepted, and the profile keeps the marker).
 function Actions.train(photos, choice, progress)
   local reg, regErr = JobWait.registerPhotos(photos, progress)
   if not reg then
@@ -81,6 +115,13 @@ function Actions.train(photos, choice, progress)
         #reg.uuids), "warning")
   end
 
+  -- Accepted photos: those carrying the photographer's marker. A photo still holding
+  -- Calotype's result is learned only then (the server checks which ones still do).
+  local accepted = nil
+  if choice.marker and choice.marker.kind ~= "none" then
+    accepted = Markers.acceptedUuids(choice.marker, reg.uuids, reg.photosByUuid)
+  end
+
   local job, jobErr = BridgeClient.queueTrain {
     schema_version = "bridge-train-v1",
     profile_name = choice.name,
@@ -91,9 +132,11 @@ function Actions.train(photos, choice, progress)
     base_preset = choice.basePreset,
     profile_id = choice.profileId,             -- retrain this profile; only sent when set
     untouched = choice.untouched,              -- a preset's placeholders; only sent when set
+    accepted_marker = choice.marker,           -- kept on the profile; only sent when set
+    accepted_lr_catalog_uuids = accepted,
   }
   if not job then return result(false, "Calotype", jobErr) end
-  Log.info("train job %s queued with %d photos", job.job_id, #reg.uuids)
+  Log.info("train job %s queued with %d photos (%d accepted)", job.job_id, #reg.uuids, accepted and #accepted or 0)
 
   local final, waitErr = JobWait.waitForJob(job.job_id, progress, LOC "$$$/Calotype/Train/Label=Training")
   if not final then

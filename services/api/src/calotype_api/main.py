@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Response, UploadFile
 
 from calotype_api.deps import get_publisher, get_storage, get_store
 from calotype_api.middleware import RateLimitMiddleware, RequestIdMiddleware
@@ -21,12 +21,14 @@ from calotype_api.schemas import (
     PhotoCreatedResponse,
     PhotoMetadataV1,
     ProfileResponse,
+    ProfileUpdateV1,
     TrainJobRequestV1,
 )
 from calotype_api.training import merged_training
 from calotype_domain.jobs import JobKind
 from calotype_domain.profiles import ProfileStatus
 from calotype_io import BlobStore
+from calotype_persistence.models import Profile
 from calotype_persistence.stores import Store
 from calotype_queue.envelope import JobEnvelopeV1
 from calotype_queue.payloads import TrainPayloadV1
@@ -88,41 +90,65 @@ async def upload_photo_endpoint(
     return PhotoCreatedResponse(photo_id=photo_id, s3_key=s3_key, already_existed=False)
 
 
+def _profile_response(p: Profile) -> ProfileResponse:
+    return ProfileResponse(
+        profile_id=p.id,
+        name=p.name,
+        genre=p.genre,
+        format_type=p.format_type,
+        color_type=p.color_type,
+        status=p.status,
+        version=p.version,
+        model_artifact_key=p.model_artifact_key,
+        failure_reason=p.failure_reason,
+        accepted_marker=p.accepted_marker,
+    )
+
+
+def _live_profile(store: Store, profile_id: UUID) -> Profile | None:
+    """The profile, unless it does not exist or was deleted (deleted ones are only hidden)."""
+    profile = store.profiles.get(profile_id)
+    return profile if profile is not None and profile.deleted_at is None else None
+
+
 @app.get("/v1/profiles", response_model=list[ProfileResponse])
 def list_profiles(store: Store = Depends(get_store)):
-    profiles = store.profiles.list_all()
-    return [
-        ProfileResponse(
-            profile_id=p.id,
-            name=p.name,
-            genre=p.genre,
-            format_type=p.format_type,
-            color_type=p.color_type,
-            status=p.status,
-            version=p.version,
-            model_artifact_key=p.model_artifact_key,
-            failure_reason=p.failure_reason,
-        )
-        for p in profiles
-    ]
+    return [_profile_response(p) for p in store.profiles.list_all()]
 
 
 @app.get("/v1/profiles/{profile_id}", response_model=ProfileResponse)
 def get_profile(profile_id: UUID, store: Store = Depends(get_store)):
-    profile = store.profiles.get(profile_id)
+    profile = _live_profile(store, profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="profile not found")
-    return ProfileResponse(
-        profile_id=profile.id,
-        name=profile.name,
-        genre=profile.genre,
-        format_type=profile.format_type,
-        color_type=profile.color_type,
-        status=profile.status,
-        version=profile.version,
-        model_artifact_key=profile.model_artifact_key,
-        failure_reason=profile.failure_reason,
-    )
+    return _profile_response(profile)
+
+
+@app.patch("/v1/profiles/{profile_id}", response_model=ProfileResponse)
+def update_profile(profile_id: UUID, body: ProfileUpdateV1, store: Store = Depends(get_store)):
+    """Rename a profile and/or change the photographer's marker for accepted photos."""
+    profile = _live_profile(store, profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="profile not found")
+    if body.name is not None:
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="name must not be blank")
+        store.profiles.rename(profile_id, name)
+    if "accepted_marker" in body.model_fields_set:
+        marker = body.accepted_marker.stored() if body.accepted_marker is not None else None
+        store.profiles.set_accepted_marker(profile_id, marker)
+    return _profile_response(store.profiles.get(profile_id))
+
+
+@app.delete("/v1/profiles/{profile_id}", status_code=204)
+def delete_profile(profile_id: UUID, store: Store = Depends(get_store)):
+    """Soft delete: the profile disappears from the list, from apply and from retraining; its
+    jobs, results and model artifacts stay. Deleting it again changes nothing."""
+    if store.profiles.get(profile_id) is None:
+        raise HTTPException(status_code=404, detail="profile not found")
+    store.profiles.delete(profile_id)
+    return Response(status_code=204)
 
 
 @app.post("/v1/jobs/train", status_code=202, response_model=JobAcceptedResponse)
@@ -141,18 +167,29 @@ def create_train_job(
             return JobAcceptedResponse(job_id=existing.id, kind="train", profile_id=existing.profile_id)
 
     payload = TrainPayloadV1.model_validate(body.model_dump())
+    # Accepted photos: the selection's photos carrying the photographer's marker, as server ids
+    # (catalog uuids of photos not in the selection or never uploaded are ignored).
+    selected = set(body.photo_ids)
+    accepted = []
+    for lr_uuid in body.accepted_lr_catalog_uuids or ():
+        photo = store.photos.get_by_lr_catalog_uuid(lr_uuid)
+        if photo is not None and photo.id in selected:
+            accepted.append(photo.id)
+    marker = body.accepted_marker.stored() if body.accepted_marker is not None else None
     if body.profile_id is not None:
         # Retrain: one profile that keeps learning from the photographer's corrections.
-        profile = store.profiles.get(body.profile_id)
+        profile = _live_profile(store, body.profile_id)
         if profile is None:
             raise HTTPException(status_code=404, detail=f"profile {body.profile_id} not found")
         if profile.format_type != body.format_type:
             raise HTTPException(status_code=409, detail=f"profile {profile.id} is for {profile.format_type} photos")
         earlier = [job.payload for job in store.jobs.list_for_profile(profile.id, JobKind.TRAIN)]
-        photo_ids, untouched = merged_training(earlier, body.photo_ids, body.untouched)
+        merged = merged_training(earlier, body.photo_ids, body.untouched, accepted)
         profile_id = profile.id
+        if body.accepted_marker is not None:
+            store.profiles.set_accepted_marker(profile_id, marker)
         payload = payload.model_copy(update={
-            "photo_ids": photo_ids, "untouched": untouched,
+            "photo_ids": merged.photo_ids, "untouched": merged.untouched, "accepted": merged.accepted,
             "retrain": profile.model_artifact_key is not None,
         })
     else:
@@ -165,7 +202,9 @@ def create_train_job(
             format_type=body.format_type,
             color_type=body.color_type,
             base_preset=body.base_preset,
+            accepted_marker=marker,
         )
+        payload = payload.model_copy(update={"accepted": accepted})
     payload = payload.model_copy(update={"profile_id": profile_id}).model_dump(mode="json")
 
     job_id = uuid4()
@@ -212,7 +251,7 @@ def create_edit_job(
 
     # Validate profile exists and is ready (without one, the look comes from the edits only).
     if body.profile_id is not None:
-        profile = store.profiles.get(body.profile_id)
+        profile = _live_profile(store, body.profile_id)
         if profile is None:
             raise HTTPException(status_code=422, detail="profile not found")
         if profile.status != ProfileStatus.READY.value:

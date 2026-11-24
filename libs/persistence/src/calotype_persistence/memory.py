@@ -185,7 +185,7 @@ class _MemoryProfiles:
         return self._profiles.get(profile_id)
 
     def list_all(self) -> list[Profile]:
-        return list(reversed(self._profiles.values()))
+        return [p for p in reversed(self._profiles.values()) if p.deleted_at is None]
 
     def create(
         self,
@@ -196,13 +196,14 @@ class _MemoryProfiles:
         format_type: str,
         color_type: str,
         base_preset: dict[str, Any] | None,
+        accepted_marker: dict[str, Any] | None = None,
     ) -> Profile:
         now = _now()
         profile = Profile(
             id=profile_id, name=name, genre=genre, format_type=format_type, color_type=color_type,
             status=ProfileStatus.DRAFT.value, version=1, base_preset=base_preset, retouch=None,
             model_artifact_key=None, lr_output_keys=None, failure_reason=None,
-            created_at=now, updated_at=now,
+            accepted_marker=accepted_marker, deleted_at=None, created_at=now, updated_at=now,
         )
         self._profiles[profile_id] = profile
         return profile
@@ -235,6 +236,24 @@ class _MemoryProfiles:
             profile.lr_output_keys = lr_output_keys
         return profile
 
+    def rename(self, profile_id: uuid.UUID, name: str) -> Profile | None:
+        profile = self._profiles.get(profile_id)
+        if profile is not None:
+            profile.name = name
+        return profile
+
+    def set_accepted_marker(self, profile_id: uuid.UUID, marker: dict[str, Any] | None) -> Profile | None:
+        profile = self._profiles.get(profile_id)
+        if profile is not None:
+            profile.accepted_marker = marker
+        return profile
+
+    def delete(self, profile_id: uuid.UUID) -> Profile | None:
+        profile = self._profiles.get(profile_id)
+        if profile is not None and profile.deleted_at is None:
+            profile.deleted_at = _now()
+        return profile
+
 
 class _MemoryEditResults:
     def __init__(self) -> None:
@@ -242,6 +261,11 @@ class _MemoryEditResults:
 
     def for_job(self, job_id: uuid.UUID) -> list[EditResult]:
         return [r for (j, _), r in self._results.items() if j == job_id]
+
+    def latest_for_photo(self, photo_id: uuid.UUID) -> EditResult | None:
+        # Insertion order breaks ties of equal timestamps: the later result is the newer.
+        found = [r for (_, p), r in self._results.items() if p == photo_id]
+        return max(reversed(found), key=lambda r: r.created_at, default=None)
 
     def upsert(
         self,
