@@ -11,6 +11,7 @@ pub mod config;
 pub mod db;
 pub mod exif;
 pub mod folder;
+pub mod looks;
 pub mod outbox;
 pub mod presets;
 pub mod preview;
