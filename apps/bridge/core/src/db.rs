@@ -12,7 +12,7 @@ use serde_json::{json, Map, Value};
 /// Key in `lr_metadata` for Lightroom's assisted-culling scores (read from the catalog).
 pub const CULLING_KEY: &str = "lr_culling";
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 pub fn now() -> i64 {
     SystemTime::now()
@@ -58,6 +58,9 @@ pub struct JobRow {
     pub remote_job_id: Option<String>,
     pub attempts: i64,
     pub last_error: Option<String>,
+    /// Why the server failed the job, as a code (`no_examples`, `profile_not_ready` …): the
+    /// plugin picks its message by it. None for failures of the Bridge itself / older servers.
+    pub failure_code: Option<String>,
     /// Server profile: created by a train job, applied by an edit job.
     pub profile_id: Option<String>,
     pub results: Option<Value>,
@@ -98,6 +101,7 @@ fn job_from_row(r: &Row) -> rusqlite::Result<JobRow> {
         attempts: r.get(7)?,
         last_error: r.get(8)?,
         profile_id: r.get(10)?,
+        failure_code: r.get(11)?,
         results: results.map(json),
     })
 }
@@ -105,7 +109,7 @@ fn job_from_row(r: &Row) -> rusqlite::Result<JobRow> {
 const PHOTO_COLS: &str = "lr_catalog_uuid, file_path, exif_json, settings_json, status, \
                           remote_photo_id, attempts, last_error, metadata_json";
 const JOB_COLS: &str = "job_id, kind, request_json, uuids_json, idempotency_key, status, \
-                        remote_job_id, attempts, last_error, results_json, profile_id";
+                        remote_job_id, attempts, last_error, results_json, profile_id,                         failure_code";
 
 impl Db {
     pub fn open(path: &Path) -> Result<Self> {
@@ -161,6 +165,9 @@ impl Db {
             conn.execute_batch(
                 "ALTER TABLE photos ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}';",
             )?;
+        }
+        if version < 4 {
+            conn.execute_batch("ALTER TABLE jobs ADD COLUMN failure_code TEXT;")?;
         }
         if version < SCHEMA_VERSION {
             conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -381,9 +388,15 @@ impl Db {
     }
 
     pub fn fail_job(&self, job_id: &str, error: &str) -> Result<()> {
+        self.fail_job_with_code(job_id, error, None)
+    }
+
+    /// Failed, with the server's failure code when it gave one.
+    pub fn fail_job_with_code(&self, job_id: &str, error: &str, code: Option<&str>) -> Result<()> {
         self.conn.execute(
-            "UPDATE jobs SET status = 'failed', last_error = ?2, updated_at = ?3 WHERE job_id = ?1",
-            params![job_id, error, now()],
+            "UPDATE jobs SET status = 'failed', last_error = ?2, failure_code = ?3, updated_at = ?4
+                 WHERE job_id = ?1",
+            params![job_id, error, code, now()],
         )?;
         Ok(())
     }
@@ -516,9 +529,14 @@ mod tests {
         assert_eq!(photo.lr_metadata, json!({"rating": 2}), "v3 column exists");
         let job = db.insert_job("train", &json!({}), &["u".into()]).unwrap();
         db.set_job_profile(&job.job_id, "p-1").unwrap();
+        db.fail_job_with_code(&job.job_id, "no examples", Some("no_examples"))
+            .unwrap();
+        let job = db.job(&job.job_id).unwrap().unwrap();
+        assert_eq!(job.profile_id.as_deref(), Some("p-1"));
         assert_eq!(
-            db.job(&job.job_id).unwrap().unwrap().profile_id.as_deref(),
-            Some("p-1")
+            job.failure_code.as_deref(),
+            Some("no_examples"),
+            "v4 column"
         );
         drop(db);
         Db::open(&path).unwrap(); // reopening an up-to-date DB is a no-op

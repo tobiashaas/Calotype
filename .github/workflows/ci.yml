@@ -39,6 +39,8 @@ jobs:
             libs/inference-pipeline/src \
             libs/edit-serializer/src \
             libs/culling/src \
+            libs/io/src \
+            libs/worker-runtime/src \
             services/api/src \
             services/workers/feature_worker/src \
             services/workers/train_worker/src \
@@ -95,11 +97,12 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: |
-          pip install -e libs/domain -e libs/queue -e libs/observability -e libs/persistence
-          pip install -e libs/inference-pipeline -e libs/edit-serializer
-          pip install -e services/workers/train_worker -e services/workers/feature_worker -e services/workers/inference_worker pytest
+          pip install -e libs/domain -e libs/queue -e libs/observability -e libs/persistence -e libs/io
+          pip install -e "libs/worker-runtime[dev]"
+          pip install -e libs/inference-pipeline -e libs/edit-serializer -e libs/culling
+          pip install -e services/workers/train_worker -e services/workers/feature_worker -e services/workers/inference_worker -e services/workers/cull_worker pytest
       - name: Test
-        run: python -m pytest services/workers/train_worker/tests/ services/workers/feature_worker/tests/ services/workers/inference_worker/tests/ libs/persistence/tests/ -v
+        run: python -m pytest libs/worker-runtime/tests/ libs/io/tests/ services/workers/train_worker/tests/ services/workers/feature_worker/tests/ services/workers/inference_worker/tests/ services/workers/cull_worker/tests/ libs/persistence/tests/ libs/queue/tests/ libs/domain/tests/ -v
 
   bridge-core:
     name: Bridge core (Rust)
@@ -146,6 +149,7 @@ jobs:
           pip install -e libs/domain
           pip install -e libs/queue
           pip install -e libs/observability
+          pip install -e libs/io
           pip install -e "libs/persistence" --no-deps
           pip install "sqlalchemy>=2.0" "pydantic>=2.10"
           pip install -e "services/api[dev]"

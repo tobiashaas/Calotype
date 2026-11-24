@@ -11,7 +11,18 @@
    "LocalHighlights2012": -0.05,
    "LocalClarity2012": 0.04
   },
-  "group": "Calotype Retouch"
+  "group": "Calotype Retouch",
+  "file": "subject.xmp",
+  "correction": "Calotype subject",
+  "title": "Lift subject",
+  "title_de": "Person hervorheben",
+  "masks": [
+   {
+    "subtype": 1,
+    "category": null,
+    "name": "Subject"
+   }
+  ]
  },
  {
   "id": "background",
@@ -24,7 +35,18 @@
    "LocalSaturation": -0.08,
    "LocalClarity2012": -0.05
   },
-  "group": "Calotype Retouch"
+  "group": "Calotype Retouch",
+  "file": "background.xmp",
+  "correction": "Calotype background",
+  "title": "Calm background",
+  "title_de": "Hintergrund beruhigen",
+  "masks": [
+   {
+    "subtype": 0,
+    "category": 22,
+    "name": "Background"
+   }
+  ]
  },
  {
   "id": "skin",
@@ -36,7 +58,18 @@
    "LocalTexture": -0.15,
    "LocalClarity2012": -0.05
   },
-  "group": "Calotype Retouch"
+  "group": "Calotype Retouch",
+  "file": "skin.xmp",
+  "correction": "Calotype skin",
+  "title": "Soften skin",
+  "title_de": "Haut sanfter",
+  "masks": [
+   {
+    "subtype": 3,
+    "category": 2,
+    "name": "Face Skin"
+   }
+  ]
  },
  {
   "id": "eyes",
@@ -49,7 +82,23 @@
    "LocalClarity2012": 0.08,
    "LocalSaturation": 0.03
   },
-  "group": "Calotype Retouch"
+  "group": "Calotype Retouch",
+  "file": "eyes.xmp",
+  "correction": "Calotype eyes",
+  "title": "Clearer eyes",
+  "title_de": "Augen klarer",
+  "masks": [
+   {
+    "subtype": 3,
+    "category": 8,
+    "name": "Eye Sclera"
+   },
+   {
+    "subtype": 3,
+    "category": 3,
+    "name": "Iris and Pupil"
+   }
+  ]
  },
  {
   "id": "teeth",
@@ -61,7 +110,18 @@
    "LocalExposure2012": 0.06,
    "LocalSaturation": -0.25
   },
-  "group": "Calotype Retouch"
+  "group": "Calotype Retouch",
+  "file": "teeth.xmp",
+  "correction": "Calotype teeth",
+  "title": "Brighten teeth",
+  "title_de": "Zähne aufhellen",
+  "masks": [
+   {
+    "subtype": 3,
+    "category": 12,
+    "name": "Teeth"
+   }
+  ]
  },
  {
   "id": "sky",
@@ -75,6 +135,17 @@
    "LocalSaturation": 0.06,
    "LocalDehaze": 0.05
   },
-  "group": "Calotype Retouch"
+  "group": "Calotype Retouch",
+  "file": "sky.xmp",
+  "correction": "Calotype sky",
+  "title": "Deepen sky",
+  "title_de": "Himmel vertiefen",
+  "masks": [
+   {
+    "subtype": 2,
+    "category": null,
+    "name": "Sky"
+   }
+  ]
  }
 ]

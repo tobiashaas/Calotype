@@ -289,6 +289,15 @@ components:
         base_preset:
           type: object
           additionalProperties: true
+        profile_id:
+          type: string
+          format: uuid
+          description: Retrain this profile instead of creating one — its earlier training photos (with their current settings) and photo_ids together; the profile keeps its id and stays usable while training.
+        untouched:
+          type: object
+          additionalProperties:
+            type: number
+          description: Values only a preset left on the photos (Lightroom key → value), e.g. Highlights2012 -100; a slider holding one is left out of that photo's training target.
     EditJobRequestV1:
       type: object
       description: Without profile_id the look comes only from the selection's edited photos; then learn_from_edits and format_type are required.
@@ -356,6 +365,13 @@ components:
           type: string
           nullable: true
           description: Short, user-facing reason when status is `failed`
+        failure_code:
+          type: string
+          nullable: true
+          description: |
+            When status is `failed`: why, as a code clients branch on — `no_examples` (no
+            edited photo to learn the look from), `profile_not_ready`, `too_few_photos`,
+            `processing_error` (anything else). Clients must accept codes they do not know.
         correlation_id:
           type: string
     PhotoCreatedResponse:
@@ -475,6 +491,13 @@ components:
             `learn_from_edits`, the selection's edited photos. Null when nothing was learned.
           example:
             subject: { LocalShadows2012: 0.16, LocalHighlights2012: -0.18 }
+        kept_crop:
+          type: boolean
+          nullable: true
+          description: |
+            True when the job straightened but the photo already had a crop or straighten of its
+            own: it keeps it, and `lr_settings` carries no crop keys. Clients count these
+            (older servers: absent, the client then sees no crop keys either way).
     JobEnvelopeV1:
       type: object
       description: Redis queue payload (JSON Schema job-envelope-v1.schema.json)

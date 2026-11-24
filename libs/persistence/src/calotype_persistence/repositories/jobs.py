@@ -21,6 +21,13 @@ class JobRepository:
         return session.execute(stmt).scalar_one_or_none()
 
     @staticmethod
+    def list_for_profile(session: Session, profile_id: uuid.UUID, kind: JobKind) -> list[Job]:
+        """A profile's jobs of one kind, oldest first."""
+        stmt = (select(Job).where(Job.profile_id == profile_id, Job.kind == kind.value)
+                .order_by(Job.created_at))
+        return list(session.execute(stmt).scalars())
+
+    @staticmethod
     def create(
         session: Session,
         *,
@@ -53,12 +60,16 @@ class JobRepository:
         status: JobStatus,
         *,
         failure_reason: str | None = None,
+        failure_code: str | None = None,
     ) -> Job | None:
+        """``failure_reason`` is text for people, ``failure_code`` a ``FailureCode`` for
+        clients; both only with FAILED."""
         job = session.get(Job, job_id)
         if job is None:
             return None
         job.sync_status_enum(status)
         job.failure_reason = failure_reason
+        job.failure_code = failure_code
         if status == JobStatus.RUNNING:
             job.started_at = job.last_progress_at = datetime.now(timezone.utc)
         session.flush()
@@ -98,5 +109,6 @@ class JobRepository:
         job.sync_status_enum(JobStatus.QUEUED)
         job.started_at = None
         job.failure_reason = None
+        job.failure_code = None
         session.flush()
         return job

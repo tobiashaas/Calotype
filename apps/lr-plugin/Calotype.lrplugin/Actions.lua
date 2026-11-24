@@ -28,6 +28,13 @@ local function result(ok, title, text, level, extra)
 end
 
 --- Ready profiles from the server, sorted by name (for the menu and for automation).
+--- Did the job fail for this reason? The failure code when the server gave one (newer
+-- servers), else the old text match on the reason.
+function Actions.failedFor(job, code, text)
+  if type(job.failure_code) == "string" then return job.failure_code == code end
+  return tostring(job.last_error):find(text, 1, true) ~= nil
+end
+
 function Actions.readyProfiles()
   local profiles, err = BridgeClient.profiles()
   if not profiles then return nil, err end
@@ -56,7 +63,8 @@ function Actions.ownEditsProfile(photos)
 end
 
 --- Train a profile from `photos` (their current develop settings are the target).
--- choice = { name, genre, colorType, basePreset } (basePreset: a look, see LookPresets.lua).
+-- choice = { name, genre, colorType, basePreset, profileId, untouched } (basePreset: a look, see
+-- LookPresets.lua; profileId: retrain that profile; untouched: Lightroom key -> a preset's placeholder).
 function Actions.train(photos, choice, progress)
   local reg, regErr = JobWait.registerPhotos(photos, progress)
   if not reg then
@@ -81,6 +89,8 @@ function Actions.train(photos, choice, progress)
     color_type = choice.colorType,
     lr_catalog_uuids = reg.uuids,
     base_preset = choice.basePreset,
+    profile_id = choice.profileId,             -- retrain this profile; only sent when set
+    untouched = choice.untouched,              -- a preset's placeholders; only sent when set
   }
   if not job then return result(false, "Calotype", jobErr) end
   Log.info("train job %s queued with %d photos", job.job_id, #reg.uuids)
@@ -103,23 +113,11 @@ function Actions.train(photos, choice, progress)
     { job_id = job.job_id, profile_id = final.profile_id, photos = #reg.uuids })
 end
 
---- Apply `profile` (a ready profile from Actions.readyProfiles) to `photos`.
--- Crop keys a straighten result may carry. A photo the photographer has already cropped or
--- straightened keeps its own crop.
-local CROP_KEYS = { "CropAngle", "CropLeft", "CropTop", "CropRight", "CropBottom", "HasCrop" }
-
-local function hasOwnCrop(photo)
-  local s = photo:getDevelopSettings() or {}
-  local angle = tonumber(s.CropAngle) or 0
-  local full = (tonumber(s.CropLeft) or 0) == 0 and (tonumber(s.CropTop) or 0) == 0
-    and (tonumber(s.CropRight) or 1) == 1 and (tonumber(s.CropBottom) or 1) == 1
-  return angle ~= 0 or not full
-end
-
 --- Apply `profile` to `photos`. options.straighten: also level photos with clear lines;
 -- options.retouch: ids of Lightroom AI-mask retouches to add (see Retouch.lua);
 -- options.learnFromEdits: photos of the selection already edited set the shoot's look and
--- stay as they are; options.look: develop settings of a preset whose look replaces the
+-- stay as they are; options.consistentSeries: photos of one scene (close in time and alike)
+-- get exposure and white balance that agree; options.look: develop settings of a preset whose look replaces the
 -- profile's (LookPresets.settings) — the edited photos' shared look still goes on top. A profile from Actions.ownEditsProfile always learns from the edits.
 -- options.fresh: start from zero — every selected photo is reset first (Fresh.lua), so the
 -- result is exactly the profile's values and the look, nothing left from earlier edits. Then
@@ -167,8 +165,10 @@ function Actions.apply(catalog, photos, profile, progress, options)
     profile_id = profile.profile_id,              -- nil for "your edits" only
     format_type = profile.own_edits and profile.format_type or nil,
     lr_catalog_uuids = reg.uuids,
-    straighten = options.straighten or nil,   -- only sent when asked (older Bridges)
+    -- Options only sent when asked: older Bridges rejected fields they did not know.
+    straighten = options.straighten or nil,
     learn_from_edits = options.learnFromEdits or nil,
+    consistent_series = options.consistentSeries or nil,
     base_preset = options.look,                -- only sent when a look was chosen
   }
   if not job then return result(false, "Calotype", jobErr) end
@@ -183,7 +183,7 @@ function Actions.apply(catalog, photos, profile, progress, options)
     end
     return result(false, "Calotype", waitErr, nil, { job_id = job.job_id })
   end
-  if final.status ~= "completed" and tostring(final.last_error):find("no edited photos", 1, true) then
+  if final.status ~= "completed" and Actions.failedFor(final, "no_examples", "no edited photos") then
     return result(false, LOC "$$$/Calotype/Apply/NoExamplesTitle=Nothing to learn from",
       LOC "$$$/Calotype/Apply/NoExamples=None of the selected photos is edited yet. Edit a few typical photos of the shoot, select them together with the rest and try again.",
       "warning", { job_id = job.job_id })
@@ -224,13 +224,12 @@ function Actions.apply(catalog, photos, profile, progress, options)
       local photo = reg.photosByUuid[r.lr_catalog_uuid]
       if photo and type(r.lr_settings) == "table" then
         local settings = r.lr_settings
-        if settings.CropAngle ~= nil then
-          if hasOwnCrop(photo) then
-            for _, k in ipairs(CROP_KEYS) do settings[k] = nil end
-            keptCrop = keptCrop + 1
-          else
-            straightened = straightened + 1
-          end
+        -- A photo already cropped or straightened keeps its own crop: the server leaves our
+        -- crop keys out and says so (kept_crop).
+        if r.kept_crop == true then
+          keptCrop = keptCrop + 1
+        elseif settings.CropAngle ~= nil then
+          straightened = straightened + 1
         end
         photo:applyDevelopSettings(PhotoData.prepareSettings(settings))
         local ids = Retouch.idsFor(retouchIds, r.retouch)

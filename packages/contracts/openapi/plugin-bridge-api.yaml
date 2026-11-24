@@ -175,7 +175,10 @@ components:
         file_path:
           type: string
           description: Absolute path of the original file (`photo:getRawMetadata('path')`)
-        exif_snapshot: { type: object, additionalProperties: true }
+        exif_snapshot:
+          type: object
+          additionalProperties: true
+          description: "What the camera recorded — JSON Schema exif-snapshot-v1.schema.json"
         lr_develop_settings:
           type: object
           additionalProperties: true
@@ -197,7 +200,11 @@ components:
         last_error: { type: string, nullable: true }
     BridgeTrainV1:
       type: object
-      additionalProperties: false
+      additionalProperties: true
+      description: |
+        The Bridge reads only schema_version and lr_catalog_uuids (swapped for server photo
+        ids); every other field goes to the server unchanged (train-request-v1), null fields
+        left out. The server validates them; its rejection becomes the job's last_error.
       required: [schema_version, profile_name, genre, format_type, color_type, lr_catalog_uuids]
       properties:
         schema_version: { type: string, enum: [bridge-train-v1] }
@@ -208,10 +215,17 @@ components:
         color_type: { type: string, enum: [color, bw] }
         lr_catalog_uuids: { type: array, minItems: 1, items: { type: string } }
         base_preset: { type: object, additionalProperties: true, nullable: true }
+        profile_id: { type: string, format: uuid, nullable: true, description: "Retrain this profile: its earlier training photos and these together, same id." }
+        untouched: { type: object, additionalProperties: { type: number }, nullable: true, description: "Values only a preset left (Lightroom key -> value), e.g. Highlights2012 -100: not taught." }
     BridgeEditV1:
       type: object
-      additionalProperties: false
-      description: Without profile_id the look comes only from the selection's edited photos; then learn_from_edits and format_type are required.
+      additionalProperties: true
+      description: |
+        Without profile_id the look comes only from the selection's edited photos; then
+        learn_from_edits and format_type are required (checked by the server). The Bridge reads
+        only schema_version and lr_catalog_uuids; every other field goes to the server
+        unchanged (edit-request-v1), null fields left out — a new server option needs no
+        Bridge change.
       required: [schema_version, lr_catalog_uuids]
       properties:
         schema_version: { type: string, enum: [bridge-edit-v1] }
@@ -221,10 +235,13 @@ components:
         collection_name: { type: string, nullable: true }
         straighten: { type: boolean, default: false, description: Level photos with clear reference lines. }
         learn_from_edits: { type: boolean, default: false, description: Already edited photos of the selection set the shoot's look and get no result. }
+        consistent_series: { type: boolean, default: false, description: "Photos of the same scene (close in capture time and alike) get exposure and white balance that agree; edited examples stay fixed." }
         base_preset: { type: object, additionalProperties: true, nullable: true, description: "A look from one of the photographer's presets; replaces the profile's." }
         lr_catalog_uuids: { type: array, minItems: 1, items: { type: string } }
     BridgeCullV1:
       type: object
+      additionalProperties: true
+      description: Like BridgeEditV1, other fields go to the server unchanged (cull-request-v1); catalog_path stays with the Bridge.
       required: [schema_version, lr_catalog_uuids]
       properties:
         schema_version: { type: string, enum: [bridge-cull-v1] }
@@ -251,6 +268,13 @@ components:
           description: Train — the profile being trained; edit — the profile applied
         attempts: { type: integer }
         last_error: { type: string, nullable: true }
+        failure_code:
+          type: string
+          nullable: true
+          description: |
+            Only when the server failed the job: why, as a code (no_examples,
+            profile_not_ready, too_few_photos, processing_error; more may come). Older servers
+            send none — then only last_error tells.
         results:
           type: array
           nullable: true
@@ -272,3 +296,8 @@ components:
                 description: |
                   Only when learned: AI masks to add (retouch id → local values), set after
                   Lightroom computed them. Never via applyDevelopSettings with new masks.
+              kept_crop:
+                type: boolean
+                description: |
+                  Only when true: straightened, but the photo keeps its own crop (no crop keys
+                  in lr_settings). The server decides it from the uploaded develop settings.

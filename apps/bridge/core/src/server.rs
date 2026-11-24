@@ -156,45 +156,17 @@ async fn photo_state(State(state): State<Shared>, Path(uuid): Path<String>) -> R
     }
 }
 
+/// A train or edit request from the plugin. The Bridge reads only what it acts on — the
+/// schema and the photos, which it swaps for server photo ids — and forwards every other field
+/// (profile, options, look …) to the server unchanged: a new server field needs no Bridge
+/// change, and the server alone validates them (`calotype_queue.payloads`; its 422 becomes the
+/// job's error). Tolerant reader: unknown fields are not rejected here.
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct TrainReq {
+struct JobReq {
     schema_version: String,
-    #[serde(default)]
-    correlation_id: Option<String>,
-    profile_name: String,
-    genre: String,
-    format_type: String,
-    color_type: String,
     lr_catalog_uuids: Vec<String>,
-    #[serde(default)]
-    base_preset: Option<Map<String, Value>>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct EditReq {
-    schema_version: String,
-    #[serde(default)]
-    correlation_id: Option<String>,
-    /// None: the look comes only from the selection's edited photos (needs
-    /// `learn_from_edits` and `format_type`).
-    #[serde(default)]
-    profile_id: Option<uuid::Uuid>,
-    #[serde(default)]
-    format_type: Option<String>,
-    #[serde(default)]
-    collection_name: Option<String>,
-    #[serde(default)]
-    straighten: bool,
-    /// Already edited photos of the selection set the shoot's look (and get no result).
-    #[serde(default)]
-    learn_from_edits: bool,
-    /// A look (develop settings of one of the photographer's presets) that replaces the
-    /// profile's; the server keeps only its look settings.
-    #[serde(default)]
-    base_preset: Option<Map<String, Value>>,
-    lr_catalog_uuids: Vec<String>,
+    #[serde(flatten)]
+    rest: Map<String, Value>,
 }
 
 /// Deduplicate, keep order, and require every photo to be registered first.
@@ -235,82 +207,42 @@ fn accept_job(state: &AppState, kind: &str, request: Value, uuids: &[String]) ->
     }
 }
 
-async fn queue_train(State(state): State<Shared>, Json(body): Json<Value>) -> Response {
-    let req: TrainReq = match parse(body) {
+/// Check the schema and the photos, then store the request for the outbox.
+fn queue_job(state: &AppState, kind: &str, schema: &str, body: Value) -> Response {
+    let req: JobReq = match parse(body) {
         Ok(r) => r,
         Err(resp) => return resp,
     };
-    if let Err(resp) = expect_schema(&req.schema_version, "bridge-train-v1") {
+    if let Err(resp) = expect_schema(&req.schema_version, schema) {
         return resp;
     }
-    if !["raw", "jpeg_tiff"].contains(&req.format_type.as_str()) {
-        return error(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "format_type must be 'raw' or 'jpeg_tiff'",
-        );
-    }
-    if !["color", "bw"].contains(&req.color_type.as_str()) {
-        return error(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "color_type must be 'color' or 'bw'",
-        );
-    }
-    let uuids = match checked_uuids(&state, req.lr_catalog_uuids) {
+    let uuids = match checked_uuids(state, req.lr_catalog_uuids) {
         Ok(u) => u,
         Err(resp) => return resp,
     };
-    let request = json!({
-        "correlation_id": req.correlation_id,
-        "profile_name": req.profile_name,
-        "genre": req.genre,
-        "format_type": req.format_type,
-        "color_type": req.color_type,
-        "base_preset": req.base_preset,
-    });
-    accept_job(&state, "train", request, &uuids)
+    accept_job(state, kind, Value::Object(req.rest), &uuids)
+}
+
+async fn queue_train(State(state): State<Shared>, Json(body): Json<Value>) -> Response {
+    queue_job(&state, "train", "bridge-train-v1", body)
 }
 
 async fn queue_edit(State(state): State<Shared>, Json(body): Json<Value>) -> Response {
-    let req: EditReq = match parse(body) {
-        Ok(r) => r,
-        Err(resp) => return resp,
-    };
-    if let Err(resp) = expect_schema(&req.schema_version, "bridge-edit-v1") {
-        return resp;
-    }
-    let format_ok = matches!(req.format_type.as_deref(), Some("raw" | "jpeg_tiff"));
-    if req.profile_id.is_none() && !(req.learn_from_edits && format_ok) {
-        return error(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "without profile_id, learn_from_edits and format_type ('raw' or 'jpeg_tiff') are required",
-        );
-    }
-    let uuids = match checked_uuids(&state, req.lr_catalog_uuids) {
-        Ok(u) => u,
-        Err(resp) => return resp,
-    };
-    let request = json!({
-        "correlation_id": req.correlation_id,
-        "profile_id": req.profile_id.map(|p| p.to_string()),
-        "format_type": if req.profile_id.is_none() { req.format_type } else { None },
-        "collection_name": req.collection_name,
-        "straighten": req.straighten,
-        "learn_from_edits": req.learn_from_edits,
-        "base_preset": req.base_preset,
-    });
-    accept_job(&state, "edit", request, &uuids)
+    queue_job(&state, "edit", "bridge-edit-v1", body)
 }
 
+/// Like [`JobReq`], plus the catalog the Bridge reads Lightroom's culling scores from (not
+/// forwarded: the scores reach the server with the photos).
 #[derive(Deserialize)]
 struct CullReq {
     schema_version: String,
-    #[serde(default)]
-    correlation_id: Option<String>,
     /// The open catalog (`catalog:getPath()`): Lightroom's assisted-culling scores are read
     /// from it and become culling features.
     #[serde(default)]
     catalog_path: Option<String>,
     lr_catalog_uuids: Vec<String>,
+    #[serde(flatten)]
+    rest: Map<String, Value>,
 }
 
 async fn queue_cull(State(state): State<Shared>, Json(body): Json<Value>) -> Response {
@@ -350,8 +282,7 @@ async fn queue_cull(State(state): State<Shared>, Json(body): Json<Value>) -> Res
             Err(e) => tracing::warn!("cannot read Lightroom culling scores: {e}"),
         }
     }
-    let request = json!({ "correlation_id": req.correlation_id });
-    accept_job(&state, "cull", request, &uuids)
+    accept_job(&state, "cull", Value::Object(req.rest), &uuids)
 }
 
 async fn job_state(State(state): State<Shared>, Path(job_id): Path<String>) -> Response {

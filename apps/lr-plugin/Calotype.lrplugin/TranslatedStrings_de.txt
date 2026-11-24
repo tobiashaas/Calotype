@@ -64,6 +64,8 @@
 "$$$/Calotype/Apply/Examples=^1 Fotos sind unverändert geblieben: Deine bearbeiteten Fotos haben den Look vorgegeben (oder ein Foto hatte keine verwendbare Vorschau)."
 "$$$/Calotype/Apply/LearnFromEdits=Look dieses Shootings von den schon bearbeiteten Fotos der Auswahl lernen"
 "$$$/Calotype/Apply/LearnFromEditsHint=Bearbeite vorher etwa 20 typische Fotos; sie bleiben unverändert."
+"$$$/Calotype/Apply/ConsistentSeries=Serien einheitlich halten: gleiche Belichtung und gleicher Weißabgleich innerhalb einer Szene"
+"$$$/Calotype/Apply/ConsistentSeriesHint=Fotos derselben Szene, kurz nacheinander aufgenommen. Deine bearbeiteten Fotos bleiben unverändert."
 "$$$/Calotype/Apply/OwnEdits=deine Bearbeitungen"
 "$$$/Calotype/Apply/OwnEditsItem=Ohne Profil: nur von den Fotos lernen, die ich schon bearbeitet habe"
 "$$$/Calotype/Apply/NoExamplesTitle=Nichts zum Lernen da"

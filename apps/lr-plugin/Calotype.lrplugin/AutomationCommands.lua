@@ -180,6 +180,7 @@ function Commands.apply(catalog, args)
   local progress = progressScope(profile.name)
   local ok, r = pcall(Actions.apply, catalog, photos, profile, progress,
     { straighten = args.straighten == true, retouch = args.retouch,
+      consistentSeries = args.consistent_series == true,
       learnFromEdits = args.learn_from_edits == true, look = look, fresh = args.fresh == true })
   progress:done()
   if not ok then error(r) end
@@ -198,7 +199,8 @@ end
 function Commands.train(catalog, args)
   local photos, missing = photosByUuid(catalog, args.uuids)
   local choice = { name = args.name, genre = args.genre or "other", colorType = args.color_type or "color",
-    basePreset = args.look and LookPresets.settings(args.look) or nil }
+    basePreset = args.look and LookPresets.settings(args.look) or nil,
+    profileId = args.profile_id, untouched = args.untouched }
   if args.look and not choice.basePreset then error("no develop preset " .. tostring(args.look)) end
   local progress = progressScope(tostring(choice.name))
   local ok, r = pcall(Actions.train, photos, choice, progress)

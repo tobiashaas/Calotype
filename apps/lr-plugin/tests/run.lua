@@ -361,7 +361,8 @@ end
 test("every UI text has a German translation with the same placeholders", function()
   local english = {}
   for _, file in ipairs({ "Info.lua", "BridgeClient.lua", "JobWait.lua", "Actions.lua", "TrainProfile.lua",
-                          "ApplyProfile.lua", "BridgeStatus.lua", "AutomationCommands.lua", "CullPhotos.lua", "Retouch.lua", "Fresh.lua" }) do
+                          "ApplyProfile.lua", "BridgeStatus.lua", "AutomationCommands.lua", "CullPhotos.lua", "Retouch.lua",
+                          "RetouchKinds.lua", "Fresh.lua" }) do
     local src = readFile(PLUGIN .. file)
     for key, value in src:gmatch('"(%$%$%$/Calotype/[%w/]+)=(.-[^\\])"') do english[key] = value end
   end
@@ -473,7 +474,7 @@ test("automation: apply runs the same flow as the menu and writes the results", 
   eq(Json.decode(fake.requests[4].body).profile_id, "p1", "edit job for the chosen profile")
 end)
 
-test("apply with straighten: crop for uncropped photos, own crops stay", function()
+test("apply with straighten: crop for uncropped photos, own crops counted as kept", function()
   local Commands = require "AutomationCommands"
   fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
   local own = { Exposure2012 = 0.1, CropAngle = 1.2, CropLeft = 0.02, CropTop = 0, CropRight = 0.98, CropBottom = 1 }
@@ -489,7 +490,8 @@ test("apply with straighten: crop for uncropped photos, own crops stay", functio
   respond(202, { job_id = "j2", status = "waiting_for_photos" })
   respond(200, { job_id = "j2", status = "completed", results = {
     { lr_catalog_uuid = "a", lr_settings = crop() },
-    { lr_catalog_uuid = "b", lr_settings = crop() },
+    -- The server leaves our crop out for a photo with its own and says so.
+    { lr_catalog_uuid = "b", lr_settings = { Exposure2012 = 0.3 }, kept_crop = true },
   } })
   local ok, r = Commands.run(catalog, { command = "apply",
     args = { profile = "Test", uuids = { "a", "b" }, straighten = true } })
@@ -612,20 +614,52 @@ test("apply without profile: only the edited photos set the look", function()
   eq(photos[2].applied, nil, "example photo untouched")
 end)
 
-test("apply without profile and nothing edited: a clear hint", function()
+local function applyFailingWith(job)
   local Commands = require "AutomationCommands"
   fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
-  local photos = { fakePhoto("a", "RAW") }
-  local catalog = fakeCatalog(photos)
+  local catalog = fakeCatalog({ fakePhoto("a", "RAW") })
   respond(200, {})
   respond(202, { status = "pending" })
   respond(202, { job_id = "j3", status = "waiting_for_photos" })
-  respond(200, { job_id = "j3", status = "failed",
-    last_error = "ValueError: no edited photos in the selection to learn the look from" })
+  job.job_id, job.status = "j3", "failed"
+  respond(200, job)
   local ok, r = Commands.run(catalog, { command = "apply", args = { uuids = { "a" }, learn_from_edits = true } })
   eq(ok, true, "returns a result: " .. tostring(r.error))
   eq(r.ok, false, "not applied")
+  return r
+end
+
+test("apply without profile and nothing edited: a clear hint, picked by the failure code", function()
+  local r = applyFailingWith({ failure_code = "no_examples", last_error = "server job failed: NoExamplesError: …" })
   eq(r.title, "Nothing to learn from", "a clear hint, not the raw server error")
+  r = applyFailingWith({ failure_code = "processing_error",
+    last_error = "server job failed: KeyError: 'no edited photos'" })
+  eq(r.title, "Editing failed", "the code wins over the text")
+end)
+
+test("older servers without a failure code: the hint still comes from the reason's text", function()
+  local r = applyFailingWith({ failure_code = Json.null,
+    last_error = "ValueError: no edited photos in the selection to learn the look from" })
+  eq(r.title, "Nothing to learn from", "text match as before")
+end)
+
+test("apply with consistent series sends the option, only when asked", function()
+  local Commands = require "AutomationCommands"
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  for _, wanted in ipairs({ true, false }) do
+    local catalog = fakeCatalog({ fakePhoto("a", "RAW") })
+    respond(200, { { profile_id = "p1", name = "Test", genre = "event", format_type = "raw", status = "ready", version = 1 } })
+    respond(202, { status = "pending" })
+    respond(202, { job_id = "j4", status = "waiting_for_photos" })
+    respond(200, { job_id = "j4", status = "completed", results = {
+      { lr_catalog_uuid = "a", lr_settings = { Exposure2012 = 0.3 } },
+    } })
+    local ok, r = Commands.run(catalog, { command = "apply",
+      args = { profile = "Test", uuids = { "a" }, consistent_series = wanted } })
+    eq(ok, true, "apply ok: " .. tostring(r.error))
+    local sent = Json.decode(fake.requests[#fake.requests - 1].body)
+    eq(sent.consistent_series, wanted or nil, "consistent_series sent only when asked")
+  end
 end)
 
 test("settings with masks reach Lightroom without JSON metatables", function()
@@ -667,6 +701,16 @@ test("cull: decisions become collections, nothing else is touched", function()
   eq(set.collections["1 Keep"].photos[1], photos[1], "keeper in Keep")
   eq(set.collections["3 Sort out"].photos[1], photos[2], "reject in Sort out")
   eq(photos[1].applied, nil, "develop settings untouched")
+end)
+
+test("retouch kinds: the plugin's list is the manifest's (ids, titles, order)", function()
+  local Retouch = require "Retouch"
+  local manifest = Json.decode(readFile("presets/retouch/retouch.json"))
+  eq(#Retouch.ITEMS, #manifest, "as many kinds as presets")
+  for i, kind in ipairs(manifest) do
+    eq(Retouch.ITEMS[i].id, kind.id, "id " .. i)
+    eq(Retouch.ITEMS[i].title, kind.title, "title of " .. kind.id)
+  end
 end)
 
 test("retouch: masks added, empty ones removed, snapshot kept, re-apply replaces", function()
@@ -881,7 +925,7 @@ end)
 
 test("menu scripts compile", function()
   for _, file in ipairs({ "Info.lua", "TrainProfile.lua", "ApplyProfile.lua", "BridgeStatus.lua", "CullPhotos.lua",
-                          "Actions.lua", "Automation.lua", "AutomationCommands.lua", "Retouch.lua", "Fresh.lua" }) do
+                          "Actions.lua", "Automation.lua", "AutomationCommands.lua", "Retouch.lua", "RetouchKinds.lua", "Fresh.lua" }) do
     assert(loadfile(PLUGIN .. file))
   end
   local info = assert(loadfile(PLUGIN .. "Info.lua"))()

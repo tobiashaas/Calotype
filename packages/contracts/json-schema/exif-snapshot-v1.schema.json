@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "exif-snapshot-v1",
+  "title": "ExifSnapshotV1",
+  "description": "What the camera recorded for a photo, sent as `exif_snapshot` with every photo upload: by the Lightroom plugin (PhotoData.exifSnapshot, from Lightroom's metadata), by the Bridge (adds the measured colour temperature it reads from the RAW) and by folder mode (read from the RAW). Every key is optional and may be null when unknown; servers ignore keys they do not know (tolerant reader). The server parses it in one place (ExifSnapshot.from_snapshot): capture time, measured colour temperature and the exposure settings are features of the shoot calibration.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "date_time_original": {
+      "type": ["string", "null"],
+      "description": "Capture time, ISO 8601 (YYYY-MM-DDTHH:MM:SS, optionally fractions and an offset). Only differences within one shoot are used; the offset is ignored."
+    },
+    "wb_measured_kelvin": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0,
+      "description": "Colour temperature the camera measured for this frame (Kelvin), read from the RAW by the Bridge — also when the camera was set to a fixed white balance. Canon CR2/CR3 only so far."
+    },
+    "iso": { "type": ["number", "null"], "description": "ISO speed" },
+    "shutter_speed": { "type": ["number", "null"], "description": "Exposure time in seconds" },
+    "aperture": { "type": ["number", "null"], "description": "f-number" },
+    "exposure_bias": { "type": ["number", "null"], "description": "Exposure compensation in EV" },
+    "focal_length": { "type": ["number", "null"], "description": "Focal length in mm" },
+    "camera": { "type": ["string", "null"], "description": "Camera model, as Lightroom shows it" },
+    "lens": { "type": ["string", "null"], "description": "Lens, as Lightroom shows it" }
+  }
+}

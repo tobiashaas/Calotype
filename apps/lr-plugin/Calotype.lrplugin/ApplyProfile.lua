@@ -34,6 +34,7 @@ local function askForProfile(context, items, count)
   end
   props.straighten = prefs.straighten == true
   props.learnFromEdits = prefs.learnFromEdits == true
+  props.consistentSeries = prefs.consistentSeries == true
   props.fresh = prefs.fresh == true
   for _, item in ipairs(Retouch.ITEMS) do props["retouch_" .. item.id] = prefs["retouch_" .. item.id] == true end
   local checks = {}
@@ -76,6 +77,14 @@ local function askForProfile(context, items, count)
       f:static_text {
         title = LOC "$$$/Calotype/Apply/LearnFromEditsHint=Edit about 20 typical photos first; they stay as they are.",
       },
+      f:checkbox {
+        value = LrView.bind "consistentSeries",
+        title = LOC "$$$/Calotype/Apply/ConsistentSeries=Keep series consistent: same exposure and white balance within a scene",
+      },
+      f:static_text {
+        title = LOC "$$$/Calotype/Apply/ConsistentSeriesHint=Photos taken shortly after one another of the same scene. Your edited photos stay as they are.",
+        width_in_chars = 52, height_in_lines = 2,
+      },
       f:group_box {
         title = LOC "$$$/Calotype/Retouch/Box=Retouch with Lightroom AI masks",
         fill_horizontal = 1,
@@ -89,6 +98,7 @@ local function askForProfile(context, items, count)
   prefs.straighten = props.straighten
   prefs.lastProfileId = props.profileId
   prefs.learnFromEdits = props.learnFromEdits
+  prefs.consistentSeries = props.consistentSeries
   prefs.fresh = props.fresh
   prefs.lastLook = props.look
   local look = LookPresets.settings(props.look)
@@ -102,6 +112,7 @@ local function askForProfile(context, items, count)
       -- Start from zero leaves no edited photo to learn from; the two exclude each other.
       local fresh = props.fresh == true and item.value ~= OWN_EDITS
       return item.profile, { straighten = props.straighten, retouch = retouch, fresh = fresh,
+        consistentSeries = props.consistentSeries == true,
         learnFromEdits = not fresh and (props.learnFromEdits or item.value == OWN_EDITS), look = look }
     end
   end

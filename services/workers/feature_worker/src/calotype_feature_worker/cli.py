@@ -1,44 +1,24 @@
-"""Feature-stage worker: extract features for edit-job photos, forward to inference queue."""
+"""Feature-stage worker: extract features for edit-job photos, forward to inference queue.
+
+Per photo: the feature vector of every supported version (a profile trained on v1 needs v1, a
+new one v2) and the preview analysis (straighten estimate), each computed once and reused by
+every later edit job. The loop around the job (envelope, DLQ, status) is the worker runtime's.
+"""
 
 from __future__ import annotations
 
 import io
-import os
-import sys
-import time
-from uuid import UUID, uuid4
 
-import boto3
 from PIL import Image
-from redis import Redis
-from redis.exceptions import ConnectionError as RedisConnectionError
-from redis.exceptions import TimeoutError as RedisTimeoutError
-from sqlalchemy.orm import sessionmaker
 
-from calotype_domain.jobs import JobStatus
 from calotype_inference_pipeline import SUPPORTED_FEATURE_VERSIONS, compute_features
 from calotype_inference_pipeline.straighten import estimate_tilt
-from calotype_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
-from calotype_persistence.reaper import reap_stuck_jobs, start_reaper_thread
-from calotype_persistence.repositories.feature_vectors import FeatureVectorRepository
-from calotype_persistence.repositories.jobs import JobRepository
-from calotype_persistence.repositories.photos import PhotoRepository
-from calotype_persistence.session import get_session_factory, session_scope
-from calotype_queue import consumer
+from calotype_observability import get_logger
 from calotype_queue.constants import QUEUE_FEATURE
-from calotype_queue.publisher import RedisQueuePublisher, redis_from_env
+from calotype_queue.payloads import EditPayloadV1
+from calotype_worker_runtime import JobContext, Worker, run_worker
 
 log = get_logger("calotype.feature_worker")
-
-
-def _s3_client():
-    return boto3.client(
-        "s3",
-        endpoint_url=os.environ.get("S3_ENDPOINT", "http://127.0.0.1:9000"),
-        aws_access_key_id=os.environ.get("S3_ACCESS_KEY", "minio"),
-        aws_secret_access_key=os.environ.get("S3_SECRET_KEY", "miniosecret_changeme"),
-        region_name="us-east-1",
-    )
 
 
 def analyze_preview(image_bytes: bytes) -> dict:
@@ -56,125 +36,56 @@ def analyze_preview(image_bytes: bytes) -> dict:
     }
 
 
-def process_one(redis: Redis, publisher: RedisQueuePublisher, factory: sessionmaker) -> bool:
-    envelope, raw = consumer.blpop_envelope(redis, QUEUE_FEATURE, timeout_seconds=5)
-    if envelope is None and raw is None:
-        return False
-    if envelope is None:
-        consumer.push_dead_letter(redis, primary_queue_name=QUEUE_FEATURE, raw_payload=raw, reason="invalid_envelope")
-        log.warning("dead-letter: invalid envelope")
-        return True
+def handle(ctx: JobContext[EditPayloadV1]) -> None:
+    photo_ids = ctx.payload.photo_ids
+    for photo_id in photo_ids:
+        with ctx.store() as store:
+            ctx.progress(store)
+            photo = store.photos.get(photo_id)
+            if photo is None:
+                log.warning("photo not found, skipping photo_id=%s job_id=%s", photo_id, ctx.job_id)
+                continue
 
-    if envelope.job_kind != "edit":
-        consumer.push_dead_letter(redis, primary_queue_name=QUEUE_FEATURE, raw_payload=raw or "", reason=f"unexpected_job_kind:{envelope.job_kind}")
-        log.warning("wrong kind on feature queue job_kind=%s", envelope.job_kind)
-        return True
+            missing = [v for v in SUPPORTED_FEATURE_VERSIONS
+                       if store.feature_vectors.get(photo_id, v) is None]
+            needs_analysis = "straighten" not in (photo.analysis or {})
+            if not missing and not needs_analysis:
+                log.info("feature vectors already exist, reusing photo_id=%s", photo_id)
+                continue
 
-    job_uuid = UUID(envelope.job_id)
-    photo_ids = [UUID(pid) for pid in envelope.payload.get("photo_ids", [])]
-    set_request_id(envelope.trace_context.get("request_id", ""))
+            # One download for the analysis and every missing version.
+            try:
+                image_bytes = ctx.blobs.preview(photo.s3_key)
+            except Exception as e:
+                log.warning("could not download preview, skipping photo_id=%s: %s", photo_id, e)
+                continue
 
-    try:
-        with session_scope(factory) as session:
-            JobRepository.set_status(session, job_uuid, JobStatus.RUNNING)
+            if needs_analysis:
+                analysis = analyze_preview(image_bytes)
+                if analysis:
+                    store.photos.merge_analysis(photo_id, analysis)
+            for version in missing:
+                ctx.features.vector(store, photo, version, preview=image_bytes)
 
-        s3 = _s3_client()
-        bucket = os.environ.get("S3_BUCKET", "calotype-photos")
+        log.info("features extracted photo_id=%s job_id=%s", photo_id, ctx.job_id)
 
-        for photo_id in photo_ids:
-            with session_scope(factory) as session:
-                JobRepository.touch(session, job_uuid)
-                photo = PhotoRepository.get_by_id(session, photo_id)
-                if photo is None:
-                    log.warning("photo not found, skipping photo_id=%s job_id=%s", photo_id, job_uuid)
-                    continue
+    ctx.forward_to_inference()
+    log.info("forwarded to inference job_id=%s photos=%d", ctx.job_id, len(photo_ids))
 
-                # Every supported version: a profile trained on v1 needs v1, a new one v2.
-                missing = [
-                    v for v in SUPPORTED_FEATURE_VERSIONS
-                    if FeatureVectorRepository.get_by_photo_id(session, photo_id, v) is None
-                ]
-                needs_analysis = "straighten" not in (photo.analysis or {})
-                if not missing and not needs_analysis:
-                    log.info("feature vectors already exist, reusing photo_id=%s", photo_id)
-                    continue
 
-                # Download preview from MinIO. Without a usable preview no vector is stored:
-                # a zero vector would be reused forever and poison training.
-                try:
-                    obj = s3.get_object(Bucket=bucket, Key=photo.s3_key)
-                    image_bytes = obj["Body"].read()
-                except Exception as e:
-                    log.warning("could not download preview, skipping photo_id=%s: %s", photo_id, e)
-                    continue
-
-                if needs_analysis:
-                    analysis = analyze_preview(image_bytes)
-                    if analysis:
-                        PhotoRepository.merge_analysis(session, photo_id, analysis)
-
-                for version in missing:
-                    try:
-                        vector = compute_features(image_bytes, version)
-                    except ValueError as e:
-                        log.warning("preview not usable for %s, skipping photo_id=%s: %s", version, photo_id, e)
-                        continue
-                    if not any(vector):
-                        log.warning("preview not decodable, skipping photo_id=%s", photo_id)
-                        continue
-                    fv_id = uuid4()
-                    FeatureVectorRepository.create(
-                        session,
-                        vector_id=fv_id,
-                        photo_id=photo_id,
-                        model_version=version,
-                        vector=vector,
-                    )
-                    PhotoRepository.set_feature_vector_id(session, photo_id, fv_id)
-
-            log.info("features extracted photo_id=%s job_id=%s", photo_id, job_uuid)
-
-        publisher.forward_to_inference(envelope)
-        log.info("forwarded to inference job_id=%s photos=%d", job_uuid, len(photo_ids))
-
-    except Exception as exc:
-        # Short, user-facing reason (shown in Lightroom); the traceback goes to the log.
-        reason = f"{type(exc).__name__}: {exc}"[:500]
-        with session_scope(factory) as session:
-            JobRepository.set_status(session, job_uuid, JobStatus.FAILED, failure_reason=reason)
-        if raw is not None:
-            consumer.push_dead_letter(redis, primary_queue_name=QUEUE_FEATURE, raw_payload=raw, reason="processing_error")
-        log.exception("feature worker failure job_id=%s", job_uuid)
-
-    return True
+WORKER = Worker(
+    name="feature",
+    queue=QUEUE_FEATURE,
+    kind="edit",
+    payload_model=EditPayloadV1,
+    handler=handle,
+    reaper_kinds=("edit",),  # an edit job starts here; a stuck one restarts here
+    compute_features=compute_features,
+)
 
 
 def main() -> None:
-    log.info("Calotype feature worker — queue %s", QUEUE_FEATURE)
-    redis = redis_from_env()
-    publisher = RedisQueuePublisher(redis)
-    factory = get_session_factory()
-
-    configure_logging()
-    start_heartbeat_thread("/tmp/lr_ff_feature_worker.heartbeat")
-
-    # Recover any jobs stuck in RUNNING at startup, then run periodically.
-    n = reap_stuck_jobs(factory, queue_name=QUEUE_FEATURE, publisher=publisher, kinds=["edit"])
-    if n:
-        log.warning("reaper: recovered %d stuck jobs at startup", n)
-    start_reaper_thread(factory, queue_name=QUEUE_FEATURE, publisher=publisher, kinds=["edit"], logger=log)
-
-    while True:
-        try:
-            if not process_one(redis, publisher, factory):
-                time.sleep(0.05)
-        except (RedisConnectionError, RedisTimeoutError) as exc:
-            # Redis restarted or the network hiccupped: keep the worker alive and retry.
-            log.warning("redis unavailable, retrying in 2s: %s", exc)
-            time.sleep(2)
-        except KeyboardInterrupt:
-            print("Stopping feature worker", file=sys.stderr)
-            raise SystemExit(0)
+    run_worker(WORKER)
 
 
 if __name__ == "__main__":

@@ -21,6 +21,8 @@ const TOKEN: &str = "test-token";
 #[derive(Default)]
 struct FakeApi {
     fail_next_upload: bool,
+    /// Server jobs fail with this (failure_reason, failure_code) instead of completing.
+    fail_jobs: Option<(String, String)>,
     uploads: Vec<Value>,
     jobs: Vec<(Option<String>, Value)>,
 }
@@ -72,8 +74,13 @@ async fn fake_job(
     )
 }
 
-async fn fake_job_state(Path(id): Path<String>) -> Json<Value> {
-    Json(json!({"job_id": id, "status": "completed"}))
+async fn fake_job_state(State(fake): State<Fake>, Path(id): Path<String>) -> Json<Value> {
+    match &fake.lock().unwrap().fail_jobs {
+        Some((reason, code)) => Json(
+            json!({"job_id": id, "status": "failed", "failure_reason": reason, "failure_code": code}),
+        ),
+        None => Json(json!({"job_id": id, "status": "completed"})),
+    }
 }
 
 async fn fake_results(State(fake): State<Fake>) -> Json<Value> {
@@ -84,7 +91,7 @@ async fn fake_results(State(fake): State<Fake>) -> Json<Value> {
             .iter()
             .map(|id| {
                 json!({"job_id": "remote-job-1", "photo_id": id, "lr_settings": {"Exposure2012": 0.35},
-                       "retouch": {"subject": {"LocalShadows2012": 0.16}}})
+                       "retouch": {"subject": {"LocalShadows2012": 0.16}}, "kept_crop": true})
             })
             .collect(),
     ))
@@ -109,6 +116,7 @@ async fn spawn_fake_api(fake: Fake) -> String {
         .route("/health", get(|| async { Json(json!({"status": "ok"})) }))
         .route("/v1/photos", post(fake_upload))
         .route("/v1/jobs/edit", post(fake_job))
+        .route("/v1/jobs/train", post(fake_job))
         .route("/v1/jobs/cull", post(fake_job))
         .route("/v1/jobs/{id}/cull-result", get(fake_cull_results))
         .route("/v1/jobs/{id}", get(fake_job_state))
@@ -267,7 +275,7 @@ async fn edit_job_roundtrip_with_retry() {
     assert_eq!(
         job["results"],
         json!([{"lr_catalog_uuid": "lr-1", "lr_settings": {"Exposure2012": 0.35},
-                "retouch": {"subject": {"LocalShadows2012": 0.16}}}])
+                "retouch": {"subject": {"LocalShadows2012": 0.16}}, "kept_crop": true}])
     );
 
     // What the server received.
@@ -536,17 +544,12 @@ async fn edit_job_without_profile_learns_from_edits_only() {
     )
     .await;
 
-    let base = json!({"schema_version": "bridge-edit-v1", "lr_catalog_uuids": ["lr-a"]});
-    let mut no_format = base.clone();
-    no_format["learn_from_edits"] = json!(true);
-    for body in [base.clone(), no_format.clone()] {
-        let (s, err) = call(&st, "POST", "/v1/jobs/edit", Some(TOKEN), Some(body)).await;
-        assert_eq!(s, StatusCode::UNPROCESSABLE_ENTITY, "{err}");
-    }
-    let mut ok = no_format;
-    ok["format_type"] = json!("raw");
-    ok["base_preset"] = json!({"ToneCurvePV2012": [0, 10, 255, 245], "GrainAmount": 20});
-    let (s, _) = call(&st, "POST", "/v1/jobs/edit", Some(TOKEN), Some(ok)).await;
+    // The Bridge forwards the options; the server alone checks "profile_id, or
+    // learn_from_edits + format_type" (its 422 becomes the job's error).
+    let body = json!({"schema_version": "bridge-edit-v1", "lr_catalog_uuids": ["lr-a"],
+                      "learn_from_edits": true, "format_type": "raw", "profile_id": null,
+                      "base_preset": {"ToneCurvePV2012": [0, 10, 255, 245], "GrainAmount": 20}});
+    let (s, _) = call(&st, "POST", "/v1/jobs/edit", Some(TOKEN), Some(body)).await;
     assert_eq!(s, StatusCode::ACCEPTED);
     for _ in 0..3 {
         st.db().retry_all_now().unwrap();
@@ -556,8 +559,132 @@ async fn edit_job_without_profile_learns_from_edits_only() {
     let sent = &f.jobs[0].1;
     assert_eq!(sent["format_type"], "raw");
     assert_eq!(sent["learn_from_edits"], true);
-    assert!(sent.get("profile_id").is_none());
+    assert!(sent.get("profile_id").is_none(), "null fields are left out");
     assert_eq!(sent["base_preset"]["GrainAmount"], 20);
+}
+
+/// A sample value for a JSON Schema property (enough for "it arrives", not for validity).
+fn sample(prop: &Value) -> Value {
+    if let Some(first) = prop["enum"].as_array().and_then(|e| e.first()) {
+        return first.clone();
+    }
+    match (prop["type"].as_str(), prop["format"].as_str()) {
+        (Some("boolean"), _) => json!(true),
+        (Some("string"), Some("uuid")) => json!("6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
+        (Some("string"), _) => json!("x"),
+        (Some("number" | "integer"), _) => json!(1),
+        (Some("array"), _) => json!([1]),
+        _ => json!({"Highlights2012": -100}),
+    }
+}
+
+/// Every field of the server's train and edit requests (`packages/contracts/json-schema`,
+/// kept equal to the API's models by a Python test) goes through the Bridge untouched — a new
+/// server option needs no Bridge change. This is what `consistent_series` once lacked.
+#[tokio::test]
+async fn every_server_request_field_passes_through_the_bridge() {
+    let contracts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../packages/contracts/json-schema");
+    for (kind, schema_file) in [
+        ("edit", "job-edit-request-v1.schema.json"),
+        ("train", "job-train-request-v1.schema.json"),
+        ("cull", "job-cull-request-v1.schema.json"),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let fake: Fake = Arc::new(Mutex::new(FakeApi::default()));
+        let api = spawn_fake_api(fake.clone()).await;
+        let st = state(&api, dir.path());
+        let jpg = dir.path().join("a.jpg");
+        write_jpeg(&jpg, 1600, 1200);
+        call(
+            &st,
+            "POST",
+            "/v1/photos",
+            Some(TOKEN),
+            Some(photo_body("lr-a", &jpg)),
+        )
+        .await;
+
+        let schema: Value =
+            serde_json::from_str(&std::fs::read_to_string(contracts.join(schema_file)).unwrap())
+                .unwrap();
+        let fields: Vec<(String, Value)> = schema["properties"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .filter(|(name, _)| !["schema_version", "photo_ids"].contains(&name.as_str()))
+            .map(|(name, prop)| (name.clone(), sample(prop)))
+            .collect();
+        assert!(!fields.is_empty());
+        let mut body = json!({"schema_version": format!("bridge-{kind}-v1"),
+                              "lr_catalog_uuids": ["lr-a"]});
+        for (name, value) in &fields {
+            body[name] = value.clone();
+        }
+        let (s, err) = call(
+            &st,
+            "POST",
+            &format!("/v1/jobs/{kind}"),
+            Some(TOKEN),
+            Some(body),
+        )
+        .await;
+        assert_eq!(s, StatusCode::ACCEPTED, "{kind}: {err}");
+        for _ in 0..3 {
+            st.db().retry_all_now().unwrap();
+            outbox::tick(&st).await;
+        }
+        let f = fake.lock().unwrap();
+        let sent = &f.jobs[0].1;
+        assert_eq!(sent["schema_version"], format!("{kind}-request-v1"));
+        assert_eq!(sent["photo_ids"], json!(["remote-lr-a"]));
+        for (name, value) in &fields {
+            assert_eq!(
+                &sent[name], value,
+                "{kind}: field {name} did not reach the server"
+            );
+        }
+    }
+}
+
+/// A failed server job keeps its failure code, so the plugin branches on the code, not text.
+#[tokio::test]
+async fn failed_server_job_passes_its_failure_code() {
+    let dir = tempfile::tempdir().unwrap();
+    let fake: Fake = Arc::new(Mutex::new(FakeApi {
+        fail_jobs: Some((
+            "NoExamplesError: no edited photos in the selection".into(),
+            "no_examples".into(),
+        )),
+        ..Default::default()
+    }));
+    let api = spawn_fake_api(fake.clone()).await;
+    let st = state(&api, dir.path());
+    let jpg = dir.path().join("a.jpg");
+    write_jpeg(&jpg, 1600, 1200);
+    call(
+        &st,
+        "POST",
+        "/v1/photos",
+        Some(TOKEN),
+        Some(photo_body("lr-a", &jpg)),
+    )
+    .await;
+    let body = json!({"schema_version": "bridge-edit-v1", "lr_catalog_uuids": ["lr-a"],
+                      "learn_from_edits": true, "format_type": "raw"});
+    let (_, job) = call(&st, "POST", "/v1/jobs/edit", Some(TOKEN), Some(body)).await;
+    let job_id = job["job_id"].as_str().unwrap().to_string();
+    for _ in 0..3 {
+        st.db().retry_all_now().unwrap();
+        outbox::tick(&st).await;
+    }
+    let (_, job) = call(&st, "GET", &format!("/v1/jobs/{job_id}"), Some(TOKEN), None).await;
+    assert_eq!(job["status"], "failed");
+    assert_eq!(job["failure_code"], "no_examples");
+    assert!(job["last_error"]
+        .as_str()
+        .unwrap()
+        .contains("no edited photos"));
 }
 
 #[tokio::test]

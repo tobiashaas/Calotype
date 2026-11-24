@@ -40,7 +40,7 @@ Update it whenever a phase is finished or new tasks are identified.
 
 ### Phase 4 — Production Hardening
 - [x] **Redis AOF persistence**: `appendonly yes --appendfsync everysec` in compose + `redis_data` volume
-- [x] **Stuck job recovery**: `libs/persistence/src/calotype_persistence/reaper.py` — resets `running` jobs after 10 min timeout, re-enqueues on the correct queue; runs at startup + every 60s in daemon thread in all 3 workers
+- [x] **Stuck job recovery**: `libs/persistence/src/calotype_persistence/reaper.py` (since ADR 007 `calotype_worker_runtime.reaper`) — resets `running` jobs after 10 min timeout, re-enqueues on the correct queue; runs at startup + every 60s in daemon thread in all 3 workers
 - [x] **At-least-once delivery**: `set_status(RUNNING)` now sets `started_at`; reaper uses `enqueue_to(queue_name)` to push back on the exact worker queue; feature_worker `forward_to_inference` is idempotent (FeatureVectors skipped if already exist)
 - [x] **Worker health checks**: `libs/observability/src/calotype_observability/heartbeat.py` — writes Unix timestamp file every 15s; all 3 workers start heartbeat thread; docker-compose has HEALTHCHECK comment template
 - [x] **CI linting**: Ruff check step added to CI for all Python source dirs
@@ -143,6 +143,7 @@ See `docs/adr/005-culling-architecture.md`.
 - [x] Renamed to **Calotype** (ADR 006, briefly Tarsier): packages, commands, plugin id, data folder, env vars, token header, XMP namespace, queues; old installations migrate (data folder, model cache, preset folders, mask names, `lrff:` attributes)
 - [x] Bridge reads only the first 4 MB of a RAW when it holds a mid-size preview: 30/30 previews identical, CR3 from USB 650 → 237 ms per photo, ~85 % less data over a NAS
 - [x] Pooled base model from other shoots (offline, `tools/eval`): with 20 own photos R6 white balance 14 → 32 % within tolerance but exposure worse; 5D exposure 14 → 37 % — helps new users, mixed styles can hurt → per-user opt-in, not default
+- [x] One definition of the retouch kinds (2026-11-24): `RETOUCH` in `tools/presets/build.py` writes the presets, the manifest `presets/retouch/retouch.json`, edit-serializer's `retouch_kinds.py`, the plugin's `RetouchKinds.lua` and German titles; the sync test catches drift. Adding a kind = one entry + run the script (`presets/README.md`)
 - [ ] Re-run all Lightroom end-to-end tests under the renamed plugin (`Calotype.lrplugin` must be added once in the Plug-in Manager)
 - [x] `calotype-folder train` reads several folders, `--recursive` (skips `.lrdata`, `@eaDir`, `._*`) and `--catalogs` (edits straight from old `.lrcat` files, read-only); `--dry-run` counts first
 - [x] Hold-out by wedding on the maintainer's archive (2026-11-09; trained on 10,154 photos of 8 weddings, scored on 3 unseen weddings, 3,192 photos, truth from their catalogs): the model alone does not transfer — exposure ±0.15 EV 27 %, temperature ±150 K 21 %, all sliders 1 %. The look (contrast, blacks, saturation …) is synced per wedding and cannot be guessed. **Calibrating on k edited photos of the same wedding** (pred = mean_k(truth) + β·(model − mean_k(model)), β from the k photos) brings the look sliders to 95–100 % with k = 5 (contrast 49 % on one wedding), exposure 40–54 %, all sliders 3–6 % (2019) / 33 % (2015). Temperature stays at 13–20 % on 2019 weddings (white balance varied per scene) → as-shot-relative target
@@ -177,6 +178,28 @@ Checked against the "What's new" page and Lightroom 16.0's own presets (`Resourc
 
 ---
 
+### Edit plan as one module (2026-11-24)
+- [x] `plan_edit` (`services/workers/inference_worker/src/calotype_inference_worker/plan.py`): the edit job's domain logic in one place — examples vs. targets, shoot calibration, as-shot handling, series smoothing, look / preset / shoot look / crop / mask precedence; no queue, database or S3. The worker is load → plan → save; `tools/eval/shoot_lab.py` and `shoot_pool.py` run the same plan / EXIF parser, so the yardstick measures the production pipeline (same numbers on a synthetic pool)
+- [x] Look composition in one place: `calotype_edit_serializer.compose` (prediction → preset or chosen Look → shoot look → straighten crop). "An own crop stays" is decided on the server now; each edit result says `kept_crop` (migration 015, API / Bridge / plugin contracts, optional); the plugin and `calotype-folder apply` only count it. Folder mode sends the crop keys of the photos to edit for that
+- [x] Typed EXIF snapshot: `ExifSnapshot.from_snapshot` is the one parser (capture time, measured colour temperature, ISO / shutter / aperture / exposure compensation); contract `exif-snapshot-v1.schema.json`, referenced from `photo-upload-v1`
+- [x] Folder mode sends the camera's exposure settings and measured colour temperature (`exif.rs`, Exif IFD of TIFF RAWs and the CR3 `CMT2` box, no new dependency), so camera-exposure features no longer switch off for folder-mode jobs
+- [ ] Check the Exif reader on real Nikon / Sony / DNG files (tested on synthetic TIFF and CR3 structures only); ORF / RW2 headers are not read
+- [ ] `calotype-folder apply` cannot send a Look (`base_preset`) yet
+
+### One source per request field (2026-11-24)
+- [x] Job requests and queue payloads defined once in `calotype_queue.payloads` (`TrainJobRequestV1` / `TrainPayloadV1` with `retrain`, `EditJobRequestV1` = `EditPayloadV1`, `CullJobRequestV1` = `CullPayloadV1`): the API validates with them, the four workers read `envelope.payload` through them (an unreadable payload goes to the DLQ as `invalid_payload`); unknown fields ignored and logged. The rule "profile_id, or learn_from_edits + format_type" lives only in `EditJobRequestV1` (Bridge and plugin no longer check it; the plugin and folder mode always build valid requests)
+- [x] Bridge passes through: train / edit / cull requests type only `schema_version`, `lr_catalog_uuids` (and the cull's `catalog_path`); every other field goes to the server unchanged (`#[serde(flatten)]`), no `deny_unknown_fields` there — a new server option needs no Rust change. This fixed `consistent_series`, which the Bridge used to reject
+- [x] Failure code: `jobs.failure_code` (migration 016) from the worker's exception (`calotype_domain.FailureCode`: `no_examples`, `profile_not_ready`, `too_few_photos`, `processing_error`), in `GET /v1/jobs/{id}`, kept by the Bridge (`failure_code` in its job state, SQLite schema 4); the plugin picks its hint by the code and falls back to the old text match for older servers
+- [x] Drift tests: `libs/queue/tests/test_payloads.py` (JSON schemas list exactly the request models' fields and required set) and the Bridge's `every_server_request_field_passes_through_the_bridge` (every schema field reaches the fake server)
+- [ ] The photo upload (`bridge-photo-v1`) still has `deny_unknown_fields` in the Bridge — it builds the upload itself, so a pass-through needs a decision on what is forwarded
+
+### Worker runtime, blob store, feature store (2026-11-24)
+- [x] `libs/worker-runtime` (ADR 007): `run_worker(Worker(...))` owns the loop every worker repeated — envelope / wrong kind / payload → DLQ, RUNNING → COMPLETED or FAILED with short reason + failure code (+ the worker's `on_failure` in the same unit of work), progress, heartbeat (`/tmp/lr_ff_<name>_worker.heartbeat`), reaper per owned job kind, Redis retry. Each worker's `cli.py` is its handler + a short main; queue names, entry points, DLQ reasons and the job / profile status semantics unchanged
+- [x] Stuck-job reaper moved from `calotype_persistence.reaper` (which imported the queue lib against the import matrix) to `calotype_worker_runtime.reaper`, over the `Store` interface
+- [x] Blob store in `libs/io` (`S3BlobStore`, `MemoryBlobStore`): the one S3 client config (same env vars and defaults), the key layout (`photos/{id}.jpg`, `models/{profile}/model-{version}.joblib`, unchanged) and bucket creation; used by the API and all workers
+- [x] Feature store (`calotype_worker_runtime.FeatureStore`): a photo's vector of a version — stored, or computed from the preview and stored (never a zero vector); used by the feature and the train worker
+- [x] Workers on the `Store` interface (+ `feature_vectors`, job status / touch / stuck, photo analysis, profile status / artifact, `kept_crop`; `store_scope`, `MemoryStore.scope`); tests across the seams: the runner on `fakeredis` + `MemoryStore` + `MemoryBlobStore`, one handler suite per worker through the runner (the cull worker's tests run in CI for the first time)
+
 ## Phase 8 — Calotype 2.0 (next milestone)
 
 Sources and what we take from each: [`docs/RESEARCH.md`](docs/RESEARCH.md).
@@ -194,7 +217,7 @@ Sources and what we take from each: [`docs/RESEARCH.md`](docs/RESEARCH.md).
 
 ### 8.3 Consistent series without flicker
 - [x] Shoot consistency as a graph optimisation in slider space (HaCohen et al.), first version 2026-11-21: `calotype_inference_pipeline.series` links photos close in capture time (≤ 20 s) *and* alike in their feature vectors, a quadratic cost pulls exposure / temperature / tint of each series together, edited examples are fixed (an example still on as-shot white balance anchors no white balance). Edit request `consistent_series` (default off), solved per connected series with numpy
-- [ ] `consistent_series` in the plugin's apply dialog, the Bridge and `calotype-folder apply`
+- [x] `consistent_series` in the plugin's apply dialog ("Keep series consistent", default off), the automation channel (`consistent_series`) and `calotype-folder apply --consistent-series` (2026-11-24; the Bridge passes it through since task D)
 - [ ] Tune the link thresholds (`MAX_GAP_SECONDS`, `FEATURE_SCALE`, `STRENGTH`) on real shoots — so far only synthetic tests
 - [ ] Yardstick: spread of the predicted sliders within a series vs. the photographer's own spread (PPR10K's group-level consistency) — `series.spread()` computes it; the measurement is open
 
@@ -203,8 +226,16 @@ Sources and what we take from each: [`docs/RESEARCH.md`](docs/RESEARCH.md).
 - [ ] Other ColorData versions (only 13 and 48 are checked on real files), other makers (Nikon, Sony, Fuji) and DNG `AsShotNeutral`
 - [ ] The measurement in training a profile (today only in shoot calibration)
 - [ ] Target = mired offset from as-shot instead of absolute Kelvin
+- [x] White balance per photo instead of per profile (2026-11-23): photos on the camera's white balance teach their Kelvin too; at apply time a photo keeps "As Shot" when the prediction is within 15 mired of the camera's (`AS_SHOT_MIRED`), else gets its own Kelvin. Marryween (camera fixed at 5899 K, hut lit by lamps at ~2850 K): hut photos the model never saw 2624 → 491 K off, daylight 11 / 11 stays as shot. Old artifacts keep their profile-wide flag
+- [ ] Measure the per-photo decision across the maintainer's weddings with `tools/eval` (the profile-wide rule of #23 came from such a measurement: predicted Kelvin on unseen weddings within 150 K for only 13-27 %) before merging to main; 30 of 1,673 Marryween photos got 5,300-5,900 K just outside the tolerance
 - [ ] Map neutral to the photographer's preferred white balance with a tiny model (Zhao, Afifi & Brown: ~500 parameters)
 - [ ] Adapt to the camera from the shoot's unlabeled photos (C5) or from the colour matrices in the RAW / DNG metadata (CCMNet)
+
+### 8.4b One living profile
+- [x] Retrain a profile in place (2026-11-23): train request `profile_id` merges the profile's earlier training photos (read with their *current* settings, so corrections are learned) with the new ones; the profile keeps its id and stays usable, a failed retrain keeps the old model. `untouched` (Lightroom key -> value) names a preset's placeholders (Marryween: highlights -100 on 128 of 300 photos): such a slider is left out of that photo's target, every other slider still learns from it (`calotype_edit_serializer.training`, per-slider masks in `train_model_v2`)
+- [ ] Plugin: "keep training an existing profile" in the train dialog (today only via the automation channel, `profile_id` / `untouched` args)
+- [ ] Accepted photos as feedback: photos the photographer reviewed and left unchanged (needs a marker, e.g. a star or label) — today only changed photos are added
+- [ ] Delete / rename profiles (API has neither)
 
 ### 8.5 Look from few examples
 - [x] Choose the closest examples by image content, not only capture time (RefRetouch), first version 2026-11-21: without a profile `shoot.calibrate` uses `blend` (half ridge, half the three references closest in feature space) and only chooses between it and `series`. Two shoots edited by other tools (internal yardstick, `tools/eval/shoot_lab.py`), all six sliders within tolerance with 10 / 20 / 50 examples: wedding 6.1 / 9.6 / 14.5 → 8.5 / 12.7 / 21.0 %, kindergarten 12.8 / 17.2 / 23.4 → 15.7 / 21.8 / 35.6 %
@@ -249,6 +280,9 @@ Sources and what we take from each: [`docs/RESEARCH.md`](docs/RESEARCH.md).
 ---
 
 ### Backlog / Nice-to-have
+- [x] **API tests across a real seam** (2026-11-24): routes get their data through `Depends(get_store)` (`calotype_persistence.stores`); tests override it with `MemoryStore` (real ORM records) instead of patching ~15 repository methods by import path; store contract suite runs against memory and — with `CALOTYPE_TEST_DATABASE_URL` — Postgres
+- [ ] CI Postgres service (`services: postgres` with pgvector + `alembic upgrade head`) and `CALOTYPE_TEST_DATABASE_URL` set, so the Postgres half of `libs/persistence/tests/test_store_contract.py` runs in CI
+- [x] Workers on the `Store` interface (2026-11-24, ADR 007): handler tests use `MemoryStore` + `MemoryBlobStore`, no monkeypatching
 - [ ] **Idea: a pixel step — sharpen, restore, upscale** (2026-11-22, not started; what exists today comes first). A new building block: Calotype so far only writes sliders, this would render a new file next to the original and add it to the catalog. First look at the field, licences read from the repositories, quality claims from the papers and not measured by us: upscaling is the mature part (faithful: HAT, Apache-2.0, or DRCT, MIT; with generated detail: SeedVR2, Apache-2.0, or one-step diffusion like OSEDiff, Apache-2.0 on Stable Diffusion 2.1 weights whose own licence needs a check); restoring and denoising: NAFNet (MIT; fast) or Restormer (MIT; heavier), both trained on action-camera blur and phone noise, so weak on lens softness and missed focus — denoising belongs on the RAW data, which Lightroom already does; sharpening real photos is the gap (DeblurDiff, MIT, NeurIPS 2025, is a diffusion model and slow). Load weights through spandrel (MIT) instead of single research repositories. Not usable for us: SUPIR, HYPIR, InvSR, CodeFormer (non-commercial), Upscayl (AGPL). First step would be a test of three or four candidates on own photos (one soft, one noisy, one small), every model through `THIRD_PARTY_MODELS.md`
 - [ ] "Start Bridge" menu item in the plugin that starts the Rust Bridge (`calotype-bridge-headless`) when it is not running
 - [ ] More sliders per photo: Texture, Clarity, Dehaze, tone curve, HSL (today only via the profile's or the shoot's look)

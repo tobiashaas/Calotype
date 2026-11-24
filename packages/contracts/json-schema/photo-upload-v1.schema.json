@@ -21,9 +21,8 @@
       "description": "Lightroom Classic catalog UUID — stable identifier assigned by LR."
     },
     "exif_snapshot": {
-      "type": "object",
-      "description": "EXIF metadata snapshot (camera model, ISO, shutter speed, aperture, focal length, etc.).",
-      "additionalProperties": true
+      "$ref": "exif-snapshot-v1.schema.json",
+      "description": "What the camera recorded (capture time, exposure settings, measured colour temperature …), see exif-snapshot-v1."
     },
     "lr_develop_settings": {
       "type": "object",

@@ -69,6 +69,9 @@ pub struct JobSnapshot {
     pub profile_id: Option<String>,
     #[serde(default)]
     pub failure_reason: Option<String>,
+    /// Why it failed as a code (`no_examples` …); older servers send none.
+    #[serde(default)]
+    pub failure_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -78,6 +81,9 @@ pub struct EditResult {
     /// Learned mask strengths: AI masks to add with these local values (older servers: none).
     #[serde(default)]
     pub retouch: Option<Value>,
+    /// Straightened, but the photo keeps its own crop (no crop keys in `lr_settings`).
+    #[serde(default)]
+    pub kept_crop: Option<bool>,
 }
 
 pub struct ApiClient {
