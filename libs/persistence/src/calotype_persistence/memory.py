@@ -54,7 +54,7 @@ class _MemoryJobs:
             id=job_id, kind=kind.value, status=JobStatus.QUEUED.value,
             payload_schema_version=payload_schema_version, payload=payload,
             correlation_id=correlation_id, idempotency_key=idempotency_key, profile_id=profile_id,
-            failure_reason=None, started_at=None, last_progress_at=None,
+            failure_reason=None, failure_code=None, started_at=None, last_progress_at=None,
             created_at=now, updated_at=now,
         )
         self._jobs[job_id] = job

@@ -188,7 +188,8 @@ fn unreachable(photo: &crate::db::PhotoRow) -> bool {
             .is_some_and(|e| e.starts_with(crate::preview::READ_ERROR_PREFIX))
 }
 
-/// Bridge request → server request: same fields, catalog UUIDs swapped for photo ids.
+/// Bridge request → server request: the fields the plugin sent (null ones left out, so the
+/// server's defaults apply), catalog UUIDs swapped for photo ids.
 fn server_body(job: &JobRow, photo_ids: Vec<String>) -> Value {
     let mut body = job.request.as_object().cloned().unwrap_or_default();
     body.remove("lr_catalog_uuids");
@@ -276,9 +277,11 @@ async fn poll(state: &AppState, job: &JobRow) -> Result<()> {
                 .failure_reason
                 .as_deref()
                 .unwrap_or("no reason given");
-            state
-                .db()
-                .fail_job(&job.job_id, &format!("server job failed: {reason}"))?
+            state.db().fail_job_with_code(
+                &job.job_id,
+                &format!("server job failed: {reason}"),
+                snapshot.failure_code.as_deref(),
+            )?
         }
         other => state.db().update_job(&job.job_id, other, None, POLL_SECS)?,
     }

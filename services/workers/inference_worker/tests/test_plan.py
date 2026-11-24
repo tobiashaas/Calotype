@@ -6,6 +6,8 @@ from uuid import uuid4
 
 import pytest
 
+from calotype_domain.failures import failure_code
+
 from calotype_inference_worker.plan import (
     EditProfile,
     EditRequest,
@@ -95,8 +97,9 @@ def test_without_a_profile_only_the_edited_sliders_are_set():
     for r in plan.results:
         assert r.lr_settings["Exposure2012"] == 0.6 and r.lr_settings["Contrast2012"] == 10
         assert "Temperature" not in r.lr_settings   # RAW as shot: no Kelvin to copy, none invented
-    with pytest.raises(NoExamplesError, match="no edited photos"):
+    with pytest.raises(NoExamplesError, match="no edited photos") as failed:
         plan_edit(LEARN, EditProfile("raw"), _shoot([], untouched=3))
+    assert failure_code(failed.value) == "no_examples"   # the job's failure code
 
 
 def test_a_photo_on_the_cameras_white_balance_passes_its_as_shot_kelvin():

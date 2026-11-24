@@ -614,20 +614,52 @@ test("apply without profile: only the edited photos set the look", function()
   eq(photos[2].applied, nil, "example photo untouched")
 end)
 
-test("apply without profile and nothing edited: a clear hint", function()
+local function applyFailingWith(job)
   local Commands = require "AutomationCommands"
   fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
-  local photos = { fakePhoto("a", "RAW") }
-  local catalog = fakeCatalog(photos)
+  local catalog = fakeCatalog({ fakePhoto("a", "RAW") })
   respond(200, {})
   respond(202, { status = "pending" })
   respond(202, { job_id = "j3", status = "waiting_for_photos" })
-  respond(200, { job_id = "j3", status = "failed",
-    last_error = "ValueError: no edited photos in the selection to learn the look from" })
+  job.job_id, job.status = "j3", "failed"
+  respond(200, job)
   local ok, r = Commands.run(catalog, { command = "apply", args = { uuids = { "a" }, learn_from_edits = true } })
   eq(ok, true, "returns a result: " .. tostring(r.error))
   eq(r.ok, false, "not applied")
+  return r
+end
+
+test("apply without profile and nothing edited: a clear hint, picked by the failure code", function()
+  local r = applyFailingWith({ failure_code = "no_examples", last_error = "server job failed: NoExamplesError: …" })
   eq(r.title, "Nothing to learn from", "a clear hint, not the raw server error")
+  r = applyFailingWith({ failure_code = "processing_error",
+    last_error = "server job failed: KeyError: 'no edited photos'" })
+  eq(r.title, "Editing failed", "the code wins over the text")
+end)
+
+test("older servers without a failure code: the hint still comes from the reason's text", function()
+  local r = applyFailingWith({ failure_code = Json.null,
+    last_error = "ValueError: no edited photos in the selection to learn the look from" })
+  eq(r.title, "Nothing to learn from", "text match as before")
+end)
+
+test("apply with consistent series sends the option, only when asked", function()
+  local Commands = require "AutomationCommands"
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  for _, wanted in ipairs({ true, false }) do
+    local catalog = fakeCatalog({ fakePhoto("a", "RAW") })
+    respond(200, { { profile_id = "p1", name = "Test", genre = "event", format_type = "raw", status = "ready", version = 1 } })
+    respond(202, { status = "pending" })
+    respond(202, { job_id = "j4", status = "waiting_for_photos" })
+    respond(200, { job_id = "j4", status = "completed", results = {
+      { lr_catalog_uuid = "a", lr_settings = { Exposure2012 = 0.3 } },
+    } })
+    local ok, r = Commands.run(catalog, { command = "apply",
+      args = { profile = "Test", uuids = { "a" }, consistent_series = wanted } })
+    eq(ok, true, "apply ok: " .. tostring(r.error))
+    local sent = Json.decode(fake.requests[#fake.requests - 1].body)
+    eq(sent.consistent_series, wanted or nil, "consistent_series sent only when asked")
+  end
 end)
 
 test("settings with masks reach Lightroom without JSON metatables", function()

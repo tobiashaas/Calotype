@@ -186,6 +186,13 @@ Checked against the "What's new" page and Lightroom 16.0's own presets (`Resourc
 - [ ] Check the Exif reader on real Nikon / Sony / DNG files (tested on synthetic TIFF and CR3 structures only); ORF / RW2 headers are not read
 - [ ] `calotype-folder apply` cannot send a Look (`base_preset`) yet
 
+### One source per request field (2026-11-24)
+- [x] Job requests and queue payloads defined once in `calotype_queue.payloads` (`TrainJobRequestV1` / `TrainPayloadV1` with `retrain`, `EditJobRequestV1` = `EditPayloadV1`, `CullJobRequestV1` = `CullPayloadV1`): the API validates with them, the four workers read `envelope.payload` through them (an unreadable payload goes to the DLQ as `invalid_payload`); unknown fields ignored and logged. The rule "profile_id, or learn_from_edits + format_type" lives only in `EditJobRequestV1` (Bridge and plugin no longer check it; the plugin and folder mode always build valid requests)
+- [x] Bridge passes through: train / edit / cull requests type only `schema_version`, `lr_catalog_uuids` (and the cull's `catalog_path`); every other field goes to the server unchanged (`#[serde(flatten)]`), no `deny_unknown_fields` there — a new server option needs no Rust change. This fixed `consistent_series`, which the Bridge used to reject
+- [x] Failure code: `jobs.failure_code` (migration 016) from the worker's exception (`calotype_domain.FailureCode`: `no_examples`, `profile_not_ready`, `too_few_photos`, `processing_error`), in `GET /v1/jobs/{id}`, kept by the Bridge (`failure_code` in its job state, SQLite schema 4); the plugin picks its hint by the code and falls back to the old text match for older servers
+- [x] Drift tests: `libs/queue/tests/test_payloads.py` (JSON schemas list exactly the request models' fields and required set) and the Bridge's `every_server_request_field_passes_through_the_bridge` (every schema field reaches the fake server)
+- [ ] The photo upload (`bridge-photo-v1`) still has `deny_unknown_fields` in the Bridge — it builds the upload itself, so a pass-through needs a decision on what is forwarded
+
 ## Phase 8 — Calotype 2.0 (next milestone)
 
 Sources and what we take from each: [`docs/RESEARCH.md`](docs/RESEARCH.md).
@@ -203,7 +210,7 @@ Sources and what we take from each: [`docs/RESEARCH.md`](docs/RESEARCH.md).
 
 ### 8.3 Consistent series without flicker
 - [x] Shoot consistency as a graph optimisation in slider space (HaCohen et al.), first version 2026-11-21: `calotype_inference_pipeline.series` links photos close in capture time (≤ 20 s) *and* alike in their feature vectors, a quadratic cost pulls exposure / temperature / tint of each series together, edited examples are fixed (an example still on as-shot white balance anchors no white balance). Edit request `consistent_series` (default off), solved per connected series with numpy
-- [ ] `consistent_series` in the plugin's apply dialog, the Bridge and `calotype-folder apply`
+- [x] `consistent_series` in the plugin's apply dialog ("Keep series consistent", default off), the automation channel (`consistent_series`) and `calotype-folder apply --consistent-series` (2026-11-24; the Bridge passes it through since task D)
 - [ ] Tune the link thresholds (`MAX_GAP_SECONDS`, `FEATURE_SCALE`, `STRENGTH`) on real shoots — so far only synthetic tests
 - [ ] Yardstick: spread of the predicted sliders within a series vs. the photographer's own spread (PPR10K's group-level consistency) — `series.spread()` computes it; the measurement is open
 

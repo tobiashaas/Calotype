@@ -72,7 +72,7 @@ def test_train_job_exposes_profile_id(client):
     assert accepted["profile_id"]
     snapshot = client.get(f"/v1/jobs/{accepted['job_id']}").json()
     assert snapshot["profile_id"] == accepted["profile_id"]
-    assert snapshot["failure_reason"] is None
+    assert snapshot["failure_reason"] is None and snapshot["failure_code"] is None
     profile = client.get(f"/v1/profiles/{accepted['profile_id']}")
     assert profile.status_code == 200
 
@@ -229,3 +229,22 @@ def test_cull_result_of_an_edit_job_is_409(client):
             "learn_from_edits": True, "format_type": "raw"}
     job_id = client.post("/v1/jobs/edit", json=body).json()["job_id"]
     assert client.get(f"/v1/jobs/{job_id}/cull-result").status_code == 409
+
+
+def test_failed_job_snapshot_carries_its_failure_code(client, store):
+    photo_id = _upload(client)
+    body = {"schema_version": "edit-request-v1", "photo_ids": [photo_id],
+            "learn_from_edits": True, "format_type": "raw"}
+    job_id = client.post("/v1/jobs/edit", json=body).json()["job_id"]
+    job = store.jobs.get(uuid.UUID(job_id))
+    job.status, job.failure_reason, job.failure_code = "failed", "NoExamplesError: no edited photos", "no_examples"
+
+    snapshot = client.get(f"/v1/jobs/{job_id}").json()
+
+    assert (snapshot["status"], snapshot["failure_code"]) == ("failed", "no_examples")
+
+
+def test_first_training_payload_names_its_new_profile(client, mock_publisher):
+    accepted = client.post("/v1/jobs/train", json=_train_body()).json()
+    payload = mock_publisher.enqueue.call_args.args[0].payload
+    assert payload["profile_id"] == accepted["profile_id"] and payload["retrain"] is False

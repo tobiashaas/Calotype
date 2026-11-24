@@ -69,6 +69,9 @@ pub struct JobSnapshot {
     pub profile_id: Option<String>,
     #[serde(default)]
     pub failure_reason: Option<String>,
+    /// Why it failed as a code (`no_examples` …); older servers send none.
+    #[serde(default)]
+    pub failure_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

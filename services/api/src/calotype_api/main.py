@@ -30,6 +30,7 @@ from calotype_domain.jobs import JobKind
 from calotype_domain.profiles import ProfileStatus
 from calotype_persistence.stores import Store
 from calotype_queue.envelope import JobEnvelopeV1
+from calotype_queue.payloads import TrainPayloadV1
 from calotype_queue.publisher import RedisQueuePublisher
 
 configure_logging()
@@ -141,7 +142,7 @@ def create_train_job(
                 raise HTTPException(status_code=409, detail="idempotency key conflicts with another job kind")
             return JobAcceptedResponse(job_id=existing.id, kind="train", profile_id=existing.profile_id)
 
-    payload = body.model_dump(mode="json")
+    payload = TrainPayloadV1.model_validate(body.model_dump())
     if body.profile_id is not None:
         # Retrain: one profile that keeps learning from the photographer's corrections.
         profile = store.profiles.get(body.profile_id)
@@ -152,8 +153,10 @@ def create_train_job(
         earlier = [job.payload for job in store.jobs.list_for_profile(profile.id, JobKind.TRAIN)]
         photo_ids, untouched = merged_training(earlier, body.photo_ids, body.untouched)
         profile_id = profile.id
-        payload.update(photo_ids=[str(p) for p in photo_ids], untouched=untouched,
-                       retrain=profile.model_artifact_key is not None)
+        payload = payload.model_copy(update={
+            "photo_ids": photo_ids, "untouched": untouched,
+            "retrain": profile.model_artifact_key is not None,
+        })
     else:
         # Create Profile record in DRAFT status.
         profile_id = uuid4()
@@ -165,9 +168,9 @@ def create_train_job(
             color_type=body.color_type,
             base_preset=body.base_preset,
         )
+    payload = payload.model_copy(update={"profile_id": profile_id}).model_dump(mode="json")
 
     job_id = uuid4()
-    payload["profile_id"] = str(profile_id)
     store.jobs.create(
         job_id=job_id,
         kind=JobKind.TRAIN,
@@ -323,6 +326,7 @@ def get_job(job_id: UUID, store: Store = Depends(get_store)):
         payload_schema_version=record.payload_schema_version,
         profile_id=record.profile_id,
         failure_reason=record.failure_reason,
+        failure_code=record.failure_code,
         correlation_id=record.correlation_id,
     )
 

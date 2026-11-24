@@ -20,9 +20,11 @@ from redis import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.orm import sessionmaker
+from pydantic import ValidationError
 
 from calotype_culling import FaceAnalyzer, PhotoFeatures, analyze_rgb
 from calotype_culling.cull import cull, decision_from_metadata
+from calotype_domain.failures import failure_code
 from calotype_domain.jobs import JobStatus
 from calotype_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
 from calotype_persistence.reaper import reap_stuck_jobs, start_reaper_thread
@@ -32,6 +34,7 @@ from calotype_persistence.repositories.photos import PhotoRepository
 from calotype_persistence.session import get_session_factory, session_scope
 from calotype_queue import consumer
 from calotype_queue.constants import QUEUE_CULL
+from calotype_queue.payloads import CullPayloadV1
 from calotype_queue.publisher import RedisQueuePublisher, redis_from_env
 
 log = get_logger("calotype.cull_worker")
@@ -66,8 +69,13 @@ def process_one(redis: Redis, factory: sessionmaker, faces: FaceAnalyzer) -> boo
                                   reason=f"unexpected_job_kind:{envelope.job_kind}")
         return True
 
+    try:
+        payload = CullPayloadV1.model_validate(envelope.payload)
+    except ValidationError:
+        consumer.push_dead_letter(redis, primary_queue_name=QUEUE_CULL, raw_payload=raw or "", reason="invalid_payload")
+        return True
     job_uuid = UUID(envelope.job_id)
-    photo_ids = [UUID(pid) for pid in envelope.payload.get("photo_ids", [])]
+    photo_ids = payload.photo_ids
     set_request_id(envelope.trace_context.get("request_id", ""))
     try:
         with session_scope(factory) as session:
@@ -116,7 +124,8 @@ def process_one(redis: Redis, factory: sessionmaker, faces: FaceAnalyzer) -> boo
     except Exception as exc:
         reason = f"{type(exc).__name__}: {exc}"[:500]
         with session_scope(factory) as session:
-            JobRepository.set_status(session, job_uuid, JobStatus.FAILED, failure_reason=reason)
+            JobRepository.set_status(session, job_uuid, JobStatus.FAILED, failure_reason=reason,
+                                     failure_code=failure_code(exc))
         if raw is not None:
             consumer.push_dead_letter(redis, primary_queue_name=QUEUE_CULL, raw_payload=raw, reason="processing_error")
         log.exception("cull worker failure job_id=%s", job_uuid)

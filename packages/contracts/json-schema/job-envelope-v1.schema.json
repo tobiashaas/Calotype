@@ -30,7 +30,7 @@
     "payload": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Original Bridge/API validated body embedded for workers"
+      "description": "The request as the API validated it (job-*-request-v1; train also gets profile_id and retrain). Workers read it through the same models (calotype_queue.payloads) and ignore unknown keys."
     }
   }
 }

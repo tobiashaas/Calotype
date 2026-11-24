@@ -14,7 +14,9 @@ from redis import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.orm import sessionmaker
+from pydantic import ValidationError
 
+from calotype_domain.failures import failure_code
 from calotype_domain.jobs import JobStatus
 from calotype_inference_pipeline import SUPPORTED_FEATURE_VERSIONS, compute_features
 from calotype_inference_pipeline.straighten import estimate_tilt
@@ -26,6 +28,7 @@ from calotype_persistence.repositories.photos import PhotoRepository
 from calotype_persistence.session import get_session_factory, session_scope
 from calotype_queue import consumer
 from calotype_queue.constants import QUEUE_FEATURE
+from calotype_queue.payloads import EditPayloadV1
 from calotype_queue.publisher import RedisQueuePublisher, redis_from_env
 
 log = get_logger("calotype.feature_worker")
@@ -70,8 +73,13 @@ def process_one(redis: Redis, publisher: RedisQueuePublisher, factory: sessionma
         log.warning("wrong kind on feature queue job_kind=%s", envelope.job_kind)
         return True
 
+    try:
+        payload = EditPayloadV1.model_validate(envelope.payload)
+    except ValidationError:
+        consumer.push_dead_letter(redis, primary_queue_name=QUEUE_FEATURE, raw_payload=raw or "", reason="invalid_payload")
+        return True
     job_uuid = UUID(envelope.job_id)
-    photo_ids = [UUID(pid) for pid in envelope.payload.get("photo_ids", [])]
+    photo_ids = payload.photo_ids
     set_request_id(envelope.trace_context.get("request_id", ""))
 
     try:
@@ -141,7 +149,8 @@ def process_one(redis: Redis, publisher: RedisQueuePublisher, factory: sessionma
         # Short, user-facing reason (shown in Lightroom); the traceback goes to the log.
         reason = f"{type(exc).__name__}: {exc}"[:500]
         with session_scope(factory) as session:
-            JobRepository.set_status(session, job_uuid, JobStatus.FAILED, failure_reason=reason)
+            JobRepository.set_status(session, job_uuid, JobStatus.FAILED, failure_reason=reason,
+                                     failure_code=failure_code(exc))
         if raw is not None:
             consumer.push_dead_letter(redis, primary_queue_name=QUEUE_FEATURE, raw_payload=raw, reason="processing_error")
         log.exception("feature worker failure job_id=%s", job_uuid)

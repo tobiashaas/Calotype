@@ -180,6 +180,7 @@ function Commands.apply(catalog, args)
   local progress = progressScope(profile.name)
   local ok, r = pcall(Actions.apply, catalog, photos, profile, progress,
     { straighten = args.straighten == true, retouch = args.retouch,
+      consistentSeries = args.consistent_series == true,
       learnFromEdits = args.learn_from_edits == true, look = look, fresh = args.fresh == true })
   progress:done()
   if not ok then error(r) end
