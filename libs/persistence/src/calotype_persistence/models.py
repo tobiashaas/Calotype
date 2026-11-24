@@ -169,6 +169,8 @@ class Job(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
 
     failure_reason: Mapped[str | None] = mapped_column(String(4096), nullable=True)
+    # Added in migration 016: why it failed as a code clients branch on (FailureCode).
+    failure_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Added in migration 006
     profile_id: Mapped[uuid.UUID | None] = mapped_column(

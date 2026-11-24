@@ -12,7 +12,9 @@ from redis import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.orm import sessionmaker
+from pydantic import ValidationError
 
+from calotype_domain.failures import ProfileNotReadyError, failure_code
 from calotype_domain.jobs import JobStatus
 from calotype_inference_pipeline import CURRENT_FEATURE_VERSION, artifact_feature_version
 from calotype_observability import configure_logging, get_logger, set_request_id, start_heartbeat_thread
@@ -24,6 +26,7 @@ from calotype_persistence.repositories.profiles import ProfileRepository
 from calotype_persistence.session import get_session_factory, session_scope
 from calotype_queue import consumer
 from calotype_queue.constants import QUEUE_INFERENCE
+from calotype_queue.payloads import EditPayloadV1
 from calotype_queue.publisher import redis_from_env
 
 from calotype_inference_worker.plan import EditProfile, EditRequest, ExifSnapshot, ShootPhoto, plan_edit
@@ -53,23 +56,26 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         consumer.push_dead_letter(redis, primary_queue_name=QUEUE_INFERENCE, raw_payload=raw or "", reason=f"unexpected_job_kind:{envelope.job_kind}")
         return True
 
+    try:
+        payload = EditPayloadV1.model_validate(envelope.payload)
+    except ValidationError:
+        consumer.push_dead_letter(redis, primary_queue_name=QUEUE_INFERENCE, raw_payload=raw or "", reason="invalid_payload")
+        return True
     job_uuid = UUID(envelope.job_id)
-    profile_id_str = envelope.payload.get("profile_id")
-    photo_ids = [UUID(pid) for pid in envelope.payload.get("photo_ids", [])]
-    request = EditRequest.from_payload(envelope.payload)
+    photo_ids = payload.photo_ids
+    request = EditRequest.from_payload(payload.model_dump())
     set_request_id(envelope.trace_context.get("request_id", ""))
 
     try:
         with session_scope(factory) as session:
             JobRepository.set_status(session, job_uuid, JobStatus.RUNNING)
 
-        profile_id: UUID | None = None
-        if profile_id_str:
-            profile_id = UUID(profile_id_str)
+        profile_id: UUID | None = payload.profile_id
+        if profile_id is not None:
             with session_scope(factory) as session:
                 record = ProfileRepository.get_by_id(session, profile_id)
                 if record is None:
-                    raise ValueError(f"profile {profile_id} not found")
+                    raise ProfileNotReadyError(f"profile {profile_id} not found")
                 artifact_key = record.model_artifact_key
                 format_type = record.format_type
                 base_preset = dict(record.base_preset or {})
@@ -77,19 +83,18 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
 
             # No model → fail the job. Zero predictions would reset the user's photos.
             if not artifact_key:
-                raise ValueError(f"profile {profile_id} has no model artifact")
+                raise ProfileNotReadyError(f"profile {profile_id} has no model artifact")
             s3 = _s3_client()
             bucket = os.environ.get("S3_BUCKET", "calotype-photos")
             model_bytes = s3.get_object(Bucket=bucket, Key=artifact_key)["Body"].read()
             # The model was trained on one feature version; use exactly that one.
             feature_version = artifact_feature_version(model_bytes)
             profile = EditProfile.from_model(model_bytes, format_type, base_preset, retouch)
-        elif request.learn_from_edits and envelope.payload.get("format_type") in ("raw", "jpeg_tiff"):
-            # No profile: the selection's edited photos are the only source of the look.
-            profile = EditProfile(envelope.payload["format_type"])
-            feature_version = CURRENT_FEATURE_VERSION
         else:
-            raise ValueError("missing profile_id in payload (without one, learn_from_edits and format_type)")
+            # No profile: the selection's edited photos are the only source of the look
+            # (the payload model guarantees learn_from_edits and format_type then).
+            profile = EditProfile(payload.format_type)
+            feature_version = CURRENT_FEATURE_VERSION
         if request.look is not None:
             log.info("look chosen for the job job_id=%s", job_uuid)
 
@@ -140,7 +145,8 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         # Short, user-facing reason (shown in Lightroom); the traceback goes to the log.
         reason = f"{type(exc).__name__}: {exc}"[:500]
         with session_scope(factory) as session:
-            JobRepository.set_status(session, job_uuid, JobStatus.FAILED, failure_reason=reason)
+            JobRepository.set_status(session, job_uuid, JobStatus.FAILED, failure_reason=reason,
+                                     failure_code=failure_code(exc))
         if raw is not None:
             consumer.push_dead_letter(redis, primary_queue_name=QUEUE_INFERENCE, raw_payload=raw, reason="processing_error")
         log.exception("inference worker failure job_id=%s", job_uuid)

@@ -151,7 +151,8 @@ def test_new_job_is_queued_with_its_payload(h):
     job = h.job(JobKind.EDIT, payload={"photo_ids": ["x"]}, correlation_id="c-1")
     h.commit()
     got = h.store.jobs.get(job.id)
-    assert (got.kind, got.status, got.failure_reason, got.correlation_id) == ("edit", "queued", None, "c-1")
+    assert (got.kind, got.status, got.failure_reason, got.failure_code, got.correlation_id) == (
+        "edit", "queued", None, None, "c-1")
     assert got.payload == {"photo_ids": ["x"]}
 
 

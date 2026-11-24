@@ -12,9 +12,11 @@ from redis import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy.orm import Session, sessionmaker
+from pydantic import ValidationError
 
 from calotype_edit_serializer import shared_masks, training_target
 from calotype_domain.jobs import JobStatus
+from calotype_domain.failures import TooFewPhotosError, failure_code
 from calotype_domain.profiles import ProfileStatus
 from calotype_inference_pipeline import (
     CURRENT_FEATURE_VERSION,
@@ -31,6 +33,7 @@ from calotype_persistence.repositories.profiles import ProfileRepository
 from calotype_persistence.session import get_session_factory, session_scope
 from calotype_queue import consumer
 from calotype_queue.constants import QUEUE_TRAIN
+from calotype_queue.payloads import TrainPayloadV1
 from calotype_queue.publisher import RedisQueuePublisher, redis_from_env
 
 log = get_logger("calotype.train_worker")
@@ -102,13 +105,18 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         consumer.push_dead_letter(redis, primary_queue_name=QUEUE_TRAIN, raw_payload=raw or "", reason=f"unexpected_job_kind:{envelope.job_kind}")
         return True
 
+    try:
+        payload = TrainPayloadV1.model_validate(envelope.payload)
+    except ValidationError:
+        consumer.push_dead_letter(redis, primary_queue_name=QUEUE_TRAIN, raw_payload=raw or "", reason="invalid_payload")
+        return True
     job_uuid = UUID(envelope.job_id)
-    profile_id_str = envelope.payload.get("profile_id")
-    photo_ids = [UUID(pid) for pid in envelope.payload.get("photo_ids", [])]
+    profile_id_str = str(payload.profile_id) if payload.profile_id else None
+    photo_ids = payload.photo_ids
     # Values only a preset left (Lightroom key -> value): not the photographer's decision.
-    untouched = envelope.payload.get("untouched") or {}
+    untouched = payload.untouched or {}
     # Retraining a profile that already has a model: a failure must not take that model away.
-    retrain = bool(envelope.payload.get("retrain"))
+    retrain = payload.retrain
     set_request_id(envelope.trace_context.get("request_id", ""))
 
     try:
@@ -157,7 +165,7 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         if skipped:
             log.warning("skipped %d training photos: %s", len(skipped), "; ".join(skipped[:20]))
         if len(feature_vectors) < MIN_SAMPLES:
-            raise ValueError(
+            raise TooFewPhotosError(
                 f"only {len(feature_vectors)} usable training photos, need at least {MIN_SAMPLES}"
             )
 
@@ -191,7 +199,8 @@ def process_one(redis: Redis, factory: sessionmaker) -> bool:
         # Short, user-facing reason (shown in Lightroom); the traceback goes to the log.
         reason = f"{type(exc).__name__}: {exc}"[:500]
         with session_scope(factory) as session:
-            JobRepository.set_status(session, job_uuid, JobStatus.FAILED, failure_reason=reason)
+            JobRepository.set_status(session, job_uuid, JobStatus.FAILED, failure_reason=reason,
+                                     failure_code=failure_code(exc))
             if profile_id_str:
                 # A retrained profile keeps its earlier model and stays usable.
                 status = ProfileStatus.READY if retrain else ProfileStatus.FAILED

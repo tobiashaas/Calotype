@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from calotype_domain.failures import FailureCode, JobFailure
 from calotype_edit_serializer import (
     compose,
     edited_photos,
@@ -45,8 +46,10 @@ from calotype_inference_pipeline.straighten import MIN_LINES, crop_settings
 Predict = Callable[[Sequence[float], float | None], dict[str, float]]
 
 
-class NoExamplesError(ValueError):
+class NoExamplesError(JobFailure, ValueError):
     """Without a profile, the selection holds no edited photo to learn the look from."""
+
+    code = FailureCode.NO_EXAMPLES
 
     def __init__(self) -> None:
         super().__init__("no edited photos in the selection to learn the look from")

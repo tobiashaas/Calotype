@@ -2,95 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 from uuid import UUID
 
-import logging
+from pydantic import BaseModel, Field
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+# The job requests live with the queue payloads (one definition per field, read by the
+# workers too); re-exported here as the API's request models.
+from calotype_queue.payloads import CullJobRequestV1 as CullJobRequestV1
+from calotype_queue.payloads import EditJobRequestV1 as EditJobRequestV1
+from calotype_queue.payloads import TolerantModel as TolerantRequest
+from calotype_queue.payloads import TrainJobRequestV1 as TrainJobRequestV1
 
-log = logging.getLogger("lr_ff.api.schemas")
-
-TrainSchema = Literal["train-request-v1"]
-EditSchema = Literal["edit-request-v1"]
-CullSchema = Literal["cull-request-v1"]
 PhotoSchema = Literal["photo-upload-v1"]
-
-
-class TolerantRequest(BaseModel):
-    """Tolerant reader: unknown *optional* fields are ignored (and logged), not rejected.
-
-    A newer Bridge may send fields this server does not know yet; refusing them would break
-    every upload after a client update. New *required* fields still need a new schema
-    version. Known fields keep their strict types.
-    """
-
-    model_config = ConfigDict(extra="ignore")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _log_unknown(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            unknown = sorted(set(data) - set(cls.model_fields))
-            if unknown:
-                log.warning("%s: ignoring unknown fields %s", cls.__name__, unknown)
-        return data
-
-
-class TrainJobRequestV1(TolerantRequest):
-
-    schema_version: TrainSchema
-    correlation_id: str | None = None
-    profile_name: str
-    genre: str
-    format_type: Literal["raw", "jpeg_tiff"]
-    color_type: Literal["color", "bw"]
-    photo_ids: Annotated[list[UUID], Field(min_length=1)]
-    base_preset: dict[str, Any] | None = None
-    # Retrain this profile instead of creating one: its earlier training photos (with their
-    # current settings) and these photos together; the profile keeps its id and stays usable.
-    profile_id: UUID | None = None
-    # Values only a preset left on the photos (Lightroom key → value), not the photographer's
-    # decision: such a slider is left out of that photo's training target.
-    untouched: dict[str, float] | None = None
-
-
-class EditJobRequestV1(TolerantRequest):
-
-    schema_version: EditSchema
-    correlation_id: str | None = None
-    # Without a profile the look comes only from the selection's edited photos: then
-    # learn_from_edits must be on and format_type says how to read white balance.
-    profile_id: UUID | None = None
-    format_type: Literal["raw", "jpeg_tiff"] | None = None
-    collection_name: str | None = None
-    photo_ids: Annotated[list[UUID], Field(min_length=1)]
-    # Optional: level photos that have clear reference lines (crop keys in the result).
-    straighten: bool = False
-    # Optional: photos of the same scene (close in time and alike) get exposure and white
-    # balance that agree; edited examples stay fixed. Needs capture times.
-    consistent_series: bool = False
-    # Optional: photos of the selection the photographer already edited set the shoot's look;
-    # they are examples only and get no result.
-    learn_from_edits: bool = False
-    # Optional: a look (develop settings of one of the photographer's presets) that replaces
-    # the profile's base preset; only its look settings are used (style layer).
-    base_preset: dict[str, Any] | None = None
-
-    @model_validator(mode="after")
-    def _profile_or_edits(self) -> "EditJobRequestV1":
-        if self.profile_id is None and not (self.learn_from_edits and self.format_type):
-            raise ValueError("without profile_id, learn_from_edits and format_type are required")
-        return self
-
-
-class CullJobRequestV1(TolerantRequest):
-    """Cull these photos. Photos among them that already carry a decision (stars, pick/reject
-    flag) teach the scorer the photographer's taste."""
-
-    schema_version: CullSchema
-    correlation_id: str | None = None
-    photo_ids: Annotated[list[UUID], Field(min_length=1)]
 
 
 class PhotoMetadataV1(TolerantRequest):
@@ -116,6 +40,8 @@ class JobSnapshotResponse(BaseModel):
     payload_schema_version: str | None = None
     profile_id: UUID | None = None
     failure_reason: str | None = None
+    # Why it failed as a code (calotype_domain.FailureCode): clients branch on it, not on text.
+    failure_code: str | None = None
     correlation_id: str | None = None
 
 

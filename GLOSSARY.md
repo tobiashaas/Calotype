@@ -153,6 +153,10 @@ _Avoid_: label, rating
 The local program on the photographer's machine that reads Photos, keeps the outbox and talks to the server; the Lightroom plugin talks only to it.
 _Avoid_: agent, daemon, desktop app (the app is the Bridge with a window)
 
+**Failure code**:
+Why a job failed, as a short fixed word (for example "no examples") that the plugin turns into its own hint; the failure reason is the text for people.
+_Avoid_: error type, status
+
 **Folder mode**:
 Working on plain RAW + XMP folders without Lightroom.
 _Avoid_: standalone, CLI mode

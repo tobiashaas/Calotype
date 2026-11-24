@@ -365,6 +365,13 @@ components:
           type: string
           nullable: true
           description: Short, user-facing reason when status is `failed`
+        failure_code:
+          type: string
+          nullable: true
+          description: |
+            When status is `failed`: why, as a code clients branch on — `no_examples` (no
+            edited photo to learn the look from), `profile_not_ready`, `too_few_photos`,
+            `processing_error` (anything else). Clients must accept codes they do not know.
         correlation_id:
           type: string
     PhotoCreatedResponse:

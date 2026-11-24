@@ -19,6 +19,7 @@
 //! train --sidecars <dir>: read the XMPs from another folder (e.g. edits exported from a
 //!              catalog) — the RAW folder stays untouched.
 //! apply --straighten: also level photos with clear reference lines (own crops stay).
+//! apply --consistent-series: photos of one scene get exposure and white balance that agree.
 //! apply --learn-from-edits: the RAWs of the folder you already edited set the shoot's look;
 //!        the others are edited from it (those edits stay untouched). Without --profile the
 //!        look comes from those edits alone.
@@ -105,6 +106,10 @@ enum Command {
         /// Learn the shoot's look from the RAWs here you already edited (they stay untouched).
         #[arg(long)]
         learn_from_edits: bool,
+        /// Photos of the same scene (close in capture time and alike) get exposure and white
+        /// balance that agree; edited examples stay fixed.
+        #[arg(long)]
+        consistent_series: bool,
     },
     /// Sort RAWs into keep / check / sort out: color label (green / yellow / red) and the
     /// reason in the sidecar. Stars and edits stay; sidecars with stars or a red/purple label
@@ -568,6 +573,7 @@ async fn apply(
     out: Option<&Path>,
     straighten: bool,
     learn_from_edits: bool,
+    consistent_series: bool,
 ) -> Result<()> {
     // No profile: the folder's edited RAWs alone set the look (written as "own edits").
     let (profile_id, name) = match wanted {
@@ -627,6 +633,7 @@ async fn apply(
                 "lr_catalog_uuids": uuids,
                 "straighten": straighten,
                 "learn_from_edits": learn_from_edits,
+                "consistent_series": consistent_series,
             }),
         )
         .await?;
@@ -722,6 +729,7 @@ async fn main() -> Result<()> {
             out,
             straighten,
             learn_from_edits,
+            consistent_series,
         } => {
             apply(
                 &bridge,
@@ -732,6 +740,7 @@ async fn main() -> Result<()> {
                 out.as_deref(),
                 straighten,
                 learn_from_edits,
+                consistent_series,
             )
             .await
         }
