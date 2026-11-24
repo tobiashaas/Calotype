@@ -280,3 +280,16 @@ def test_the_plan_needs_no_infrastructure():
     source = open(plan.__file__, encoding="utf-8").read()
     for forbidden in ("redis", "sqlalchemy", "boto3", "calotype_persistence", "calotype_queue"):
         assert f"import {forbidden}" not in source and f"from {forbidden}" not in source
+
+
+def test_a_profile_that_keeps_the_cameras_white_balance_says_so():
+    """Found on Marryween: results without Temperature left the Kelvin of an earlier run on the photo."""
+    photos = [ShootPhoto(i, {"WhiteBalance": "Custom", "Temperature": 3951, "Tint": 5}, [float(i)]) for i in range(2)]
+    plan = plan_edit(EditRequest(), _profile({"exposure": 0.4}), photos)
+    assert all(r.lr_settings.get("WhiteBalance") == "As Shot" and "Temperature" not in r.lr_settings for r in plan.results)
+
+
+def test_a_predicted_kelvin_is_not_overridden():
+    photos = [ShootPhoto(0, {}, [0.0])]
+    plan = plan_edit(EditRequest(), _profile({"exposure": 0.4, "temp": 2850.0, "tint": -21.0}), photos)
+    assert plan.results[0].lr_settings["Temperature"] == 2850 and "WhiteBalance" not in plan.results[0].lr_settings

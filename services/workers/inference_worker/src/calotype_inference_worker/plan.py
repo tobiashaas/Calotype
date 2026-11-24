@@ -251,5 +251,11 @@ def plan_edit(request: EditRequest, profile: EditProfile, photos: Sequence[Shoot
             crop=straighten_settings(p.analysis) if request.straighten else None,
             own_settings=p.settings,
         )
-        results.append(PhotoResult(p.photo_id, composed.settings, retouch or None, composed.kept_crop))
+        settings = composed.settings
+        # The profile kept the camera's white balance: say so. Leaving the keys out would leave
+        # whatever Kelvin an earlier run (or another profile) put on the photo.
+        if (fmt == "raw" and profile.predict is not None
+                and not {"Temperature", "Tint", "WhiteBalance"} & set(settings)):
+            settings = {**settings, "WhiteBalance": "As Shot"}
+        results.append(PhotoResult(p.photo_id, settings, retouch or None, composed.kept_crop))
     return EditPlan(results, notes)
