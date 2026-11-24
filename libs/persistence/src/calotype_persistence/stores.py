@@ -182,6 +182,10 @@ class EditResultStore(Protocol):
         """Calotype's newest result for this photo, of any job and any profile."""
         ...
 
+    def for_photo(self, photo_id: uuid.UUID) -> list[EditResult]:
+        """Every result Calotype wrote for this photo, of any job and profile, newest first."""
+        ...
+
     def upsert(
         self,
         *,
@@ -330,6 +334,9 @@ class _SqlEditResults:
 
     def latest_for_photo(self, photo_id):
         return EditResultRepository.latest_for_photo(self._s, photo_id)
+
+    def for_photo(self, photo_id):
+        return EditResultRepository.for_photo(self._s, photo_id)
 
     def upsert(self, **fields):
         EditResultRepository.upsert(self._s, **fields)

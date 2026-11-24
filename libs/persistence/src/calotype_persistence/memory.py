@@ -267,6 +267,11 @@ class _MemoryEditResults:
         found = [r for (_, p), r in self._results.items() if p == photo_id]
         return max(reversed(found), key=lambda r: r.created_at, default=None)
 
+    def for_photo(self, photo_id: uuid.UUID) -> list[EditResult]:
+        found = [r for (_, p), r in self._results.items() if p == photo_id]
+        # newest first; a later insertion wins a tie of equal timestamps
+        return [r for _, r in sorted(enumerate(found), key=lambda x: (x[1].created_at, x[0]), reverse=True)]
+
     def upsert(
         self,
         *,

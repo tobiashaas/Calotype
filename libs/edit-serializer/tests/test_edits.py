@@ -66,3 +66,24 @@ def test_a_result_without_sliders_proves_nothing():
 
 def test_a_slider_lightroom_omits_counts_as_its_default():
     assert unchanged_since({"Contrast2012": 0}, {}, "jpeg_tiff") is True
+
+
+def test_an_own_white_balance_where_the_result_kept_the_cameras_is_a_correction():
+    """Found on Marryween: a profile kept the camera's white balance (no Temperature in its result),
+    the photographer set 2850 K in the hut — the photo still matched on every Slider the result
+    set, so the hut was dropped from training."""
+    kept_camera = {"Exposure2012": 0.35, "Contrast2012": -36}
+    hut = {**kept_camera, "WhiteBalance": "Custom", "Temperature": 2850, "Tint": -21}
+    assert unchanged_since(kept_camera, hut, "raw") is False
+    still_camera = {**kept_camera, "WhiteBalance": "As Shot", "Temperature": 5899, "Tint": 3}
+    assert unchanged_since(kept_camera, still_camera, "raw") is True
+
+
+def test_a_white_balance_an_earlier_calotype_result_set_is_not_the_photographers():
+    """Profile A set 4400 K, profile B (keeping the camera's) was applied later: the 4400 K the
+    photo still holds is Calotype's, not a Correction."""
+    kept_camera = {"Exposure2012": 0.35, "Contrast2012": -36}
+    earlier = {"Exposure2012": 0.1, "Temperature": 4400, "Tint": 5}
+    photo = {**kept_camera, "WhiteBalance": "Custom", "Temperature": 4400, "Tint": 5}
+    assert unchanged_since(kept_camera, photo, "raw", earlier=[earlier]) is True
+    assert unchanged_since(kept_camera, {**photo, "Temperature": 2850}, "raw", earlier=[earlier]) is False

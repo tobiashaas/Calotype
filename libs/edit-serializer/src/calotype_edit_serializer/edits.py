@@ -62,14 +62,30 @@ def edited_photos(settings: Sequence[Mapping[str, Any]], format_type: FormatType
     return [s != baseline for s in sigs]
 
 
-def unchanged_since(applied: Mapping[str, Any], current: Mapping[str, Any], format_type: FormatType) -> bool:
+def _same_value(a: Any, b: Any, decimals: int) -> bool:
+    x, y = _as_float(a), _as_float(b)
+    return x is not None and y is not None and abs(x - y) <= 0.5 * 10 ** -decimals + 1e-9
+
+
+def unchanged_since(applied: Mapping[str, Any], current: Mapping[str, Any], format_type: FormatType,
+                    earlier: Sequence[Mapping[str, Any]] = ()) -> bool:
     """Does a photo still hold the Sliders Calotype applied to it (its result's ``lr_settings``)?
 
     Compared at Lightroom's precision on the Sliders the result set; keys it did not set (look,
     crop, sliders a profile leaves to the photographer) are ignored. A result without any
     Slider proves nothing, so that is False — as is any Slider the photographer moved since
-    (then the photo is a Correction).
+    (then the photo is a Correction). A RAW photo with its own white balance where the result
+    kept the camera's is a Correction too, unless one of the ``earlier`` results (the photo's
+    older Calotype results) set exactly that white balance.
     """
+    # A result that left the camera's white balance and a photo that no longer has it: the
+    # photographer set their own — a Correction, even though no Slider the result set moved —
+    # unless an earlier Calotype result (``earlier``) set exactly that white balance.
+    wb = [spec for spec in slider_specs(format_type) if spec.internal in ("temp", "tint")]
+    if format_type == "raw" and not {s.lr_key for s in wb} & set(applied) and not keeps_as_shot(current, format_type):
+        if not any(all(_same_value(e.get(s.lr_key), current.get(s.lr_key), s.decimals) for s in wb)
+                   for e in earlier):
+            return False
     compared = 0
     for spec in slider_specs(format_type):
         if spec.lr_key not in applied:

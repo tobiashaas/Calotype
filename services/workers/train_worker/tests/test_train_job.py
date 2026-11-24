@@ -23,6 +23,7 @@ from calotype_train_worker.cli import WORKER
 
 EDITED = {"WhiteBalance": "Custom", "Temperature": 5600, "Tint": 4, "Exposure2012": 0.4,
           "Contrast2012": 12}
+CALOTYPE_WB = {"Temperature": 5600, "Tint": 4}  # the white balance Calotype's result set
 
 
 def _jpeg(color) -> bytes:
@@ -118,7 +119,7 @@ def _applied(store, photo, lr_settings):
 
 def test_a_photo_still_holding_calotypes_result_is_not_learned(store, services):
     photos = [_photo(store, services, i) for i in range(3)]
-    _applied(store, photos[0], {"Exposure2012": photos[0].lr_develop_settings["Exposure2012"], "Contrast2012": 12})
+    _applied(store, photos[0], {**CALOTYPE_WB, "Exposure2012": photos[0].lr_develop_settings["Exposure2012"], "Contrast2012": 12})
     job, profile = _run(store, services, photos)
     assert (job.status, job.failure_code) == ("failed", "too_few_photos")
     assert job.failure_reason == "TooFewPhotosError: only 2 usable training photos, need at least 3"
@@ -126,7 +127,7 @@ def test_a_photo_still_holding_calotypes_result_is_not_learned(store, services):
 
 def test_an_accepted_photo_holding_calotypes_result_is_learned(store, services):
     photos = [_photo(store, services, i) for i in range(3)]
-    _applied(store, photos[0], {"Exposure2012": photos[0].lr_develop_settings["Exposure2012"]})
+    _applied(store, photos[0], {**CALOTYPE_WB, "Exposure2012": photos[0].lr_develop_settings["Exposure2012"]})
     job, profile = _run(store, services, photos, accepted=[photos[0]])
     assert (job.status, profile.status) == ("completed", "ready")
 
@@ -140,7 +141,17 @@ def test_a_correction_after_calotype_applied_is_learned(store, services):
 
 def test_only_calotypes_latest_result_counts(store, services):
     photos = [_photo(store, services, i) for i in range(3)]
-    _applied(store, photos[0], {"Exposure2012": photos[0].lr_develop_settings["Exposure2012"]})
+    _applied(store, photos[0], {**CALOTYPE_WB, "Exposure2012": photos[0].lr_develop_settings["Exposure2012"]})
     _applied(store, photos[0], {"Exposure2012": 2.0})  # applied again later, then corrected back by hand
+    job, profile = _run(store, services, photos)
+    assert (job.status, profile.status) == ("completed", "ready")
+
+
+def test_an_own_white_balance_after_a_result_that_kept_the_cameras_is_learned(store, services):
+    """Marryween's hut: the profile kept the camera's white balance, the photographer set 2850 K."""
+    hut = {**EDITED, "Temperature": 2850, "Tint": -21}
+    photos = [_photo(store, services, i, settings={**hut, "Exposure2012": 0.2 * i}) for i in range(3)]
+    for p in photos:
+        _applied(store, p, {"Exposure2012": p.lr_develop_settings["Exposure2012"], "Contrast2012": 12})
     job, profile = _run(store, services, photos)
     assert (job.status, profile.status) == ("completed", "ready")

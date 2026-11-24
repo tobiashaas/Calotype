@@ -64,9 +64,11 @@ def handle(ctx: JobContext[TrainPayloadV1]) -> None:
                 skipped.append(f"{photo_id}: not found")
                 continue
             if photo_id not in accepted:
-                applied = store.edit_results.latest_for_photo(photo_id)
+                results = store.edit_results.for_photo(photo_id)  # newest first
+                applied = results[0] if results else None
                 if applied is not None and unchanged_since(
-                    applied.lr_settings or {}, photo.lr_develop_settings or {}, format_type
+                    applied.lr_settings or {}, photo.lr_develop_settings or {}, format_type,
+                    earlier=[r.lr_settings or {} for r in results[1:]],
                 ):
                     skipped.append(f"{photo_id}: still Calotype's result of job {applied.job_id}, not accepted")
                     continue
