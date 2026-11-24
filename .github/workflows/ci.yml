@@ -90,6 +90,22 @@ jobs:
   worker-tests:
     name: Worker tests
     runs-on: ubuntu-latest
+    # Throwaway Postgres for the Postgres half of the store contract tests
+    # (libs/persistence/tests/test_store_contract.py); same image as infra/compose.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: calotype
+          POSTGRES_PASSWORD: calotype
+          POSTGRES_DB: calotype_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U calotype"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CALOTYPE_TEST_DATABASE_URL: postgresql+psycopg://calotype:calotype@127.0.0.1:5432/calotype_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -100,7 +116,15 @@ jobs:
           pip install -e libs/domain -e libs/queue -e libs/observability -e libs/persistence -e libs/io
           pip install -e "libs/worker-runtime[dev]"
           pip install -e libs/inference-pipeline -e libs/edit-serializer -e libs/culling
-          pip install -e services/workers/train_worker -e services/workers/feature_worker -e services/workers/inference_worker -e services/workers/cull_worker pytest
+          pip install -e services/workers/train_worker -e services/workers/feature_worker -e services/workers/inference_worker -e services/workers/cull_worker pytest alembic
+      - name: Migrate the test database
+        working-directory: infra/migrations
+        env:
+          DATABASE_URL: ${{ env.CALOTYPE_TEST_DATABASE_URL }}
+        # pgvector comes from infra/compose/postgres-init locally; here we enable it ourselves
+        run: |
+          PGPASSWORD=calotype psql -h 127.0.0.1 -U calotype -d calotype_test -c "CREATE EXTENSION IF NOT EXISTS vector"
+          alembic upgrade head
       - name: Test
         run: python -m pytest libs/worker-runtime/tests/ libs/io/tests/ services/workers/train_worker/tests/ services/workers/feature_worker/tests/ services/workers/inference_worker/tests/ services/workers/cull_worker/tests/ libs/persistence/tests/ libs/queue/tests/ libs/domain/tests/ -v
 
