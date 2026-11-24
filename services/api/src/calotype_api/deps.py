@@ -3,11 +3,11 @@ from __future__ import annotations
 from collections.abc import Generator
 from functools import lru_cache
 
-from botocore.client import BaseClient
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from calotype_api.storage import get_s3_client
+from calotype_api.storage import blob_store
+from calotype_io import BlobStore
 from calotype_persistence.session import get_session_factory, session_scope
 from calotype_persistence.stores import SqlStore, Store
 from calotype_queue.publisher import RedisQueuePublisher, redis_from_env
@@ -35,6 +35,7 @@ def get_publisher() -> RedisQueuePublisher:
     return RedisQueuePublisher(redis_from_env())
 
 
-def get_storage() -> BaseClient:
-    # Not cached — boto3 clients are not thread-safe when shared; FastAPI handles per-request.
-    return get_s3_client()
+def get_storage() -> BlobStore:
+    """Previews go to the blob store (S3 from the environment). Tests override it with
+    `calotype_io.MemoryBlobStore`."""
+    return blob_store()

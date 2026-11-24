@@ -14,7 +14,7 @@ folders (renamed from LR-FrameFlow, see ADR 006; website `calotype.xyz`, repo
 2. **Bridge** (Rust, `apps/bridge/`) — local service on 127.0.0.1 (previews, outbox, XMP, presets, `calotype-folder`) + Tauri desktop shell
 3. **API** (FastAPI, `services/api/`) — thin HTTP gateway, returns 202 immediately, no blocking
 4. **Workers** (`services/workers/`) — four independent workers: feature, train, inference, cull
-5. **Shared Libs** (`libs/`) — domain, persistence, queue, observability, inference-pipeline, edit-serializer, culling, io
+5. **Shared Libs** (`libs/`) — domain, persistence, queue, observability, inference-pipeline, edit-serializer, culling, io, worker-runtime
 
 ---
 
@@ -53,7 +53,8 @@ libs/
   inference-pipeline/  # versioned features, models (boosting/Ridge), model registry, straighten
   edit-serializer/     # internal params ↔ Lightroom develop settings (names, ranges), style layer
   culling/             # culling features (sharpness, faces, expressions, series, people) + rules + learned scorer
-  io/                  # Shared path/I/O helpers (stub)
+  io/                  # Blob store: previews + models in S3 (or memory), owns the key layout (ADR 007)
+  worker-runtime/      # The loop around every worker: envelope, DLQ, job status, heartbeat, reaper; FeatureStore (ADR 007)
 services/
   api/                 # FastAPI: all routes (photos, profiles, jobs, results)
   workers/
@@ -86,12 +87,14 @@ TODO.md                # Completed + open work items — keep up to date
   - `domain` imports nothing
   - `queue` imports: domain, pydantic, redis — owns the job requests / queue payloads (`payloads.py`) the API and the workers share
   - `persistence` imports: domain, sqlalchemy, psycopg
+  - `io` imports: stdlib, boto3 — owns the blob store (S3 config, key layout, bucket creation)
+  - `worker-runtime` imports: domain, persistence, queue, observability, io — imported by the workers only, never the API
   - `observability` imports: stdlib only
   - `inference-pipeline` imports: Pillow, numpy, scikit-learn, joblib, opencv-python-headless (YuNet face box) — no DB/Redis; owns the model registry (`models.py`)
-  - `services/api` imports: domain, persistence, queue — NOT workers, NOT torch
+  - `services/api` imports: domain, persistence, queue, io — NOT workers, NOT worker-runtime, NOT torch
   - `edit-serializer` imports: stdlib only
   - `culling` imports: inference-pipeline (model registry), numpy, Pillow, opencv-python-headless, mediapipe, scikit-learn — no DB/Redis; models only via the registry (SHA-256, `THIRD_PARTY_MODELS.md`)
-  - `services/workers/*` import: domain, persistence, queue, observability, inference-pipeline, edit-serializer; `cull_worker` also culling
+  - `services/workers/*` import: domain, persistence, queue, observability, io, worker-runtime, inference-pipeline, edit-serializer; `cull_worker` also culling
   - **Workers CANNOT import `calotype_api`**
   - **API CANNOT import worker modules**
 - **Versioned contracts:** Every queue message and API schema has a `schema_version` field. Never break existing schema versions; add new ones.
@@ -109,8 +112,12 @@ TODO.md                # Completed + open work items — keep up to date
 | `libs/domain/src/calotype_domain/profiles.py` | `ProfileStatus` enum |
 | `libs/persistence/src/calotype_persistence/models.py` | All SQLAlchemy models |
 | `libs/persistence/src/calotype_persistence/repositories/` | One repo file per model |
-| `libs/persistence/src/calotype_persistence/stores.py` | `Store` interface (jobs, photos, profiles, edit/cull results) the API routes use via `Depends(get_store)`; `SqlStore` = the repositories in one session |
-| `libs/persistence/src/calotype_persistence/memory.py` | `MemoryStore`: the same interface over real ORM records in dicts — for API (and later worker) tests; `tests/test_store_contract.py` runs one suite against both (Postgres only with `CALOTYPE_TEST_DATABASE_URL`) |
+| `libs/persistence/src/calotype_persistence/stores.py` | `Store` interface (jobs, photos, profiles, feature vectors, edit/cull results) the API routes (`Depends(get_store)`) and the workers (`ctx.store()`) use; `SqlStore` = the repositories in one session, `store_scope(factory)` = one unit of work |
+| `libs/persistence/src/calotype_persistence/memory.py` | `MemoryStore`: the same interface over real ORM records in dicts — for API and worker tests (`MemoryStore.scope` stands in for `store_scope`); `tests/test_store_contract.py` runs one suite against both (Postgres only with `CALOTYPE_TEST_DATABASE_URL`) |
+| `libs/worker-runtime/src/calotype_worker_runtime/runner.py` | `Worker`, `run_worker`, `process_one`, `JobContext`: envelope / wrong kind / payload → DLQ, RUNNING → COMPLETED or FAILED (reason + failure code, worker's `on_failure`), progress, heartbeat, reaper, Redis retry (ADR 007); tests on `fakeredis` + `MemoryStore` + `MemoryBlobStore` |
+| `libs/worker-runtime/src/calotype_worker_runtime/features.py` | `FeatureStore.vector(store, photo, version)`: stored vector, or computed from the preview and stored (never a zero vector) — feature + train worker |
+| `libs/worker-runtime/src/calotype_worker_runtime/reaper.py` | Stuck-job reaper over the `Store`: RUNNING jobs without progress for 10 min back to their first queue, per owned job kind |
+| `libs/io/src/calotype_io/blobs.py` | `BlobStore` (`preview`, `put_preview`, `model`, `put_model`), `S3BlobStore.from_env()` (S3_* env, defaults `127.0.0.1:9000` / `calotype-photos`), `MemoryBlobStore`; the key layout `photos/{id}.jpg`, `models/{profile}/model-{version}.joblib` |
 | `libs/inference-pipeline/src/calotype_inference_pipeline/features.py` | `extract_features()` — 128-dim histogram |
 | `libs/inference-pipeline/src/calotype_inference_pipeline/model.py` | `train_model()` / `run_inference()` |
 | `libs/edit-serializer/src/calotype_edit_serializer/sliders.py` | `from_lightroom()` / `to_lightroom()` — LR names, ranges, RAW vs JPEG white balance |
@@ -122,8 +129,8 @@ TODO.md                # Completed + open work items — keep up to date
 | `libs/queue/src/calotype_queue/consumer.py` | `blpop_envelope()`, `push_dead_letter()` |
 | `services/api/src/calotype_api/main.py` | FastAPI app + all routes |
 | `services/api/src/calotype_api/schemas.py` | Pydantic request/response models |
-| `services/api/src/calotype_api/deps.py` | FastAPI dependencies (store over a DB session, publisher, S3) — tests override them via `app.dependency_overrides`, never by patching import paths |
-| `services/api/src/calotype_api/storage.py` | boto3 S3 helper |
+| `services/api/src/calotype_api/deps.py` | FastAPI dependencies (store over a DB session, publisher, blob store) — tests override them via `app.dependency_overrides` (`MemoryStore`, `MemoryBlobStore`), never by patching import paths |
+| `services/api/src/calotype_api/storage.py` | `blob_store()`: the `S3BlobStore` from the environment |
 | `packages/contracts/openapi/bridge-api.yaml` | OpenAPI spec (Bridge ↔ API contract) |
 | `packages/contracts/openapi/plugin-bridge-api.yaml` | OpenAPI spec (LR plugin ↔ Bridge, local, `X-Calotype-Token`) |
 | `apps/bridge/core/src/outbox.rs` | Background loop: preview → upload → submit job → poll → map results |
@@ -210,7 +217,7 @@ Edit flow detail:
 
 Cull flow detail: `cull_worker` computes the culling features once per photo (cached in `photos.analysis.cull`), takes the decisions from `lr_metadata` (pick flag, else 4–5 ★ keep / 1–3 ★ not), learns with ≥ 8 per class else uses the rules, upserts one CullResult per photo (bucket, score, reason, method). The plugin turns them into collections *Calotype > Culling <date> > Keep / Check / Sort out*; `calotype-folder cull` writes a color label + `calotype:Cull` into the sidecar.
 
-On error at any stage: Job → FAILED with `failure_reason` (text) and `failure_code` (from the exception, `calotype_domain.FailureCode`), envelope pushed to `{queue}:dlq`. Workers read the payload through `calotype_queue.payloads`; one that does not validate goes to the DLQ as `invalid_payload`.
+On error at any stage: Job → FAILED with `failure_reason` (text) and `failure_code` (from the exception, `calotype_domain.FailureCode`), envelope pushed to `{queue}:dlq`. Workers read the payload through `calotype_queue.payloads`; one that does not validate goes to the DLQ as `invalid_payload`. All of this — and RUNNING / COMPLETED, progress, heartbeat, reaper — is `calotype_worker_runtime` (`run_worker`); each worker's `cli.py` is only its handler (ADR 007).
 
 ---
 
@@ -274,7 +281,7 @@ cd infra/compose && docker compose -p calotype up -d
 
 # Install Python libs (order matters due to dependencies)
 pip install -e libs/domain -e libs/queue -e libs/persistence -e libs/observability
-pip install -e libs/inference-pipeline -e libs/edit-serializer -e libs/culling -e libs/io
+pip install -e libs/inference-pipeline -e libs/edit-serializer -e libs/culling -e libs/io -e libs/worker-runtime
 pip install -e services/api -e services/workers/feature_worker -e services/workers/train_worker \
             -e services/workers/inference_worker -e services/workers/cull_worker
 # Workers: calotype-feature-worker, calotype-train-worker, calotype-inference-worker, calotype-cull-worker
@@ -320,8 +327,8 @@ Nine jobs on push/PR to `main` (the branch itself does not trigger CI — run th
 2. **lint** — Ruff check across all Python source dirs
 3. **inference-pipeline** — `pytest libs/inference-pipeline/tests/` (incl. straighten)
 4. **edit-serializer** — `pytest libs/edit-serializer/tests/` (incl. presets in sync with the generator)
-5. **api-tests** — `pytest services/api/tests/` (in-memory store via dependency overrides, no Postgres needed)
-6. **worker-tests** — `pytest` for train / feature / inference workers + `libs/persistence/tests` + `libs/queue/tests` (payloads, schema drift) + `libs/domain/tests` (mock-based, no DB/S3; the store contract's Postgres half is skipped without `CALOTYPE_TEST_DATABASE_URL`)
+5. **api-tests** — `pytest services/api/tests/` (in-memory store and blob store via dependency overrides, no Postgres / S3 needed)
+6. **worker-tests** — `pytest` for `libs/worker-runtime` (runner on `fakeredis`), `libs/io`, the four workers (each handler through the runner on `MemoryStore` + `MemoryBlobStore`) + `libs/persistence/tests` + `libs/queue/tests` (payloads, schema drift) + `libs/domain/tests` (no DB/S3/Redis; the store contract's Postgres half is skipped without `CALOTYPE_TEST_DATABASE_URL`)
 7. **bridge-core** — `cargo fmt --check`, `clippy -D warnings`, `cargo test -p calotype-bridge-core` (incl. end-to-end against a fake API)
 8. **lr-plugin** — `luajit apps/lr-plugin/tests/run.lua` (Lightroom SDK faked)
 9. **culling** — `pytest libs/culling/tests/` (synthetic images, no models needed)
@@ -338,6 +345,7 @@ Nine jobs on push/PR to `main` (the branch itself does not trigger CI — run th
 | 004 | Bridge = local Rust/axum service on 127.0.0.1 with SQLite outbox; LR plugin = UI, talks only to Bridge; model input = unedited image (embedded RAW JPEG / original) |
 | 005 | Culling: many explainable features, weights learned from the photographer's decisions, three buckets with reasons |
 | 006 | The project is called Calotype (formerly LR-FrameFlow, briefly Tarsier); every name and the migration of old installations |
+| 007 | Worker runtime (`libs/worker-runtime`: job lifecycle, DLQ, heartbeat, reaper, feature store), blob store in `libs/io`; workers on the `Store` interface |
 
 Full docs in `docs/adr/`.
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+from uuid import UUID
 
 
 def _jpeg_bytes() -> bytes:
@@ -27,7 +28,7 @@ _META = json.dumps({
 })
 
 
-def test_upload_photo_creates_record(client, mock_storage):
+def test_upload_photo_creates_record(client, blobs, store):
     resp = client.post(
         "/v1/photos",
         files={"file": ("test.jpg", _jpeg_bytes(), "image/jpeg")},
@@ -36,9 +37,10 @@ def test_upload_photo_creates_record(client, mock_storage):
     assert resp.status_code == 200
     body = resp.json()
     assert "photo_id" in body
-    assert body["s3_key"].startswith("photos/")
+    assert body["s3_key"] == f"photos/{body['photo_id']}.jpg"
     assert body["already_existed"] is False
-    mock_storage.put_object.assert_called_once()
+    assert blobs.preview(body["s3_key"]) == _jpeg_bytes()
+    assert store.photos.get(UUID(body["photo_id"])).s3_key == body["s3_key"]
 
 
 def test_upload_photo_idempotent(client):
@@ -55,7 +57,7 @@ def test_upload_photo_idempotent(client):
     assert r2.json()["already_existed"] is True
 
 
-def test_reupload_refreshes_settings_and_decisions(client, mock_storage):
+def test_reupload_refreshes_settings_and_decisions(client, blobs):
     """Re-edited or re-rated photo: same record, current values, preview not stored again."""
     first = client.post(
         "/v1/photos",
@@ -75,7 +77,7 @@ def test_reupload_refreshes_settings_and_decisions(client, mock_storage):
     ).json()
     assert second["photo_id"] == first["photo_id"]
     assert second["already_existed"] is True
-    assert mock_storage.put_object.call_count == 1
+    assert list(blobs.objects) == [first["s3_key"]]
 
 
 def test_upload_from_newer_client_with_unknown_field_is_accepted(client):

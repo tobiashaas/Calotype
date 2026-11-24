@@ -4,10 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "calotype-io"
-version = "0.1.1"
-description = "Shared path/metadata helpers for Calotype"
+version = "0.2.0"
+description = "Blob store for previews and models (S3 or in memory)"
 requires-python = ">=3.11"
 readme = "README.md"
+dependencies = ["boto3>=1.35"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.8"]

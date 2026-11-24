@@ -19,6 +19,7 @@ dependencies = [
     "calotype-edit-serializer",
     "calotype-culling",
     "calotype-io",
+    "calotype-worker-runtime",
     "calotype-api",
     "calotype-worker-feature",
     "calotype-worker-train",
@@ -34,6 +35,7 @@ dev = [
     "openapi-spec-validator",
     "check-jsonschema",
     "httpx",  # FastAPI TestClient
+    "fakeredis",  # worker-runtime tests: Redis lists in memory (BSD-3-Clause)
 ]
 
 [tool.uv]
@@ -51,6 +53,7 @@ calotype-inference-pipeline = { workspace = true }
 calotype-edit-serializer = { workspace = true }
 calotype-culling = { workspace = true }
 calotype-io = { workspace = true }
+calotype-worker-runtime = { workspace = true }
 calotype-api = { workspace = true }
 calotype-worker-feature = { workspace = true }
 calotype-worker-train = { workspace = true }

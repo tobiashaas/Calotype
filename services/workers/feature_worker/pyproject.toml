@@ -11,8 +11,9 @@ dependencies = [
     "calotype-persistence",
     "calotype-queue",
     "calotype-observability",
+    "calotype-io",
+    "calotype-worker-runtime",
     "calotype-inference-pipeline",
-    "boto3>=1.35",
 ]
 
 [project.scripts]

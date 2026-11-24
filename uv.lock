@@ -21,6 +21,7 @@ members = [
     "calotype-worker-cull",
     "calotype-worker-feature",
     "calotype-worker-inference",
+    "calotype-worker-runtime",
     "calotype-worker-train",
 ]
 
@@ -134,8 +135,8 @@ name = "calotype-api"
 version = "0.1.1"
 source = { editable = "services/api" }
 dependencies = [
-    { name = "boto3" },
     { name = "calotype-domain" },
+    { name = "calotype-io" },
     { name = "calotype-persistence" },
     { name = "calotype-queue" },
     { name = "fastapi" },
@@ -156,8 +157,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", extras = ["trio"], marker = "extra == 'dev'", specifier = ">=4" },
-    { name = "boto3", specifier = ">=1.35" },
     { name = "calotype-domain", editable = "libs/domain" },
+    { name = "calotype-io", editable = "libs/io" },
     { name = "calotype-persistence", editable = "libs/persistence" },
     { name = "calotype-queue", editable = "libs/queue" },
     { name = "fastapi", specifier = ">=0.115" },
@@ -221,6 +222,7 @@ dependencies = [
     { name = "calotype-worker-cull" },
     { name = "calotype-worker-feature" },
     { name = "calotype-worker-inference" },
+    { name = "calotype-worker-runtime" },
     { name = "calotype-worker-train" },
 ]
 
@@ -228,6 +230,7 @@ dependencies = [
 dev = [
     { name = "alembic" },
     { name = "check-jsonschema" },
+    { name = "fakeredis" },
     { name = "httpx" },
     { name = "openapi-spec-validator" },
     { name = "pytest" },
@@ -248,6 +251,7 @@ requires-dist = [
     { name = "calotype-worker-cull", editable = "services/workers/cull_worker" },
     { name = "calotype-worker-feature", editable = "services/workers/feature_worker" },
     { name = "calotype-worker-inference", editable = "services/workers/inference_worker" },
+    { name = "calotype-worker-runtime", editable = "libs/worker-runtime" },
     { name = "calotype-worker-train", editable = "services/workers/train_worker" },
 ]
 
@@ -255,6 +259,7 @@ requires-dist = [
 dev = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "check-jsonschema" },
+    { name = "fakeredis" },
     { name = "httpx" },
     { name = "openapi-spec-validator" },
     { name = "pytest", specifier = ">=8" },
@@ -330,8 +335,11 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "calotype-io"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "libs/io" }
+dependencies = [
+    { name = "boto3" },
+]
 
 [package.optional-dependencies]
 dev = [
@@ -341,6 +349,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "boto3", specifier = ">=1.35" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
 ]
@@ -425,22 +434,24 @@ name = "calotype-worker-cull"
 version = "0.1.1"
 source = { editable = "services/workers/cull_worker" }
 dependencies = [
-    { name = "boto3" },
     { name = "calotype-culling" },
     { name = "calotype-domain" },
+    { name = "calotype-io" },
     { name = "calotype-observability" },
     { name = "calotype-persistence" },
     { name = "calotype-queue" },
+    { name = "calotype-worker-runtime" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "boto3", specifier = ">=1.35" },
     { name = "calotype-culling", editable = "libs/culling" },
     { name = "calotype-domain", editable = "libs/domain" },
+    { name = "calotype-io", editable = "libs/io" },
     { name = "calotype-observability", editable = "libs/observability" },
     { name = "calotype-persistence", editable = "libs/persistence" },
     { name = "calotype-queue", editable = "libs/queue" },
+    { name = "calotype-worker-runtime", editable = "libs/worker-runtime" },
 ]
 
 [[package]]
@@ -448,22 +459,24 @@ name = "calotype-worker-feature"
 version = "0.1.1"
 source = { editable = "services/workers/feature_worker" }
 dependencies = [
-    { name = "boto3" },
     { name = "calotype-domain" },
     { name = "calotype-inference-pipeline" },
+    { name = "calotype-io" },
     { name = "calotype-observability" },
     { name = "calotype-persistence" },
     { name = "calotype-queue" },
+    { name = "calotype-worker-runtime" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "boto3", specifier = ">=1.35" },
     { name = "calotype-domain", editable = "libs/domain" },
     { name = "calotype-inference-pipeline", editable = "libs/inference-pipeline" },
+    { name = "calotype-io", editable = "libs/io" },
     { name = "calotype-observability", editable = "libs/observability" },
     { name = "calotype-persistence", editable = "libs/persistence" },
     { name = "calotype-queue", editable = "libs/queue" },
+    { name = "calotype-worker-runtime", editable = "libs/worker-runtime" },
 ]
 
 [[package]]
@@ -471,49 +484,85 @@ name = "calotype-worker-inference"
 version = "0.1.1"
 source = { editable = "services/workers/inference_worker" }
 dependencies = [
-    { name = "boto3" },
     { name = "calotype-domain" },
     { name = "calotype-edit-serializer" },
     { name = "calotype-inference-pipeline" },
+    { name = "calotype-io" },
+    { name = "calotype-observability" },
+    { name = "calotype-persistence" },
+    { name = "calotype-queue" },
+    { name = "calotype-worker-runtime" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "calotype-domain", editable = "libs/domain" },
+    { name = "calotype-edit-serializer", editable = "libs/edit-serializer" },
+    { name = "calotype-inference-pipeline", editable = "libs/inference-pipeline" },
+    { name = "calotype-io", editable = "libs/io" },
+    { name = "calotype-observability", editable = "libs/observability" },
+    { name = "calotype-persistence", editable = "libs/persistence" },
+    { name = "calotype-queue", editable = "libs/queue" },
+    { name = "calotype-worker-runtime", editable = "libs/worker-runtime" },
+]
+
+[[package]]
+name = "calotype-worker-runtime"
+version = "0.1.0"
+source = { editable = "libs/worker-runtime" }
+dependencies = [
+    { name = "calotype-domain" },
+    { name = "calotype-io" },
     { name = "calotype-observability" },
     { name = "calotype-persistence" },
     { name = "calotype-queue" },
 ]
 
+[package.optional-dependencies]
+dev = [
+    { name = "fakeredis" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
-    { name = "boto3", specifier = ">=1.35" },
     { name = "calotype-domain", editable = "libs/domain" },
-    { name = "calotype-edit-serializer", editable = "libs/edit-serializer" },
-    { name = "calotype-inference-pipeline", editable = "libs/inference-pipeline" },
+    { name = "calotype-io", editable = "libs/io" },
     { name = "calotype-observability", editable = "libs/observability" },
     { name = "calotype-persistence", editable = "libs/persistence" },
     { name = "calotype-queue", editable = "libs/queue" },
+    { name = "fakeredis", marker = "extra == 'dev'", specifier = ">=2.26" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
 ]
+provides-extras = ["dev"]
 
 [[package]]
 name = "calotype-worker-train"
 version = "0.1.1"
 source = { editable = "services/workers/train_worker" }
 dependencies = [
-    { name = "boto3" },
     { name = "calotype-domain" },
     { name = "calotype-edit-serializer" },
     { name = "calotype-inference-pipeline" },
+    { name = "calotype-io" },
     { name = "calotype-observability" },
     { name = "calotype-persistence" },
     { name = "calotype-queue" },
+    { name = "calotype-worker-runtime" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "boto3", specifier = ">=1.35" },
     { name = "calotype-domain", editable = "libs/domain" },
     { name = "calotype-edit-serializer", editable = "libs/edit-serializer" },
     { name = "calotype-inference-pipeline", editable = "libs/inference-pipeline" },
+    { name = "calotype-io", editable = "libs/io" },
     { name = "calotype-observability", editable = "libs/observability" },
     { name = "calotype-persistence", editable = "libs/persistence" },
     { name = "calotype-queue", editable = "libs/queue" },
+    { name = "calotype-worker-runtime", editable = "libs/worker-runtime" },
 ]
 
 [[package]]
@@ -803,6 +852,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/a9/95/a3dbbb5028f35eafb79008e7522a75244477d2838f38cbb722248dabc2a8/cycler-0.12.1.tar.gz", hash = "sha256:88bb128f02ba341da8ef447245a9e138fae777f6a23943da4540077d3601eb1c", size = 7615, upload-time = "2023-10-07T05:32:18.335Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e7/05/c19819d5e3d95294a6f5947fb9b9629efb316b96de511b418c53d245aae6/cycler-0.12.1-py3-none-any.whl", hash = "sha256:85cef7cff222d8644161529808465972e51340599459b8ac3ccbac5a854e0d30", size = 8321, upload-time = "2023-10-07T05:32:16.783Z" },
+]
+
+[[package]]
+name = "fakeredis"
+version = "2.41.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "redis" },
+    { name = "sortedcontainers" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8e/74/1d78df11d3c168a7fe4e11315e77b762c1f89b8ddeaeb0f0486c55fd64cd/fakeredis-2.41.0.tar.gz", hash = "sha256:a10d97197e6c6e9e98affc10abba9fb0efa9bc5671bbc425dca7f47063c2c577", size = 351444, upload-time = "2026-11-23T14:47:49.136Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3a/47/1a20be7813c4f079b478d9d2c54fcfc4178062a3acd028dd289cdced3904/fakeredis-2.41.0-py3-none-any.whl", hash = "sha256:9a2bb58889e8bf646b991324ac4d226a3ae74a3bdde7b6e533c7072c853f236e", size = 211330, upload-time = "2026-11-23T14:47:47.667Z" },
 ]
 
 [[package]]

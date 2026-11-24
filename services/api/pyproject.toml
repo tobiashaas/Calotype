@@ -13,10 +13,10 @@ dependencies = [
   "uvicorn[standard]>=0.32",
   "pydantic>=2.10",
   "python-multipart>=0.0.12",
-  "boto3>=1.35",
   "calotype-domain",
   "calotype-persistence",
   "calotype-queue",
+  "calotype-io",
 ]
 
 [project.optional-dependencies]
