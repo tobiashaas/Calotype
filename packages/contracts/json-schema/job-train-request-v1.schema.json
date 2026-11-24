@@ -65,6 +65,53 @@
         "type": "number"
       },
       "description": "Values only a preset left on the photos (Lightroom key -> value), e.g. {\"Highlights2012\": -100}: a slider holding one is left out of that photo's training target."
+    },
+    "accepted_lr_catalog_uuids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Accepted photos: Lightroom catalog uuids of the selected photos that carry the photographer's marker. A photo whose develop settings still hold Calotype's latest result for it is learned only when it is accepted (no self-learning); a photo changed since is a correction and always learned. Uuids outside photo_ids are ignored."
+    },
+    "accepted_marker": {
+      "$ref": "#/$defs/accepted_marker",
+      "description": "How the photographer marks accepted photos, kept on the profile (the next retrain dialog preselects it); kind none removes it. Without the field a retrained profile keeps its marker."
+    }
+  },
+  "$defs": {
+    "accepted_marker": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "none",
+            "label",
+            "rating"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "enum": [
+            "red",
+            "yellow",
+            "green",
+            "blue",
+            "purple"
+          ],
+          "description": "Colour label (kind label)."
+        },
+        "min": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Minimum star rating (kind rating)."
+        }
+      }
     }
   },
   "description": "Servers are tolerant readers: unknown optional fields are ignored, so newer clients keep working with older servers. New required fields need a new schema version."

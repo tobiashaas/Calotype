@@ -362,7 +362,7 @@ test("every UI text has a German translation with the same placeholders", functi
   local english = {}
   for _, file in ipairs({ "Info.lua", "BridgeClient.lua", "JobWait.lua", "Actions.lua", "TrainProfile.lua",
                           "ApplyProfile.lua", "BridgeStatus.lua", "AutomationCommands.lua", "CullPhotos.lua", "Retouch.lua",
-                          "RetouchKinds.lua", "Fresh.lua" }) do
+                          "RetouchKinds.lua", "Fresh.lua", "Markers.lua", "ManageProfiles.lua" }) do
     local src = readFile(PLUGIN .. file)
     for key, value in src:gmatch('"(%$%$%$/Calotype/[%w/]+)=(.-[^\\])"') do english[key] = value end
   end
@@ -902,6 +902,140 @@ test("virtual copies: one per selected photo, mapped back to the original", func
   eq(r.missing[1], "x", "unknown photo reported")
 end)
 
+-- ------------------------------------------------------------ one living profile
+
+-- A photo with the photographer's colour label and stars.
+local function markedPhoto(uuid, label, rating)
+  local photo = fakePhoto(uuid, "RAW")
+  local base = photo.getRawMetadata
+  photo.getRawMetadata = function(self, key)
+    if key == "colorNameForLabel" then return label end
+    if key == "rating" then return rating end
+    return base(self, key)
+  end
+  return photo
+end
+
+local function requestTo(path, method)
+  for _, req in ipairs(fake.requests) do
+    if req.url:find(path, 1, true) and (method == nil or req.method == method) then return req end
+  end
+end
+
+test("markers: the photographer's choice, read from each photo's label or stars", function()
+  local Markers = require "Markers"
+  local items = Markers.items()
+  eq(#items, 11, "none, five colours, one to five stars")
+  eq(items[1].value, "none", "no marker first")
+  for _, item in ipairs(items) do
+    eq(Markers.toValue(Markers.fromValue(item.value)), item.value, "round trip of " .. item.value)
+  end
+  eq(Markers.fromValue("label:green").value, "green", "label")
+  eq(Markers.fromValue("rating:4").min, 4, "rating")
+  eq(Markers.fromValue("garbage").kind, "none", "unknown is none")
+  eq(Markers.toValue(nil), "none", "a profile without marker")
+  eq(Markers.toValue(Json.null), "none", "null from the server")
+
+  local green, red, rated = markedPhoto("g", "green", 2), markedPhoto("r", "red", 5), markedPhoto("n", "none", 4)
+  eq(Markers.isAccepted({ kind = "label", value = "green" }, green), true, "green label")
+  eq(Markers.isAccepted({ kind = "label", value = "green" }, red), false, "other label")
+  eq(Markers.isAccepted({ kind = "rating", min = 4 }, rated), true, "four stars")
+  eq(Markers.isAccepted({ kind = "rating", min = 4 }, green), false, "two stars")
+  eq(Markers.isAccepted({ kind = "none" }, red), false, "no marker, nothing accepted")
+  local uuids = Markers.acceptedUuids({ kind = "rating", min = 4 }, { "g", "r", "n" }, { g = green, r = red, n = rated })
+  eq(table.concat(uuids, ","), "r,n", "in order")
+end)
+
+test("keep training: profile, marker and accepted photos reach the Bridge", function()
+  local Commands = require "AutomationCommands"
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  sdk.LrApplication.developPresetFolders = function()
+    return { { getName = function() return "Import" end, getDevelopPresets = function()
+      return { { getUuid = function() return "imp" end, getName = function() return "Wedding import" end,
+                 getSetting = function() return { Highlights2012 = -100, Contrast2012 = 0, GrainAmount = 10 } end } }
+    end } }
+  end
+  local photos = { markedPhoto("a", "green", 0), markedPhoto("b", "none", 5), markedPhoto("c", "green", 1) }
+  respond(202, { status = "pending" })
+  respond(202, { status = "pending" })
+  respond(202, { status = "pending" })
+  respond(202, { job_id = "j1", status = "waiting_for_photos" })
+  respond(200, { job_id = "j1", status = "completed", profile_id = "p1" })
+  local ok, r = Commands.run(fakeCatalog(photos), { command = "train", args = {
+    uuids = { "a", "b", "c" }, name = "Matte", genre = "wedding", profile_id = "p1",
+    marker = { kind = "label", value = "green" }, import_preset = "Wedding import" } })
+  eq(ok, true, "train ok: " .. tostring(r.error))
+  local body = Json.decode(requestTo("/v1/jobs/train", "POST").body)
+  eq(body.profile_id, "p1", "keeps training this profile")
+  eq(body.accepted_marker.kind, "label", "marker kind")
+  eq(body.accepted_marker.value, "green", "marker value")
+  eq(table.concat(body.accepted_lr_catalog_uuids, ","), "a,c", "the green photos are accepted")
+  eq(body.untouched.Highlights2012, -100, "the import preset's value is a placeholder")
+  eq(body.untouched.Contrast2012, nil, "a neutral 0 is no placeholder")
+  eq(body.untouched.GrainAmount, nil, "only sliders")
+end)
+
+test("train without a marker sends no accepted photos", function()
+  local Commands = require "AutomationCommands"
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  local photos = { markedPhoto("a", "green", 5), markedPhoto("b", "green", 5), markedPhoto("c", "green", 5) }
+  for _ = 1, 3 do respond(202, { status = "pending" }) end
+  respond(202, { job_id = "j1", status = "waiting_for_photos" })
+  respond(200, { job_id = "j1", status = "completed", profile_id = "p1" })
+  local ok, r = Commands.run(fakeCatalog(photos), { command = "train", args = {
+    uuids = { "a", "b", "c" }, name = "New", marker = { kind = "none" } } })
+  eq(ok, true, "train ok: " .. tostring(r.error))
+  local body = Json.decode(requestTo("/v1/jobs/train", "POST").body)
+  eq(body.accepted_lr_catalog_uuids, nil, "nothing accepted")
+  eq(body.accepted_marker.kind, "none", "the choice still reaches the profile")
+  eq(body.profile_id, nil, "a new profile")
+end)
+
+test("manage profiles: rename and delete through the Bridge", function()
+  local Commands = require "AutomationCommands"
+  fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t" })
+  local listed = { { profile_id = "p1", name = "Matte", genre = "wedding", format_type = "raw", status = "ready",
+                     version = 2, accepted_marker = { kind = "rating", min = 4 } },
+                   { profile_id = "p2", name = "Draft", genre = "event", format_type = "raw", status = "failed", version = 1 } }
+  local catalog = fakeCatalog({})
+
+  respond(200, listed)
+  local ok, r = Commands.run(catalog, { command = "profiles", args = {} })
+  eq(ok, true, "list ok")
+  eq(#r.profiles, 2, "every status, not only ready")
+
+  respond(200, listed)
+  respond(200, { profile_id = "p1", name = "Matte 2026" })
+  ok, r = Commands.run(catalog, { command = "rename_profile", args = { profile = "Matte", name = "  Matte 2026 " } })
+  eq(ok, true, "rename ok: " .. tostring(r.error))
+  local patch = requestTo("/v1/profiles/p1", "PATCH")
+  local body = Json.decode(patch.body)
+  eq(body.schema_version, "profile-update-v1", "schema")
+  eq(body.name, "Matte 2026", "trimmed name")
+  eq(body.accepted_marker, nil, "only the name changes")
+
+  respond(200, listed)
+  ok, r = Commands.run(catalog, { command = "rename_profile", args = { profile = "p1", name = "  " } })
+  eq(ok, false, "a blank name is refused before the Bridge")
+
+  respond(200, listed)
+  respond(204, "")
+  ok, r = Commands.run(catalog, { command = "delete_profile", args = { profile = "p2" } })
+  eq(ok, true, "delete ok: " .. tostring(r.error))
+  eq(r.deleted, "p2", "deleted id")
+  eq(requestTo("/v1/profiles/p2", "DELETE").body, "", "a delete has no body")
+
+  respond(200, listed)
+  respond(404, { error = "profile not found" })
+  ok, r = Commands.run(catalog, { command = "delete_profile", args = { profile = "p1" } })
+  eq(ok, false, "the Bridge's error reaches the caller")
+  assert(r.error:find("profile not found"), r.error)
+
+  respond(200, listed)
+  ok, r = Commands.run(catalog, { command = "delete_profile", args = { profile = "nope" } })
+  eq(ok, false, "unknown profile")
+end)
+
 test("automation init runs in a Lightroom-like plugin environment", function()
   fake.files[CONFIG_PATH] = Json.encode({ port = 1, token = "t", automation = false })
   local started
@@ -925,7 +1059,7 @@ end)
 
 test("menu scripts compile", function()
   for _, file in ipairs({ "Info.lua", "TrainProfile.lua", "ApplyProfile.lua", "BridgeStatus.lua", "CullPhotos.lua",
-                          "Actions.lua", "Automation.lua", "AutomationCommands.lua", "Retouch.lua", "RetouchKinds.lua", "Fresh.lua" }) do
+                          "Actions.lua", "Automation.lua", "AutomationCommands.lua", "Retouch.lua", "RetouchKinds.lua", "Fresh.lua", "Markers.lua", "ManageProfiles.lua" }) do
     assert(loadfile(PLUGIN .. file))
   end
   local info = assert(loadfile(PLUGIN .. "Info.lua"))()

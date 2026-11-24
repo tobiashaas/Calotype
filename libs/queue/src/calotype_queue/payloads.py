@@ -39,6 +39,36 @@ class TolerantModel(BaseModel):
         return data
 
 
+LabelColor = Literal["red", "yellow", "green", "blue", "purple"]
+
+
+class AcceptedMarker(TolerantModel):
+    """How the photographer marks Accepted photos — reviewed after Calotype applied a Profile
+    and left unchanged. Every photographer marks differently, so they choose: ``none``, a colour
+    label (``{"kind": "label", "value": "green"}``) or a minimum star rating
+    (``{"kind": "rating", "min": 4}``)."""
+
+    kind: Literal["none", "label", "rating"]
+    value: LabelColor | None = None
+    min: Annotated[int, Field(ge=1, le=5)] | None = None
+
+    @model_validator(mode="after")
+    def _complete(self) -> AcceptedMarker:
+        if self.kind == "label" and self.value is None:
+            raise ValueError("a label marker needs value (red, yellow, green, blue, purple)")
+        if self.kind == "rating" and self.min is None:
+            raise ValueError("a rating marker needs min (1-5)")
+        return self
+
+    def stored(self) -> dict[str, Any] | None:
+        """What a profile keeps: only the fields of its kind; ``none`` is no marker (None)."""
+        if self.kind == "label":
+            return {"kind": "label", "value": self.value}
+        if self.kind == "rating":
+            return {"kind": "rating", "min": self.min}
+        return None
+
+
 class TrainJobRequestV1(TolerantModel):
     """Train a profile from the photographer's edited photos (``train-request-v1``)."""
 
@@ -56,15 +86,24 @@ class TrainJobRequestV1(TolerantModel):
     # Values only a preset left on the photos (Lightroom key → value), not the photographer's
     # decision: such a slider is left out of that photo's training target.
     untouched: dict[str, float] | None = None
+    # Photos of this selection carrying the photographer's marker (Lightroom catalog uuids, as
+    # the plugin knows them): Accepted photos. A photo that still holds Calotype's last result
+    # is learned only when it is accepted — otherwise the profile would learn from itself.
+    accepted_lr_catalog_uuids: list[str] | None = None
+    # The photographer's marker for accepted photos, kept on the profile (the next retrain
+    # dialog preselects it); kind "none" removes it.
+    accepted_marker: AcceptedMarker | None = None
 
 
 class TrainPayloadV1(TrainJobRequestV1):
     """What the train worker reads: the request as the API completed it — ``profile_id``
-    always set (a new profile's id too), ``photo_ids`` / ``untouched`` merged with the
-    profile's earlier training, and ``retrain`` when the profile already has a model (a
-    failure must not take that model away)."""
+    always set (a new profile's id too), ``photo_ids`` / ``untouched`` / ``accepted`` merged
+    with the profile's earlier training, and ``retrain`` when the profile already has a model
+    (a failure must not take that model away)."""
 
     retrain: bool = False
+    # Accepted photos as server photo ids (the API resolves accepted_lr_catalog_uuids).
+    accepted: list[UUID] = Field(default_factory=list)
 
 
 class EditJobRequestV1(TolerantModel):

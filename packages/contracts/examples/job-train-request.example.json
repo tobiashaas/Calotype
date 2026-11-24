@@ -6,5 +6,7 @@
   "color_type": "color",
   "photo_ids": ["6ba7b810-9dad-11d1-80b4-00c04fd430c8"],
   "base_preset": {"contrast": 8, "vibrance": 6},
-  "correlation_id": "lr-plugin-xyz"
+  "correlation_id": "lr-plugin-xyz",
+  "accepted_lr_catalog_uuids": ["A1B2C3D4-0000-4000-8000-000000000001"],
+  "accepted_marker": {"kind": "label", "value": "green"}
 }

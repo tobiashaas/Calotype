@@ -64,6 +64,14 @@ _Avoid_: untouched value, default
 Teaching an existing Profile again from all its Training photos plus new ones, so the photographer's Corrections become part of it.
 _Avoid_: new training, re-create
 
+**Accepted photo**:
+A Photo the photographer reviewed after Calotype applied a Profile and left as it was, and marked with their Marker; it teaches the Profile that Calotype got it right. A Photo left as Calotype set it without the Marker teaches nothing — otherwise the Profile would learn from itself.
+_Avoid_: approved, confirmed, feedback
+
+**Marker**:
+How a photographer marks Accepted photos — a colour label or a minimum star rating of their choice (every photographer uses labels and stars differently), or none. Each Profile keeps its photographer's Marker.
+_Avoid_: tag, flag (a flag is a pick/reject Decision)
+
 **Correction**:
 A change the photographer makes to a Photo after Calotype applied a Profile; the strongest signal a Profile can learn from.
 _Avoid_: fix, feedback (feedback also covers photos left as they are)

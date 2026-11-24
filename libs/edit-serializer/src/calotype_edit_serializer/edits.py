@@ -60,3 +60,27 @@ def edited_photos(settings: Sequence[Mapping[str, Any]], format_type: FormatType
     if baseline != default and counts[baseline] < 2:
         return [False] * len(sigs)
     return [s != baseline for s in sigs]
+
+
+def unchanged_since(applied: Mapping[str, Any], current: Mapping[str, Any], format_type: FormatType) -> bool:
+    """Does a photo still hold the Sliders Calotype applied to it (its result's ``lr_settings``)?
+
+    Compared at Lightroom's precision on the Sliders the result set; keys it did not set (look,
+    crop, sliders a profile leaves to the photographer) are ignored. A result without any
+    Slider proves nothing, so that is False — as is any Slider the photographer moved since
+    (then the photo is a Correction).
+    """
+    compared = 0
+    for spec in slider_specs(format_type):
+        if spec.lr_key not in applied:
+            continue
+        want = _as_float(applied.get(spec.lr_key))
+        have = _as_float(current.get(spec.lr_key))
+        if have is None:
+            have = spec.default
+        if want is None or have is None:
+            return False
+        if abs(want - have) > 0.5 * 10 ** -spec.decimals + 1e-9:
+            return False
+        compared += 1
+    return compared > 0

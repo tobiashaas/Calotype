@@ -199,6 +199,49 @@ impl ApiClient {
         let resp = self.http.get(self.url("/v1/profiles")).send().await?;
         Ok(check(resp).await?.json().await?)
     }
+
+    /// Rename a profile and/or change its marker (`profile-update-v1`, sent as it is).
+    pub async fn update_profile(
+        &self,
+        profile_id: &str,
+        body: &Value,
+    ) -> Result<ServerAnswer, reqwest::Error> {
+        let resp = self
+            .http
+            .patch(self.url(&format!("/v1/profiles/{profile_id}")))
+            .json(body)
+            .send()
+            .await?;
+        ServerAnswer::read(resp).await
+    }
+
+    /// Soft-delete a profile (the server only hides it).
+    pub async fn delete_profile(&self, profile_id: &str) -> Result<ServerAnswer, reqwest::Error> {
+        let resp = self
+            .http
+            .delete(self.url(&format!("/v1/profiles/{profile_id}")))
+            .send()
+            .await?;
+        ServerAnswer::read(resp).await
+    }
+}
+
+/// A server answer the Bridge hands to the plugin as it is: its status (404 unknown profile,
+/// 422 invalid body …) means something to the plugin, unlike for the outbox's jobs.
+#[derive(Debug)]
+pub struct ServerAnswer {
+    pub status: StatusCode,
+    /// The JSON body; `Null` when there is none (204) or it is not JSON.
+    pub body: Value,
+}
+
+impl ServerAnswer {
+    async fn read(resp: Response) -> Result<Self, reqwest::Error> {
+        let status = resp.status();
+        let bytes = resp.bytes().await?;
+        let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+        Ok(Self { status, body })
+    }
 }
 
 fn normalize(url: &str) -> String {
